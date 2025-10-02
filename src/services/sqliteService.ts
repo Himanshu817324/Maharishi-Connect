@@ -35,6 +35,13 @@ class SQLiteService {
       await this.createTables();
       await this.testDatabase();
 
+      // Clean up any existing duplicate messages
+      try {
+        await this.cleanupDuplicateMessagesByClientId();
+      } catch (cleanupError) {
+        console.warn('Failed to cleanup duplicate messages during init:', cleanupError);
+      }
+
     } catch (error) {
       console.error('Error initializing SQLite:', error);
       this.db = null;
@@ -56,7 +63,7 @@ class SQLiteService {
     if (this.isInitializing) {
       let attempts = 0;
       while (this.isInitializing && attempts < 50) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise<void>(resolve => setTimeout(resolve, 100));
         attempts++;
       }
       return this.db !== null;
@@ -81,6 +88,7 @@ class SQLiteService {
         chatId TEXT NOT NULL,
         content TEXT NOT NULL,
         senderId TEXT NOT NULL,
+        senderName TEXT,
         timestamp TEXT NOT NULL,
         status TEXT NOT NULL,
         reactions TEXT DEFAULT '{}',
@@ -127,6 +135,9 @@ class SQLiteService {
     if (!this.db) return;
 
     try {
+      // Check if senderName column exists, if not add it (migration)
+      await this.migrateAddSenderNameColumn();
+
       await this.db.executeSql(`
         CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_clientId 
         ON messages(clientId)
@@ -148,35 +159,193 @@ class SQLiteService {
     }
   }
 
-  async messageExists(messageId: string, clientId?: string): Promise<boolean> {
-    if (!this.db) return false;
+  private async migrateAddSenderNameColumn() {
+    if (!this.db) return;
 
     try {
+      // Check if senderName column exists
+      const result = await this.db.executeSql(
+        "PRAGMA table_info(messages);"
+      );
+
+      let senderNameExists = false;
+      if (result && result[0] && result[0].rows) {
+        for (let i = 0; i < result[0].rows.length; i++) {
+          const column = result[0].rows.item(i);
+          if (column.name === 'senderName') {
+            senderNameExists = true;
+            break;
+          }
+        }
+      }
+
+      // Add senderName column if it doesn't exist
+      if (!senderNameExists) {
+        await this.db.executeSql(
+          "ALTER TABLE messages ADD COLUMN senderName TEXT;"
+        );
+        console.log('✅ Added senderName column to messages table');
+      }
+    } catch (error) {
+      console.error('❌ Error during senderName migration:', error);
+    }
+  }
+
+  private async ensureParticipantsColumn() {
+    if (!this.db) return;
+
+    try {
+      // Check if type and participants columns exist in chats table
+      const result = await this.db.executeSql("PRAGMA table_info(chats);");
+
+      let typeExists = false;
+      let participantsExists = false;
+
+      if (result && result[0] && result[0].rows) {
+        for (let i = 0; i < result[0].rows.length; i++) {
+          const column = result[0].rows.item(i);
+          if (column.name === 'type') {
+            typeExists = true;
+          }
+          if (column.name === 'participants') {
+            participantsExists = true;
+          }
+        }
+      }
+
+      // Add type column if it doesn't exist
+      if (!typeExists) {
+        await this.db.executeSql(
+          "ALTER TABLE chats ADD COLUMN type TEXT DEFAULT 'direct';"
+        );
+        console.log('✅ Added type column to chats table');
+      }
+
+      // Add participants column if it doesn't exist
+      if (!participantsExists) {
+        await this.db.executeSql(
+          "ALTER TABLE chats ADD COLUMN participants TEXT DEFAULT '[]';"
+        );
+        console.log('✅ Added participants column to chats table');
+      }
+    } catch (error) {
+      console.error('❌ Error during chats table migration:', error instanceof Error ? error.message : error);
+    }
+  }
+
+  async messageExists(messageId: string, clientId?: string): Promise<boolean> {
+    try {
+      const initialized = await withTimeout(this.ensureInitialized(), 3000);
+      if (!initialized || !this.db) {
+        console.error('SQLite database not initialized');
+        return false;
+      }
+
+      if (!messageId && !clientId) {
+        console.error('No messageId or clientId provided to messageExists');
+        return false;
+      }
+
       const query = `
         SELECT COUNT(*) as count FROM messages 
-        WHERE id = ? OR clientId = ? OR clientId = ?
+        WHERE (id = ? OR clientId = ? OR id = ? OR clientId = ?) 
       `;
 
       const result = await new Promise<any>((resolve, reject) => {
         this.db!.transaction((tx) => {
           tx.executeSql(
             query,
-            [messageId, messageId, clientId || messageId],
+            [messageId, messageId, clientId || messageId, clientId || messageId],
             (tx, results) => resolve(results),
             (tx, error) => {
+              console.error('Transaction error:', error);
               reject(error);
               return false;
             }
           );
+        }, (error) => {
+          console.error('Transaction failed:', error);
+          reject(error);
         });
       });
 
-      if (result?.rows?.length > 0) {
-        return result.rows.item(0).count > 0;
+      const count = result.rows.item(0).count;
+      const exists = count > 0;
+
+      if (exists) {
+        console.log(`💾 Message exists in SQLite: ${messageId || clientId}`);
       }
-      return false;
+
+      return exists;
     } catch (error) {
-      console.error('Error checking message existence:', error);
+      console.error('Error checking if message exists:', error);
+      return false;
+    }
+  }
+
+  // Enhanced message existence check with better logic
+  async messageExistsEnhanced(serverId?: string, clientId?: string): Promise<boolean> {
+    try {
+      const initialized = await withTimeout(this.ensureInitialized(), 3000);
+      if (!initialized || !this.db) {
+        console.error('SQLite database not initialized');
+        return false;
+      }
+
+      if (!serverId && !clientId) {
+        console.error('No serverId or clientId provided to messageExistsEnhanced');
+        return false;
+      }
+
+      // Build a more precise query
+      let query = 'SELECT COUNT(*) as count FROM messages WHERE ';
+      const params: any[] = [];
+      const conditions: string[] = [];
+
+      if (serverId) {
+        conditions.push('(id = ? OR clientId = ?)');
+        params.push(serverId, serverId);
+      }
+
+      if (clientId) {
+        conditions.push('(id = ? OR clientId = ?)');
+        params.push(clientId, clientId);
+      }
+
+      if (conditions.length === 0) {
+        return false;
+      }
+
+      query += conditions.join(' OR ');
+
+      const result = await new Promise<any>((resolve, reject) => {
+        this.db!.transaction((tx) => {
+          tx.executeSql(
+            query,
+            params,
+            (tx, results) => resolve(results),
+            (tx, error) => {
+              console.error('Transaction error:', error);
+              reject(error);
+              return false;
+            }
+          );
+        }, (error) => {
+          console.error('Transaction failed:', error);
+          reject(error);
+        });
+      });
+
+      const count = result.rows.item(0).count;
+      const exists = count > 0;
+
+      if (exists) {
+        console.log(`💾 Message exists in SQLite (enhanced): serverId=${serverId}, clientId=${clientId}`);
+      }
+
+      return exists;
+    } catch (error) {
+      console.error('Error checking if message exists (enhanced):', error);
       return false;
     }
   }
@@ -190,21 +359,22 @@ class SQLiteService {
         return;
       }
 
-      // Generate consistent IDs
+      // Generate consistent IDs with better uniqueness
       const serverId = message.id || message._id;
-      const clientId = message.clientId || message.tempId || serverId || `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const clientId = message.clientId || message.tempId || serverId || `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${Math.floor(Math.random() * 10000)}`;
 
-      // Check if message already exists
-      const exists = await this.messageExists(serverId, clientId);
+      // Enhanced existence check with better query
+      const exists = await this.messageExistsEnhanced(serverId, clientId);
       if (exists) {
         console.log('Message already exists, skipping:', clientId);
         return;
       }
 
+      // Use INSERT OR IGNORE to handle duplicate clientId gracefully
       const query = `
-        INSERT INTO messages 
-        (id, clientId, chatId, content, senderId, timestamp, status, reactions, createdAt, updatedAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR IGNORE INTO messages 
+        (id, clientId, chatId, content, senderId, senderName, timestamp, status, reactions, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
       const params = [
@@ -213,6 +383,7 @@ class SQLiteService {
         message.chatId,
         message.text || message.content,
         message.senderId || message.user?._id,
+        message.senderName || message.user?.name || 'User',
         message.timestamp || message.createdAt || new Date().toISOString(),
         message.status || 'sent',
         typeof message.reactions === 'string' ? message.reactions : JSON.stringify(message.reactions || {}),
@@ -230,14 +401,24 @@ class SQLiteService {
           tx.executeSql(
             query,
             params,
-            () => {
-              console.log('Message saved:', clientId);
+            (tx, results) => {
+              if (results.rowsAffected > 0) {
+                console.log('Message saved:', clientId);
+              } else {
+                console.log('Message already exists, skipped:', clientId);
+              }
               resolve();
             },
             (tx, error) => {
               console.error('Transaction error:', error);
-              reject(error);
-              return false;
+              // If it's a constraint error, log it but don't fail
+              if (error.message && error.message.includes('UNIQUE constraint failed')) {
+                console.log('Message already exists (constraint), skipped:', clientId);
+                resolve();
+              } else {
+                reject(error);
+                return false;
+              }
             }
           );
         }, (error) => {
@@ -306,15 +487,15 @@ class SQLiteService {
         });
       });
 
-      if (!result || !result.rows) {
+      if (!result || !(result as any).rows) {
         console.log('No messages found for chatId:', chatId);
         return [];
       }
 
       const messages = [];
-      for (let i = 0; i < result.rows.length; i++) {
+      for (let i = 0; i < (result as any).rows.length; i++) {
         try {
-          const message = result.rows.item(i);
+          const message = (result as any).rows.item(i);
           if (message.reactions && typeof message.reactions === 'string') {
             try {
               message.reactions = JSON.parse(message.reactions);
@@ -332,10 +513,10 @@ class SQLiteService {
       console.log('Retrieved messages from SQLite:', messages.length, 'for chatId:', chatId);
       return messages;
     } catch (error) {
-      if (error.message && error.message.includes('timed out')) {
+      if (error instanceof Error && error.message.includes('timed out')) {
         console.error('SQLite getMessages timed out for chatId:', chatId);
       } else {
-        console.error('Error getting messages from SQLite:', error);
+        console.error('Error getting messages from SQLite:', error instanceof Error ? error.message : error);
       }
       return [];
     }
@@ -354,10 +535,13 @@ class SQLiteService {
     }
 
     try {
+      // First, check if we need to add participants column
+      await this.ensureParticipantsColumn();
+
       const query = `
         INSERT OR REPLACE INTO chats 
-        (id, name, avatar, lastMessage, lastMessageTime, unreadCount, isOnline, createdAt, updatedAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, name, avatar, lastMessage, lastMessageTime, unreadCount, isOnline, type, participants, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
       const params = [
@@ -368,6 +552,8 @@ class SQLiteService {
         chat.lastMessageTime || '',
         chat.unreadCount || 0,
         chat.isOnline ? 1 : 0,
+        chat.type || 'direct',
+        typeof chat.participants === 'string' ? chat.participants : JSON.stringify(chat.participants || []),
         chat.createdAt || new Date().toISOString(),
         chat.updatedAt || new Date().toISOString(),
       ];
@@ -386,6 +572,9 @@ class SQLiteService {
         console.error('SQLite database not initialized');
         return [];
       }
+
+      // Ensure new columns exist before querying
+      await this.ensureParticipantsColumn();
 
       const query = `
         SELECT * FROM chats 
@@ -407,15 +596,28 @@ class SQLiteService {
 
       const chats = [];
       for (let i = 0; i < results.rows.length; i++) {
-        chats.push(results.rows.item(i));
+        const chat = results.rows.item(i);
+
+        // Parse participants if it's a JSON string
+        if (chat.participants && typeof chat.participants === 'string') {
+          try {
+            chat.participants = JSON.parse(chat.participants);
+          } catch (parseError) {
+            console.warn('Failed to parse participants for chat:', chat.id);
+            chat.participants = [];
+          }
+        }
+
+        chats.push(chat);
       }
 
+      console.log(`📥 Retrieved ${chats.length} chats from SQLite`);
       return chats;
     } catch (error) {
-      if (error.message && error.message.includes('timed out')) {
+      if (error instanceof Error && error.message.includes('timed out')) {
         console.error('SQLite getChats timed out');
       } else {
-        console.error('Error getting chats from SQLite:', error);
+        console.error('Error getting chats from SQLite:', error instanceof Error ? error.message : error);
       }
       return [];
     }
@@ -606,7 +808,7 @@ class SQLiteService {
         }
       }
 
-      reactions[emoji] = (reactions[emoji] || 0) + 1;
+      (reactions as any)[emoji] = ((reactions as any)[emoji] || 0) + 1;
 
       let updateQuery = `
         UPDATE messages 
@@ -655,10 +857,10 @@ class SQLiteService {
         }
       }
 
-      if (reactions[emoji]) {
-        reactions[emoji] = Math.max(reactions[emoji] - 1, 0);
-        if (reactions[emoji] === 0) {
-          delete reactions[emoji];
+      if ((reactions as any)[emoji]) {
+        (reactions as any)[emoji] = Math.max((reactions as any)[emoji] - 1, 0);
+        if ((reactions as any)[emoji] === 0) {
+          delete (reactions as any)[emoji];
         }
       }
 
@@ -775,8 +977,8 @@ class SQLiteService {
         }, (error) => reject(error));
       });
 
-      if (result && result.rows && result.rows.length > 0) {
-        return result.rows.item(0).count;
+      if (result && (result as any).rows && (result as any).rows.length > 0) {
+        return (result as any).rows.item(0).count;
       }
       return 0;
     } catch (error) {
@@ -786,22 +988,22 @@ class SQLiteService {
   }
 
   // ✅ Delete all chats (but keep the table structure)
-async deleteAllChats() {
-  if (!this.db) return;
+  async deleteAllChats() {
+    if (!this.db) return;
 
-  try {
-    await this.db.executeSql('DELETE FROM chats');
-    console.log('✅ All chats deleted successfully');
-  } catch (error) {
-    console.error('❌ Error deleting all chats:', error);
+    try {
+      await this.db.executeSql('DELETE FROM chats');
+      console.log('✅ All chats deleted successfully');
+    } catch (error) {
+      console.error('❌ Error deleting all chats:', error);
+    }
   }
-}
 
-// ✅ Cleanup duplicate messages
-async cleanupDuplicateMessages() {
-  if (!this.db) return;
+  // ✅ Cleanup duplicate messages
+  async cleanupDuplicateMessages() {
+    if (!this.db) return;
 
-  const query = `
+    const query = `
     DELETE FROM messages 
     WHERE rowid NOT IN (
       SELECT MIN(rowid) 
@@ -810,13 +1012,36 @@ async cleanupDuplicateMessages() {
     )
   `;
 
-  try {
-    await this.db.executeSql(query);
-    console.log('✅ Cleaned up duplicate messages');
-  } catch (error) {
-    console.error('❌ Error cleaning up duplicate messages:', error);
+    try {
+      await this.db.executeSql(query);
+      console.log('✅ Cleaned up duplicate messages');
+    } catch (error) {
+      console.error('❌ Error cleaning up duplicate messages:', error);
+    }
   }
-}
+
+  // ✅ Cleanup duplicate messages by clientId specifically
+  async cleanupDuplicateMessagesByClientId() {
+    if (!this.db) return;
+
+    const query = `
+    DELETE FROM messages 
+    WHERE rowid NOT IN (
+      SELECT MIN(rowid) 
+      FROM messages 
+      GROUP BY clientId
+    )
+  `;
+
+    try {
+      const result = await this.db.executeSql(query);
+      console.log('✅ Cleaned up duplicate messages by clientId');
+      return result;
+    } catch (error) {
+      console.error('❌ Error cleaning up duplicate messages by clientId:', error);
+      throw error;
+    }
+  }
 
 
 

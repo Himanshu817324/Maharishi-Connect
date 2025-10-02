@@ -48,8 +48,35 @@ const deduplicateMessages = (messages: Message[]): Message[] => {
     const id = normalizeMessageId(msg);
     if (id) {
       const existing = messageMap.get(id);
-      if (!existing || (msg._id && !msg._id.startsWith('temp_'))) {
+      // Improved deduplication logic:
+      // 1. If no existing message, add it
+      // 2. If existing message is temporary and new one is server message, replace
+      // 3. If both are server messages, keep the newer one
+      // 4. If both are temporary, keep the newer one
+      if (!existing) {
         messageMap.set(id, msg);
+      } else {
+        const existingIsTemp = existing._id.startsWith('temp_') || existing._id.startsWith('client_');
+        const newIsTemp = msg._id.startsWith('temp_') || msg._id.startsWith('client_');
+
+        if (existingIsTemp && !newIsTemp) {
+          // Replace temp with server message
+          messageMap.set(id, msg);
+        } else if (!existingIsTemp && !newIsTemp) {
+          // Both are server messages, keep the newer one
+          const existingTime = new Date(existing.createdAt).getTime();
+          const newTime = new Date(msg.createdAt).getTime();
+          if (newTime > existingTime) {
+            messageMap.set(id, msg);
+          }
+        } else if (existingIsTemp && newIsTemp) {
+          // Both are temp, keep the newer one
+          const existingTime = new Date(existing.createdAt).getTime();
+          const newTime = new Date(msg.createdAt).getTime();
+          if (newTime > existingTime) {
+            messageMap.set(id, msg);
+          }
+        }
       }
     }
   }
@@ -58,18 +85,147 @@ const deduplicateMessages = (messages: Message[]): Message[] => {
 
 export const loadChatMessages = createAsyncThunk('chat/loadChatMessages', async (chatId: string, { rejectWithValue }) => {
   try {
+    console.log(`📥 [loadChatMessages] Loading messages for chat: ${chatId}`);
+
+    // Step 1: Load from SQLite first (fastest, always available)
+    console.log(`📥 [loadChatMessages] Loading from SQLite...`);
     const localMessages = await sqliteService.getMessages(chatId);
-    const formattedLocalMessages: Message[] = localMessages.map(msg => ({ _id: msg.id || msg.clientId || msg._id, text: msg.content || msg.text, chatId, senderId: msg.senderId, createdAt: msg.createdAt || msg.timestamp, status: msg.status || 'sent', user: { _id: msg.senderId, name: msg.senderName || 'User' } }));
+    console.log(`📥 [loadChatMessages] Found ${localMessages.length} local messages`);
+
+    // Format local messages properly
+    const formattedLocalMessages: Message[] = localMessages.map(msg => ({
+      _id: msg.id || msg.clientId || msg._id,
+      text: msg.content || msg.text,
+      chatId,
+      senderId: msg.senderId,
+      createdAt: msg.createdAt || msg.timestamp,
+      status: msg.status || 'sent',
+      user: {
+        _id: msg.senderId,
+        name: msg.senderName || msg.senderId || 'User'
+      }
+    }));
+
+    // Step 2: Perform full server sync to get ALL messages
     let apiMessages: Message[] = [];
+    let serverSyncSuccessful = false;
+
     try {
-      const rawApiMessages = await chatApiService.getChatMessages(chatId);
-      apiMessages = rawApiMessages.map(msg => ({ _id: msg._id || msg.id, text: msg.content || msg.text, chatId, senderId: msg.senderId, createdAt: msg.createdAt, status: msg.status || 'sent', user: { _id: msg.senderId, name: msg.senderName || 'User' } }));
-      for (const msg of apiMessages) { await sqliteService.saveMessage({ id: msg._id, clientId: msg._id, chatId, content: msg.text, text: msg.text, senderId: msg.senderId, timestamp: msg.createdAt, createdAt: msg.createdAt, status: msg.status }); }
-    } catch (apiError) { console.error('API load error:', apiError); }
+      console.log(`📥 [loadChatMessages] Performing full server sync...`);
+
+      // Always fetch ALL messages from server for complete sync
+      let allServerMessages: any[] = [];
+      let hasMoreMessages = true;
+      let offset = 0;
+      const limit = 100; // Fetch in larger batches
+
+      while (hasMoreMessages) {
+        const batchOptions: any = { limit, offset };
+
+        console.log(`📥 [loadChatMessages] Fetching batch ${offset / limit + 1} (offset: ${offset}, limit: ${limit})`);
+        const rawApiMessages = await chatApiService.getChatMessages(chatId, batchOptions);
+
+        if (rawApiMessages.length === 0) {
+          hasMoreMessages = false;
+          break;
+        }
+
+        allServerMessages.push(...rawApiMessages);
+        console.log(`📥 [loadChatMessages] Fetched ${rawApiMessages.length} messages in this batch`);
+
+        // If we got fewer messages than requested, we've reached the end
+        if (rawApiMessages.length < limit) {
+          hasMoreMessages = false;
+        } else {
+          offset += limit;
+        }
+
+        // Safety check to prevent infinite loops
+        if (offset > 1000) {
+          console.warn(`📥 [loadChatMessages] Reached safety limit for message fetching`);
+          break;
+        }
+      }
+
+      apiMessages = allServerMessages.map(msg => ({
+        _id: msg._id || msg.id,
+        text: msg.content || msg.text,
+        chatId,
+        senderId: msg.senderId || msg.sender_id,
+        createdAt: msg.createdAt || msg.created_at,
+        status: msg.status || 'sent',
+        user: {
+          _id: msg.senderId || msg.sender_id,
+          name: msg.senderName || msg.sender_name || 'User'
+        }
+      }));
+
+      console.log(`📥 [loadChatMessages] Found ${apiMessages.length} server messages (${allServerMessages.length} total fetched)`);
+
+      // Save new messages from server to SQLite with better duplicate handling
+      let newMessagesSaved = 0;
+      let duplicateMessagesSkipped = 0;
+
+      for (const msg of apiMessages) {
+        try {
+          // Check if message exists by both server ID and content to avoid duplicates
+          const exists = await sqliteService.messageExistsEnhanced(msg._id, msg._id);
+          if (!exists) {
+            await sqliteService.saveMessage({
+              id: msg._id,
+              clientId: msg._id,
+              chatId,
+              content: msg.text,
+              text: msg.text,
+              senderId: msg.senderId,
+              timestamp: msg.createdAt,
+              createdAt: msg.createdAt,
+              status: msg.status,
+              senderName: msg.user.name
+            });
+            newMessagesSaved++;
+            console.log(`💾 [loadChatMessages] Saved new message: ${msg._id}`);
+          } else {
+            duplicateMessagesSkipped++;
+            console.log(`💾 [loadChatMessages] Skipped duplicate message: ${msg._id}`);
+          }
+        } catch (saveError) {
+          console.error(`❌ [loadChatMessages] Error saving message ${msg._id}:`, saveError);
+          // Continue with other messages even if one fails
+        }
+      }
+
+      console.log(`💾 [loadChatMessages] Saved ${newMessagesSaved} new messages to SQLite, skipped ${duplicateMessagesSkipped} duplicates`);
+      serverSyncSuccessful = true;
+
+    } catch (apiError) {
+      console.error('📥 [loadChatMessages] Server sync failed:', apiError);
+      // Continue with local messages only
+    }
+
+    // Step 3: Combine and deduplicate messages
     const allMessages = [...formattedLocalMessages, ...apiMessages];
     const deduplicatedMessages = deduplicateMessages(allMessages);
-    return { chatId, messages: deduplicatedMessages };
-  } catch (error) { return rejectWithValue('Failed to load messages'); }
+
+    // Sort by timestamp (oldest first for proper chronological order)
+    deduplicatedMessages.sort((a, b) =>
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+
+    console.log(`📥 [loadChatMessages] Final result: ${deduplicatedMessages.length} messages`);
+    console.log(`📥 [loadChatMessages] Server sync: ${serverSyncSuccessful ? 'Success' : 'Failed'}`);
+
+    return {
+      chatId,
+      messages: deduplicatedMessages,
+      source: serverSyncSuccessful ? 'server-synced' : 'local-only'
+    };
+
+  } catch (error) {
+    console.error('📥 [loadChatMessages] Critical error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return rejectWithValue(`Failed to load messages: ${errorMessage}`);
+  }
 });
 
 const chatSlice = createSlice({
@@ -146,9 +302,22 @@ const chatSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(loadChatMessages.pending, (state) => { state.isLoading = true; })
-      .addCase(loadChatMessages.fulfilled, (state, action) => { const { chatId, messages } = action.payload; state.messages[chatId] = messages; state.isLoading = false; state.error = null; })
-      .addCase(loadChatMessages.rejected, (state, action) => { state.error = action.payload as string; state.isLoading = false; });
+      .addCase(loadChatMessages.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(loadChatMessages.fulfilled, (state, action) => {
+        const { chatId, messages, source } = action.payload;
+        state.messages[chatId] = messages;
+        state.isLoading = false;
+        state.error = null;
+        console.log(`🎉 Redux: Loaded ${messages.length} messages for chat ${chatId} (${source})`);
+      })
+      .addCase(loadChatMessages.rejected, (state, action) => {
+        state.error = action.payload as string;
+        state.isLoading = false;
+        console.error('🚨 Redux: Failed to load messages:', action.payload);
+      });
   },
 });
 

@@ -100,3 +100,53 @@
 # Keep all classes that might be accessed via reflection
 -keep class * extends java.lang.Exception { *; }
 -keep class * implements java.io.Serializable { *; }
+
+# Socket.IO and WebSocket classes - Critical for real-time messaging
+-keep class io.socket.** { *; }
+-keep class org.java_websocket.** { *; }
+-keep class com.facebook.react.modules.websocket.** { *; }
+-dontwarn io.socket.**
+-dontwarn org.java_websocket.**
+
+# Keep all networking classes - Critical for API calls
+-keep class java.net.** { *; }
+-keep class javax.net.** { *; }
+-keep class android.net.** { *; }
+-dontwarn java.net.**
+-dontwarn javax.net.**
+
+# Keep JavaScript bridge methods - Critical for React Native communication
+-keep class com.facebook.react.bridge.JavaScriptModule { *; }
+-keep class com.facebook.react.bridge.NativeModule { *; }
+-keep class com.facebook.react.bridge.ReactMethod { *; }
+-keepclassmembers class * {
+    @com.facebook.react.bridge.ReactMethod <methods>;
+}
+
+# Keep all contact-related classes
+-keep class com.rt2zz.reactnativecontacts.** { *; }
+-dontwarn com.rt2zz.reactnativecontacts.**
+
+# Keep SQLite classes
+-keep class io.liteglue.** { *; }
+-keep class org.pgsqlite.** { *; }
+-dontwarn io.liteglue.**
+-dontwarn org.pgsqlite.**
+
+# Keep all fetch and XMLHttpRequest related classes
+-keep class com.facebook.react.modules.network.** { *; }
+-keep class org.chromium.** { *; }
+
+# Keep all timer and scheduling classes
+-keep class com.facebook.react.modules.core.** { *; }
+-keep class java.util.concurrent.** { *; }
+
+# Keep all JSON parsing classes
+-keepattributes *Annotation*
+-keepattributes Signature
+-keep class org.json.** { *; }
+-keep class com.google.gson.** { *; }
+
+# Prevent method name obfuscation for debugging
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile

@@ -1,5 +1,5 @@
 // User service for MongoDB operations (main user data)
-const BASE_URL = 'http://localhost:3001/api';
+const BASE_URL = 'https://api.maharishiconnect.com/api';
 
 interface ApiResponse<T> {
   success: boolean;

@@ -6,6 +6,7 @@ import {
   setTyping,
   setOnlineStatus,
   addChat,
+  mergeChats,
 } from '../store/slices/chatSlice';
 import chatApiService from './chatApiService';
 import sqliteService from './sqliteService';
@@ -23,9 +24,26 @@ const normalizeChat = (c: any, currentUserId?: string) => {
       return participantId !== currentUserId;
     });
     if (other) {
-      name = other?.userDetails?.fullName || other?.fullName || other?.name || 'Unknown User';
+      // Enhanced name resolution with better fallbacks
+      name = other?.userDetails?.fullName ||
+        other?.fullName ||
+        other?.name ||
+        other?.user_name ||
+        other?.displayName ||
+        (other?.user_mobile ? `+91${other.user_mobile}` : null) ||
+        (other?.phone ? `+91${other.phone}` : null) ||
+        'Unknown User';
     } else {
       name = 'Unknown';
+    }
+  }
+
+  // If still no name, use a more descriptive fallback
+  if (!name || name === 'Unknown Chat') {
+    if (type === 'direct') {
+      name = 'Direct Message';
+    } else {
+      name = 'Group Chat';
     }
   }
 
@@ -49,13 +67,14 @@ class SocketService {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
-  private typingTimeouts = new Map<string, NodeJS.Timeout>();
+  private typingTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
   private isTyping = false;
+  private processedMessages = new Set<string>(); // Track processed messages to prevent duplicates
 
   connect(userId: string, token?: string): Promise<void> {
-    if (this.socket?.connected) {
-      this.isConnected = true;
-      this.connectionStatus = 'connected';
+    // If already connected with same user, don't reconnect
+    if (this.socket?.connected && this.isConnected) {
+      console.log('🔌 Socket already connected, skipping reconnection');
       return Promise.resolve();
     }
 
@@ -63,11 +82,30 @@ class SocketService {
       console.log('🔌 Connecting to socket server...');
       this.connectionStatus = 'connecting';
 
+      // Disconnect existing socket if any
+      if (this.socket) {
+        this.socket.disconnect();
+        this.socket = null;
+      }
+
       this.socket = io('https://api.maharishiconnect.com', {
         auth: { userId, token },
         transports: ['websocket', 'polling'],
-        timeout: 20000,
+        timeout: 30000, // Increased timeout for release builds
         forceNew: true,
+        upgrade: true,
+        rememberUpgrade: false,
+        // Enhanced configuration for release builds
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        autoConnect: true,
+        // Add headers for better compatibility
+        extraHeaders: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
       });
 
       const onConnect = () => {
@@ -108,21 +146,78 @@ class SocketService {
           }
         } else this.handleReconnection();
       });
-      
+
       const handleIncoming = async (message: any) => {
         console.log('📨 [SocketService] Incoming message:', message);
+
+        // Prevent processing the same message multiple times
+        const messageId = message._id || message.id;
+        if (!messageId) {
+          console.warn('📨 [SocketService] Message missing ID, skipping:', message);
+          return;
+        }
+
+        // Check if message was already processed
+        if (this.processedMessages.has(messageId)) {
+          console.log('📨 [SocketService] Message already processed, skipping:', messageId);
+          return;
+        }
+
+        // Mark message as being processed
+        this.processedMessages.add(messageId);
+
+        // Clean up old processed messages (keep only last 1000)
+        if (this.processedMessages.size > 1000) {
+          const messagesArray = Array.from(this.processedMessages);
+          this.processedMessages.clear();
+          messagesArray.slice(-500).forEach(id => this.processedMessages.add(id));
+        }
+
+        // Enhanced user name resolution
+        const senderId = message.sender_id || message.senderId || message.user?._id;
+        let senderName = message.sender_name || message.senderName || message.user?.name;
+
+        // If no sender name provided, try to resolve it
+        if (!senderName || senderName === 'Unknown') {
+          const state = store.getState();
+          const currentUserId = state.auth.user?.id;
+
+          if (senderId === currentUserId) {
+            senderName = 'You';
+          } else {
+            // Try to resolve from chat participants
+            const chatId = message.chat_id || message.chatId;
+            const chat = state.chat.chats.find((c: any) => c.id === chatId);
+
+            if (chat?.participants) {
+              const participant = chat.participants.find((p: any) =>
+                (p?.user_id || p?.uid || p?.id || p) === senderId
+              );
+              if (participant) {
+                senderName = participant?.user_name || participant?.fullName ||
+                  participant?.name || participant?.userDetails?.fullName ||
+                  `+91${participant?.user_mobile || participant?.phone || ''}`.replace(/^\+91$/, 'Unknown User');
+              }
+            }
+
+            // Fallback to phone number format if still unknown
+            if (!senderName || senderName === 'Unknown') {
+              senderName = message.sender_phone ? `+91${message.sender_phone}` : 'Unknown User';
+            }
+          }
+        }
 
         const formattedMessage = {
           _id: message._id || message.id,
           text: message.content || message.text,
           createdAt: message.created_at || message.createdAt || new Date().toISOString(),
           user: {
-            _id: message.sender_id || message.senderId || message.user?._id,
-            name: message.sender_name || message.senderName || message.user?.name || 'Unknown',
+            _id: senderId,
+            name: senderName,
             avatar: message.sender_avatar || message.senderAvatar || message.user?.avatar,
           },
           chatId: message.chat_id || message.chatId,
-          senderId: message.sender_id || message.senderId,
+          senderId: senderId,
           status: message.status || 'sent',
         };
 
@@ -140,7 +235,7 @@ class SocketService {
             if (newChatData) {
               const currentUserId = state.auth.user?.id;
               const normalizedNewChat = normalizeChat(newChatData, currentUserId);
-              
+
               await sqliteService.saveChat(normalizedNewChat);
               console.log(`💾 [SocketService] New chat ${chatId} saved to SQLite.`);
 
@@ -151,23 +246,85 @@ class SocketService {
             console.error(`❌ [SocketService] Failed to process new chat ${chatId}:`, error);
           }
         }
-        
+
+        // Save message to SQLite first, then dispatch to Redux
+        try {
+          await sqliteService.saveMessage({
+            id: formattedMessage._id,
+            clientId: formattedMessage._id,
+            chatId: formattedMessage.chatId,
+            content: formattedMessage.text,
+            text: formattedMessage.text,
+            senderId: formattedMessage.senderId,
+            timestamp: formattedMessage.createdAt,
+            createdAt: formattedMessage.createdAt,
+            status: formattedMessage.status,
+            senderName: formattedMessage.user.name
+          });
+          console.log('💾 [SocketService] Message saved to SQLite:', formattedMessage._id);
+        } catch (saveError) {
+          console.error('❌ [SocketService] Failed to save message to SQLite:', saveError);
+          // Continue with Redux dispatch even if SQLite save fails
+        }
+
+        // Dispatch to Redux for immediate UI update
         store.dispatch(addMessage(formattedMessage as any));
       };
 
+      // Clean up existing listeners to prevent duplicates
       this.socket?.off('newMessage');
       this.socket?.off('message');
       this.socket?.off('new_message');
 
+      // Use only one primary event listener to prevent conflicts
       this.socket?.on('newMessage', handleIncoming);
-      this.socket?.on('message', handleIncoming);
-      this.socket?.on('new_message', handleIncoming);
+
+      // Keep fallback listeners but with different handlers to avoid conflicts
+      this.socket?.on('message', (message: any) => {
+        console.log('📨 [SocketService] Fallback message event:', message);
+        // Process all message events as fallback
+        if (message) {
+          handleIncoming(message);
+        }
+      });
+
+      this.socket?.on('new_message', (message: any) => {
+        console.log('📨 [SocketService] Fallback new_message event:', message);
+        // Process all new_message events as fallback
+        if (message) {
+          handleIncoming(message);
+        }
+      });
 
       this.socket.on('messageDelivered', (data) => {
         store.dispatch(updateMessageStatus({ messageId: data.messageId, status: 'delivered' }));
       });
       this.socket.on('messageRead', (data) => {
         store.dispatch(updateMessageStatus({ messageId: data.messageId, status: 'read' }));
+      });
+
+      // Handle new chat creation events
+      this.socket.on('newChat', (chatData: any) => {
+        console.log('📨 [SocketService] New chat created:', chatData);
+        try {
+          const normalizedChat = normalizeChat(chatData);
+          store.dispatch(mergeChats([normalizedChat]));
+          console.log('📨 [SocketService] New chat added to Redux:', normalizedChat.id);
+        } catch (error) {
+          console.error('❌ [SocketService] Failed to process new chat:', error);
+        }
+      });
+
+      // Handle chat updates
+      this.socket.on('chatUpdated', (chatData: any) => {
+        console.log('📨 [SocketService] Chat updated:', chatData);
+        try {
+          const normalizedChat = normalizeChat(chatData);
+          store.dispatch(mergeChats([normalizedChat]));
+          console.log('📨 [SocketService] Chat update processed:', normalizedChat.id);
+        } catch (error) {
+          console.error('❌ [SocketService] Failed to process chat update:', error);
+        }
       });
       this.socket.on('messageEdited', (data) => {
         store.dispatch({ type: 'chat/updateMessage', payload: data });
@@ -204,8 +361,13 @@ class SocketService {
   sendMessage(message: any) {
     if (this.socket?.connected) {
       console.log('📤 Sending message via socket:', message.tempId || message._id);
-      this.socket.emit('message', message);
-      return true;
+      try {
+        this.socket.emit('message', message);
+        return true;
+      } catch (error) {
+        console.error('❌ Error sending message via socket:', error);
+        return false;
+      }
     }
     console.error('❌ Cannot send message: Socket not connected');
     return false;
@@ -272,7 +434,15 @@ class SocketService {
   }
 
   getConnectionStatus() {
-    return this.isConnected;
+    return this.isConnected && this.socket?.connected;
+  }
+
+  getConnectionDetails() {
+    return {
+      isConnected: this.isConnected,
+      connectionStatus: this.connectionStatus,
+      socketConnected: this.socket?.connected,
+    };
   }
 
   getConnectionStatusString() {

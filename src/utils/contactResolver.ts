@@ -129,6 +129,30 @@ class ContactResolver {
     return chat.name || 'Unknown';
   }
 
+  // Resolve contact name by phone number or user ID
+  resolveContactName(phoneNumberOrId: string, fallbackName?: string): string {
+    if (!phoneNumberOrId) return fallbackName || 'Unknown User';
+    
+    // First try to resolve by phone number from local contacts
+    const localName = this._resolveNameFromCache(phoneNumberOrId);
+    if (localName) return localName;
+    
+    // Try to resolve from server contacts
+    const serverContact = this.getServerContact(phoneNumberOrId);
+    if (serverContact) {
+      return serverContact.localName || serverContact.name || serverContact.fullName || fallbackName || 'Unknown User';
+    }
+    
+    // If it looks like a phone number, format it nicely
+    const normalizedNumber = this.normalizePhoneNumber(phoneNumberOrId);
+    if (normalizedNumber && normalizedNumber.length === 10) {
+      return `+91${normalizedNumber}`;
+    }
+    
+    // Return fallback name or unknown
+    return fallbackName || 'Unknown User';
+  }
+
   // FIXED: Updated to call the new private methods
   resolveChatAvatar(chat: any, currentUserId: string): string | null {
     if (!chat || chat.type !== 'direct') {
