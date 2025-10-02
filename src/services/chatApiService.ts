@@ -16,7 +16,7 @@ class ChatApiService {
     // Note: This is a simplified approach. In a real app, you might want to pass the token
     // or use a different method to access the Redux store from a service
     const token = this.getStoredToken();
-    
+
     return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -49,7 +49,7 @@ class ChatApiService {
         method: 'GET',
         headers: this.getAuthHeaders(),
       });
-      
+
       return response.ok;
     } catch (error) {
       console.error('Server connection test failed:', error);
@@ -62,7 +62,7 @@ class ChatApiService {
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     try {
-      
+
       const response = await fetch(`${BASE_URL}${endpoint}`, {
         headers: {
           ...this.getAuthHeaders(),
@@ -104,7 +104,7 @@ class ChatApiService {
       method: 'POST',
       body: JSON.stringify(chatData),
     });
-    
+
     // Handle different response formats
     if (response.data) {
       return response.data;
@@ -120,7 +120,7 @@ class ChatApiService {
       method: 'POST',
       body: JSON.stringify({ participantId }),
     });
-    
+
     // Handle different response formats
     if (response.data) {
       return response.data;
@@ -133,7 +133,7 @@ class ChatApiService {
 
   async getUserChats(): Promise<any[]> {
     const response = await this.makeRequest<any[]>('/chat/user-chats');
-    
+
     // Handle different response formats
     if (response.data && Array.isArray(response.data)) {
       return response.data;
@@ -147,9 +147,14 @@ class ChatApiService {
     }
   }
 
+  async getChatDetails(chatId: string): Promise<any> {
+    const response = await this.makeRequest<any>(`/chat/${chatId}`);
+    return response.data;
+  }
+
   async getChat(chatId: string): Promise<any> {
     const response = await this.makeRequest<any>(`/chat/${chatId}`);
-    
+
     // Handle different response formats
     if (response.data) {
       return response.data;
@@ -162,13 +167,6 @@ class ChatApiService {
 
   async joinChat(chatId: string): Promise<any> {
     const response = await this.makeRequest<any>(`/chat/${chatId}/join`, {
-      method: 'POST',
-    });
-    return response.data;
-  }
-
-  async leaveChat(chatId: string): Promise<any> {
-    const response = await this.makeRequest<any>(`/chat/${chatId}/leave`, {
       method: 'POST',
     });
     return response.data;
@@ -201,10 +199,10 @@ class ChatApiService {
     if (options?.limit) params.append('limit', options.limit.toString());
     if (options?.offset) params.append('offset', options.offset.toString());
     if (options?.beforeMessageId) params.append('beforeMessageId', options.beforeMessageId);
-    
+
     const queryString = params.toString();
     const endpoint = queryString ? `/chat/${chatId}/messages?${queryString}` : `/chat/${chatId}/messages`;
-    
+
     const response = await this.makeRequest<any[]>(endpoint);
     return response.data || [];
   }
@@ -218,10 +216,10 @@ class ChatApiService {
     if (options?.limit) params.append('limit', options.limit.toString());
     if (options?.offset) params.append('offset', options.offset.toString());
     if (options?.beforeMessageId) params.append('beforeMessageId', options.beforeMessageId);
-    
+
     const queryString = params.toString();
     const endpoint = queryString ? `/chat/${chatId}/messages?${queryString}` : `/chat/${chatId}/messages`;
-    
+
     const response = await this.makeRequest<any[]>(endpoint);
     return response.data || [];
   }
@@ -325,10 +323,10 @@ class ChatApiService {
 
   // Search endpoints
   async searchMessages(query: string, chatId?: string): Promise<any[]> {
-    const endpoint = chatId 
+    const endpoint = chatId
       ? `/search/messages?q=${encodeURIComponent(query)}&chatId=${chatId}`
       : `/search/messages?q=${encodeURIComponent(query)}`;
-    
+
     const response = await this.makeRequest<any[]>(endpoint);
     return response.data || [];
   }
@@ -338,6 +336,20 @@ class ChatApiService {
       `/search/chats?q=${encodeURIComponent(query)}`
     );
     return response.data || [];
+  }
+
+  async deleteChat(chatId: string): Promise<any> {
+    const response = await this.makeRequest<any>(`/chat/${chatId}`, {
+      method: 'DELETE',
+    });
+    return response.data;
+  }
+
+  async leaveChat(chatId: string): Promise<any> {
+    const response = await this.makeRequest<any>(`/chat/${chatId}/leave`, {
+      method: 'POST',
+    });
+    return response.data;
   }
 }
 

@@ -19,6 +19,7 @@ import {
   setLoading,
   setError,
   mergeChats,
+  removeChat,
 } from '@/store/slices/chatSlice';
 import { selectCurrentUser } from '@/store/slices/authSlice';
 import MessageTime from '@/components/atoms/chats/MessageTime';
@@ -199,6 +200,37 @@ export default function ChatScreen() {
 
         console.log(`🔄 Fetched ${allServerChats.length} chats from server`);
 
+        // Step 2: Clean up orphaned chats (chats that exist locally but not on server)
+        console.log(`🧹 [ChatScreen] Checking for orphaned chats...`);
+        const localChats = await sqliteService.getChats();
+        const serverChatIds = new Set(
+          allServerChats.map(chat => chat.id || chat._id),
+        );
+
+        let orphanedChatsRemoved = 0;
+        for (const localChat of localChats) {
+          const localChatId = localChat.id || localChat._id;
+          if (!serverChatIds.has(localChatId)) {
+            console.log(
+              `🗑️ [ChatScreen] Removing orphaned chat: ${localChatId}`,
+            );
+
+            // Remove from Redux state
+            dispatch(removeChat(localChatId));
+
+            // Remove from SQLite
+            await sqliteService.deleteChat(localChatId);
+
+            orphanedChatsRemoved++;
+          }
+        }
+
+        if (orphanedChatsRemoved > 0) {
+          console.log(
+            `✅ [ChatScreen] Removed ${orphanedChatsRemoved} orphaned chats`,
+          );
+        }
+
         const normalizedApiChats = allServerChats.map(c =>
           normalizeChat(c, currentUser.id),
         );
@@ -340,6 +372,55 @@ export default function ChatScreen() {
 
     return () => clearInterval(refreshInterval);
   }, [currentUser?.id, syncChatsFromServer]);
+
+  // Periodic cleanup of orphaned data
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const cleanupInterval = setInterval(async () => {
+      console.log('🧹 [ChatScreen] Periodic cleanup of orphaned data');
+      try {
+        // Get all local chats
+        const localChats = await sqliteService.getChats();
+
+        // Check each chat against server
+        for (const localChat of localChats) {
+          const chatId = localChat.id || localChat._id;
+          try {
+            // Try to fetch chat details from server
+            await chatApiService.getChatDetails(chatId);
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              error.message &&
+              error.message.includes('Chat not found')
+            ) {
+              console.log(
+                `🗑️ [ChatScreen] Found orphaned chat during cleanup: ${chatId}`,
+              );
+
+              // Remove from Redux state
+              dispatch(removeChat(chatId));
+
+              // Remove from SQLite
+              await sqliteService.deleteChat(chatId);
+
+              console.log(
+                `✅ [ChatScreen] Cleaned up orphaned chat: ${chatId}`,
+              );
+            }
+          }
+        }
+      } catch (cleanupError) {
+        console.error(
+          '❌ [ChatScreen] Error during periodic cleanup:',
+          cleanupError,
+        );
+      }
+    }, 60000); // Cleanup every 60 seconds
+
+    return () => clearInterval(cleanupInterval);
+  }, [currentUser?.id, dispatch]);
 
   const initializeContactResolver = async () => {
     try {

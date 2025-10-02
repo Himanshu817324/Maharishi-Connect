@@ -7,6 +7,7 @@ import {
   setOnlineStatus,
   addChat,
   mergeChats,
+  removeChat,
 } from '../store/slices/chatSlice';
 import chatApiService from './chatApiService';
 import sqliteService from './sqliteService';
@@ -269,6 +270,27 @@ class SocketService {
 
         // Dispatch to Redux for immediate UI update
         store.dispatch(addMessage(formattedMessage as any));
+
+        // Update chat last message
+        try {
+          const chatId = formattedMessage.chatId;
+          const state = store.getState();
+          const chat = state.chat.chats.find((c: any) => c.id === chatId);
+
+          if (chat) {
+            store.dispatch({
+              type: 'chat/updateChatLastMessage',
+              payload: {
+                chatId,
+                lastMessage: formattedMessage.text,
+                lastMessageTime: formattedMessage.createdAt,
+                unreadCount: chat.unreadCount + 1
+              }
+            });
+          }
+        } catch (chatUpdateError) {
+          console.error('❌ [SocketService] Failed to update chat:', chatUpdateError);
+        }
       };
 
       // Clean up existing listeners to prevent duplicates
@@ -297,10 +319,45 @@ class SocketService {
       });
 
       this.socket.on('messageDelivered', (data) => {
+        console.log('📨 [SocketService] Message delivered:', data);
         store.dispatch(updateMessageStatus({ messageId: data.messageId, status: 'delivered' }));
       });
       this.socket.on('messageRead', (data) => {
+        console.log('📨 [SocketService] Message read:', data);
         store.dispatch(updateMessageStatus({ messageId: data.messageId, status: 'read' }));
+      });
+
+      // Handle message edits
+      this.socket.on('messageEdited', (data: any) => {
+        console.log('📨 [SocketService] Message edited:', data);
+        try {
+          store.dispatch({
+            type: 'chat/updateMessage',
+            payload: {
+              messageId: data.messageId,
+              updates: {
+                text: data.content,
+                editedAt: data.editedAt,
+                isEdited: true
+              }
+            }
+          });
+        } catch (error) {
+          console.error('❌ [SocketService] Failed to process message edit:', error);
+        }
+      });
+
+      // Handle message deletions
+      this.socket.on('messageDeleted', (data: any) => {
+        console.log('📨 [SocketService] Message deleted:', data);
+        try {
+          store.dispatch({
+            type: 'chat/removeMessage',
+            payload: data.messageId
+          });
+        } catch (error) {
+          console.error('❌ [SocketService] Failed to process message deletion:', error);
+        }
       });
 
       // Handle new chat creation events
@@ -324,6 +381,18 @@ class SocketService {
           console.log('📨 [SocketService] Chat update processed:', normalizedChat.id);
         } catch (error) {
           console.error('❌ [SocketService] Failed to process chat update:', error);
+        }
+      });
+
+      // Handle chat deletion
+      this.socket.on('chatDeleted', (data: any) => {
+        console.log('📨 [SocketService] Chat deleted:', data);
+        try {
+          const { chatId } = data;
+          store.dispatch(removeChat(chatId));
+          console.log('📨 [SocketService] Chat deletion processed:', chatId);
+        } catch (error) {
+          console.error('❌ [SocketService] Failed to process chat deletion:', error);
         }
       });
       this.socket.on('messageEdited', (data) => {
@@ -356,6 +425,31 @@ class SocketService {
       this.socket = null;
       this.isConnected = false;
     }
+  }
+
+  // Clean up socket state for chat deletion
+  cleanupChatState(chatId: string) {
+    console.log(`🧹 [SocketService] Cleaning up state for chat: ${chatId}`);
+
+    // Clear typing timeouts for this chat
+    const timeout = this.typingTimeouts.get(chatId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.typingTimeouts.delete(chatId);
+    }
+
+    // Clear processed messages cache to prevent conflicts
+    this.processedMessages.clear();
+
+    console.log(`✅ [SocketService] State cleaned up for chat: ${chatId}`);
+  }
+
+  // Force reconnection for clean state
+  forceReconnect() {
+    console.log('🔄 [SocketService] Force reconnecting for clean state...');
+    this.disconnect();
+    this.reconnectAttempts = 0;
+    // Will reconnect on next connect() call
   }
 
   sendMessage(message: any) {

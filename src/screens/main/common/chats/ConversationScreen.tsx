@@ -9,7 +9,12 @@ import {
   FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
+import {
+  useRoute,
+  RouteProp,
+  useFocusEffect,
+  useNavigation,
+} from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, store } from '@/store';
 import {
@@ -44,6 +49,7 @@ type ConversationRouteProp = RouteProp<
 const ConversationScreen: React.FC = () => {
   const route = useRoute<ConversationRouteProp>();
   const dispatch = useDispatch();
+  const navigation = useNavigation();
   const { colors } = useTheme();
 
   const { id: chatId } = route.params;
@@ -93,6 +99,13 @@ const ConversationScreen: React.FC = () => {
           console.log('✅ Full server sync completed successfully');
           setLastSyncTime(Date.now());
         }
+
+        // If chat was cleaned up (not found on server), navigate back
+        if (result.payload.source === 'cleaned-up') {
+          console.log('🗑️ Chat was cleaned up, navigating back to chat list');
+          navigation.goBack();
+          return;
+        }
       } else {
         console.error('📥 Failed to load messages:', result.payload);
       }
@@ -138,6 +151,46 @@ const ConversationScreen: React.FC = () => {
 
     return () => clearInterval(syncInterval);
   }, [chatId, currentUser?.id, lastSyncTime]);
+
+  // Enhanced real-time message handling
+  useEffect(() => {
+    if (!chatId || !currentUser?.id) return;
+
+    // Listen for message updates (edits, deletions)
+    const unsubMessageUpdate = socketService.on(
+      'messageEdited',
+      (data: any) => {
+        console.log('📨 [ConversationScreen] Message edited:', data);
+        if (data.chatId === chatId) {
+          dispatch({
+            type: 'chat/updateMessage',
+            payload: {
+              messageId: data.messageId,
+              content: data.content,
+            },
+          });
+        }
+      },
+    );
+
+    const unsubMessageDelete = socketService.on(
+      'messageDeleted',
+      (data: any) => {
+        console.log('📨 [ConversationScreen] Message deleted:', data);
+        if (data.chatId === chatId) {
+          dispatch({
+            type: 'chat/removeMessage',
+            payload: data.messageId,
+          });
+        }
+      },
+    );
+
+    return () => {
+      unsubMessageUpdate?.();
+      unsubMessageDelete?.();
+    };
+  }, [chatId, currentUser?.id, dispatch]);
 
   // Socket connection
   useEffect(() => {

@@ -999,6 +999,23 @@ class SQLiteService {
     }
   }
 
+  // ✅ Delete a specific chat
+  async deleteChat(chatId: string) {
+    if (!this.db) return;
+
+    try {
+      // Delete chat
+      await this.db.executeSql('DELETE FROM chats WHERE id = ?', [chatId]);
+
+      // Delete all messages for this chat
+      await this.db.executeSql('DELETE FROM messages WHERE chatId = ?', [chatId]);
+
+      console.log(`✅ Chat and messages deleted successfully: ${chatId}`);
+    } catch (error) {
+      console.error(`❌ Error deleting chat ${chatId}:`, error);
+    }
+  }
+
   // ✅ Cleanup duplicate messages
   async cleanupDuplicateMessages() {
     if (!this.db) return;

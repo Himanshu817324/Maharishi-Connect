@@ -1,6 +1,54 @@
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
 import chatApiService from '@/services/chatApiService';
 import sqliteService from '@/services/sqliteService';
+import socketService from '@/services/socketService';
+import { store } from '@/store';
+
+// Utility function to normalize chat data
+const normalizeChat = (c: any, currentUserId?: string) => {
+  const id = c?.id || c?._id;
+  const type = (c?.type || c?.chat_type) === 'direct' ? 'direct' : (c?.type || 'group');
+  const participants = c?.participants || c?.members || [];
+
+  let name = c?.name;
+  if (!name && type === 'direct' && Array.isArray(participants)) {
+    const other = participants.find((p: any) => {
+      const participantId = p?.user_id || p?.uid || p?.id || p;
+      return participantId !== currentUserId;
+    });
+    if (other) {
+      name = other?.userDetails?.fullName ||
+        other?.fullName ||
+        other?.name ||
+        other?.user_name ||
+        other?.displayName ||
+        (other?.user_mobile ? `+91${other.user_mobile}` : null) ||
+        (other?.phone ? `+91${other.phone}` : null) ||
+        'Unknown User';
+    } else {
+      name = 'Unknown';
+    }
+  }
+
+  if (!name || name === 'Unknown Chat') {
+    if (type === 'direct') {
+      name = 'Direct Message';
+    } else {
+      name = 'Group Chat';
+    }
+  }
+
+  return {
+    id,
+    type,
+    name: name || 'Unknown Chat',
+    participants,
+    avatar: c?.avatar || c?.icon || undefined,
+    lastMessage: c?.last_message_content || c?.lastMessage || '',
+    lastMessageTime: c?.last_message_created_at || c?.updated_at || c?.created_at || c?.lastMessageTime || null,
+    unreadCount: c?.unread_count ?? c?.unreadCount ?? 0,
+  } as any;
+};
 
 interface Message {
   _id: string;
@@ -106,12 +154,12 @@ export const loadChatMessages = createAsyncThunk('chat/loadChatMessages', async 
       }
     }));
 
-    // Step 2: Perform full server sync to get ALL messages
+    // Step 2: Perform comprehensive server sync to get ALL messages
     let apiMessages: Message[] = [];
     let serverSyncSuccessful = false;
 
     try {
-      console.log(`📥 [loadChatMessages] Performing full server sync...`);
+      console.log(`📥 [loadChatMessages] Performing comprehensive server sync...`);
 
       // Always fetch ALL messages from server for complete sync
       let allServerMessages: any[] = [];
@@ -145,6 +193,21 @@ export const loadChatMessages = createAsyncThunk('chat/loadChatMessages', async 
           console.warn(`📥 [loadChatMessages] Reached safety limit for message fetching`);
           break;
         }
+      }
+
+      // Step 2.1: Get chat metadata and participants for better sync
+      try {
+        const chatDetails = await chatApiService.getChatDetails(chatId);
+        console.log(`📥 [loadChatMessages] Fetched chat details:`, chatDetails);
+
+        // Update chat in Redux with latest server data
+        if (chatDetails) {
+          const normalizedChat = normalizeChat(chatDetails);
+          store.dispatch(mergeChats([normalizedChat]));
+        }
+      } catch (chatDetailsError) {
+        console.warn('📥 [loadChatMessages] Failed to fetch chat details:', chatDetailsError);
+        // Continue with message sync even if chat details fail
       }
 
       apiMessages = allServerMessages.map(msg => ({
@@ -200,7 +263,28 @@ export const loadChatMessages = createAsyncThunk('chat/loadChatMessages', async 
 
     } catch (apiError) {
       console.error('📥 [loadChatMessages] Server sync failed:', apiError);
-      // Continue with local messages only
+
+      // If chat not found on server, clean up local data
+      if (apiError instanceof Error && apiError.message && apiError.message.includes('Chat not found')) {
+        console.log('🗑️ [loadChatMessages] Chat not found on server, cleaning up local data...');
+
+        // Remove chat from Redux state
+        store.dispatch(removeChat(chatId));
+
+        // Remove chat and messages from SQLite
+        await sqliteService.deleteChat(chatId);
+
+        console.log('✅ [loadChatMessages] Cleaned up orphaned chat and messages');
+
+        // Return empty result
+        return {
+          messages: [],
+          source: 'cleaned-up',
+          chatId,
+        };
+      }
+
+      // Continue with local messages only for other errors
     }
 
     // Step 3: Combine and deduplicate messages
@@ -225,6 +309,73 @@ export const loadChatMessages = createAsyncThunk('chat/loadChatMessages', async 
     console.error('📥 [loadChatMessages] Critical error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return rejectWithValue(`Failed to load messages: ${errorMessage}`);
+  }
+});
+
+export const deleteChat = createAsyncThunk('chat/deleteChat', async (chatId: string, { dispatch, rejectWithValue }) => {
+  try {
+    console.log(`🗑️ [deleteChat] Deleting chat: ${chatId}`);
+
+    // Delete from server
+    await chatApiService.deleteChat(chatId);
+
+    // Clean up socket state
+    socketService.cleanupChatState(chatId);
+
+    // Remove from Redux state
+    dispatch(removeChat(chatId));
+
+    // Delete from SQLite
+    await sqliteService.deleteChat(chatId);
+
+    console.log(`✅ [deleteChat] Chat deleted successfully: ${chatId}`);
+    return { chatId };
+  } catch (error) {
+    console.error('❌ [deleteChat] Failed to delete chat:', error);
+    return rejectWithValue(`Failed to delete chat: ${error}`);
+  }
+});
+
+export const leaveChat = createAsyncThunk('chat/leaveChat', async (chatId: string, { dispatch, rejectWithValue }) => {
+  try {
+    console.log(`🚪 [leaveChat] Leaving chat: ${chatId}`);
+
+    // Leave chat on server
+    await chatApiService.leaveChat(chatId);
+
+    // Clean up socket state
+    socketService.cleanupChatState(chatId);
+
+    // Remove from Redux state
+    dispatch(removeChat(chatId));
+
+    // Delete from SQLite
+    await sqliteService.deleteChat(chatId);
+
+    console.log(`✅ [leaveChat] Left chat successfully: ${chatId}`);
+    return { chatId };
+  } catch (error) {
+    console.error('❌ [leaveChat] Failed to leave chat:', error);
+    return rejectWithValue(`Failed to leave chat: ${error}`);
+  }
+});
+
+// Force clean state for new chat creation
+export const prepareForNewChat = createAsyncThunk('chat/prepareForNewChat', async (_, { dispatch }) => {
+  try {
+    console.log('🔄 [prepareForNewChat] Preparing for new chat creation...');
+
+    // Clear all chat state
+    dispatch(clearChatState());
+
+    // Force socket reconnection for clean state
+    socketService.forceReconnect();
+
+    console.log('✅ [prepareForNewChat] Clean state prepared');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ [prepareForNewChat] Failed to prepare clean state:', error);
+    throw error;
   }
 });
 
@@ -298,7 +449,51 @@ const chatSlice = createSlice({
     setLoading: (state, action: PayloadAction<boolean>) => { state.isLoading = action.payload; },
     setError: (state, action: PayloadAction<string | null>) => { state.error = action.payload; },
     clearChats: (state) => { state.chats = []; state.messages = {}; state.currentChat = null; },
+    removeChat: (state, action: PayloadAction<string>) => {
+      const chatId = action.payload;
+      state.chats = state.chats.filter(chat => chat.id !== chatId);
+      delete state.messages[chatId];
+      if (state.currentChat?.id === chatId) {
+        state.currentChat = null;
+      }
+    },
+    clearChatState: (state) => {
+      state.chats = [];
+      state.messages = {};
+      state.currentChat = null;
+      state.isLoading = false;
+      state.error = null;
+    },
     clearMessagesForChat: (state, action: PayloadAction<string>) => { const chatId = action.payload; if (state.messages[chatId]) { state.messages[chatId] = []; } },
+    reconcileMessages: (state, action: PayloadAction<{ chatId: string; serverMessages: Message[] }>) => {
+      const { chatId, serverMessages } = action.payload;
+      const localMessages = state.messages[chatId] || [];
+
+      // Create a map of server messages by ID
+      const serverMessageMap = new Map(serverMessages.map(msg => [msg._id, msg]));
+
+      // Update existing messages and add new ones
+      const reconciledMessages: Message[] = [];
+      const processedIds = new Set<string>();
+
+      // First, process all server messages (authoritative)
+      serverMessages.forEach(serverMsg => {
+        reconciledMessages.push(serverMsg);
+        processedIds.add(serverMsg._id);
+      });
+
+      // Then, add any local messages that aren't on server (temporary messages)
+      localMessages.forEach(localMsg => {
+        if (!processedIds.has(localMsg._id) && localMsg._id.startsWith('temp_')) {
+          reconciledMessages.push(localMsg);
+        }
+      });
+
+      // Sort by creation time
+      reconciledMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+      state.messages[chatId] = reconciledMessages;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -342,7 +537,10 @@ export const {
   setLoading,
   setError,
   clearChats,
+  removeChat,
+  clearChatState,
   clearMessagesForChat,
+  reconcileMessages,
 } = chatSlice.actions;
 
 export default chatSlice.reducer;
