@@ -3,7 +3,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import React from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
-import { RootStackParamList } from '../types/navigation'; 
+import { RootStackParamList } from '../types/navigation';
 
 // Import navigation stacks
 import AuthStack from './auth/AuthStack';

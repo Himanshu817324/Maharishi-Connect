@@ -441,37 +441,70 @@ export default function FilteredContactsScreen() {
         return;
       }
 
-      // Create new direct message chat using standard createChat API
-      console.log('💬 Creating new direct message chat...');
+      // Create new direct message chat using real-time socket events
+      console.log('💬 Creating new direct message chat via socket...');
       let chatData;
       let serverChatId = null;
 
       try {
-        console.log('💬 Calling createChat API with user ID:', user._id);
+        console.log('💬 Calling socket createChat with user ID:', user._id);
 
-        // Use the regular createChat API (createDirectMessage endpoint doesn't exist yet)
-        chatData = await chatApiService.createChat({
+        // Ensure socket is connected before attempting chat creation
+        if (!socketService.getConnectionStatus()) {
+          console.log('💬 Socket not connected, attempting to connect...');
+          await socketService.connect(currentUser.id, currentUser.token);
+
+          // Wait a moment for connection to establish
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+          if (!socketService.getConnectionStatus()) {
+            throw new Error('Socket connection failed');
+          }
+        }
+
+        // Use socket-based chat creation for real-time synchronization
+        chatData = await socketService.createChat({
           type: 'direct',
           name: user.name || user.fullName,
           description: `Direct message with ${user.name || user.fullName}`,
           participants: [currentUser.id, user._id],
         });
-        console.log('💬 CreateChat response:', chatData);
+        console.log('💬 Socket createChat response:', chatData);
 
         serverChatId = chatData?.id || chatData?._id || chatData?.chatId;
 
         if (!serverChatId) {
-          throw new Error('No chat ID returned from server');
+          throw new Error('No chat ID returned from socket response');
         }
-      } catch (apiError) {
-        console.error('💬 CreateChat API failed:', apiError);
+      } catch (socketError) {
+        console.error('💬 Socket createChat failed:', socketError);
 
-        Alert.alert(
-          'Error',
-          'Failed to create chat. Please check your connection and try again.',
-          [{ text: 'OK' }],
-        );
-        return;
+        // Fallback to HTTP API if socket fails
+        console.log('💬 Falling back to HTTP API...');
+        try {
+          chatData = await chatApiService.createChat({
+            type: 'direct',
+            name: user.name || user.fullName,
+            description: `Direct message with ${user.name || user.fullName}`,
+            participants: [currentUser.id, user._id],
+          });
+          console.log('💬 HTTP API fallback response:', chatData);
+
+          serverChatId = chatData?.id || chatData?._id || chatData?.chatId;
+
+          if (!serverChatId) {
+            throw new Error('No chat ID returned from HTTP API fallback');
+          }
+        } catch (apiError) {
+          console.error('💬 Both socket and HTTP API failed:', apiError);
+
+          Alert.alert(
+            'Error',
+            'Failed to create chat. Please check your connection and try again.',
+            [{ text: 'OK' }],
+          );
+          return;
+        }
       }
 
       // We must have a server ID at this point
@@ -482,12 +515,12 @@ export default function FilteredContactsScreen() {
       socketService.joinChat(serverChatId);
 
       // Create a properly formatted chat object for Redux (matching Chat interface)
-      const chatName = ContactResolver.isInitialized() 
+      const chatName = ContactResolver.isInitialized()
         ? ContactResolver.resolveContactName(
             user.mobileNo || user._id,
             user.name || user.fullName,
           )
-        : (user.name || user.fullName || `+91${user.mobileNo}`);
+        : user.name || user.fullName || `+91${user.mobileNo}`;
 
       const formattedChat: Chat = {
         id: serverChatId,

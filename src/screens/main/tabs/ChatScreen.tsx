@@ -39,6 +39,7 @@ import {
 } from '@/theme/responsive';
 import ContactResolver from '@/utils/contactResolver';
 import { fetchContacts } from '@/services/contactService';
+import { useSocketLifecycle } from '@/hooks/useSocketLifecycle';
 
 type ApiChat = any;
 
@@ -159,6 +160,13 @@ export default function ChatScreen() {
   );
   const [contactResolverReady, setContactResolverReady] = useState(false);
 
+  // Socket lifecycle management - disconnect when leaving chat context
+  const { cancelDisconnection } = useSocketLifecycle({
+    connectOnFocus: true,
+    disconnectOnBlur: true,
+    disconnectDelay: 30000, // 30 seconds delay before disconnecting
+  });
+
   const syncChatsFromServer = useCallback(
     async (isInitialLoad = false) => {
       if (!currentUser?.token) return;
@@ -276,14 +284,29 @@ export default function ChatScreen() {
     [currentUser, dispatch],
   );
 
+  // On-demand socket connection when ChatScreen mounts
   useEffect(() => {
-    if (currentUser?.id && !socketService.getConnectionStatus()) {
-      socketService
-        .connect(currentUser.id, currentUser.token)
-        .catch(err =>
-          console.error('❌ [ChatScreen] Socket connection failed:', err),
+    if (!currentUser?.id) return;
+
+    const initializeSocket = async () => {
+      try {
+        console.log(
+          '🔌 [ChatScreen] Initializing on-demand socket connection...',
         );
-    }
+
+        if (!socketService.getConnectionStatus()) {
+          await socketService.connect(currentUser.id, currentUser.token);
+          console.log('✅ [ChatScreen] Socket connected on-demand');
+        } else {
+          console.log('✅ [ChatScreen] Socket already connected');
+        }
+      } catch (error) {
+        console.error('❌ [ChatScreen] Socket connection failed:', error);
+        // Continue without socket - app will work in offline mode
+      }
+    };
+
+    initializeSocket();
     const unsubConnect = socketService.on('connect', () => {
       console.log('🔌 [ChatScreen] Socket connected');
       setSocketConnected(true);
@@ -353,10 +376,14 @@ export default function ChatScreen() {
     loadInitialChats();
 
     return () => {
+      console.log('🧹 [ChatScreen] Cleaning up socket listeners...');
       unsubConnect?.();
       unsubDisconnect?.();
       unsubNewChat?.();
       unsubChatUpdated?.();
+
+      // Note: We don't disconnect socket here as user might navigate to ConversationScreen
+      // Socket will be disconnected when user leaves all chat-related screens
     };
   }, [currentUser?.id]);
 

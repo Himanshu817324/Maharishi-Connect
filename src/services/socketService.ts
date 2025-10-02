@@ -205,6 +205,12 @@ class SocketService {
           messagesArray.slice(-1000).forEach(key => this.processedMessages.add(key));
         }
 
+        // Enhanced message validation
+        if (!message.content && !message.text) {
+          console.warn('📨 [SocketService] Message missing content, skipping:', messageId);
+          return;
+        }
+
         // Enhanced user name resolution
         const senderId = message.sender_id || message.senderId || message.user?._id;
         let senderName = message.sender_name || message.senderName || message.user?.name;
@@ -279,21 +285,26 @@ class SocketService {
           }
         }
 
-        // Save message to SQLite first, then dispatch to Redux
+        // Save message to SQLite first for persistence
         try {
-          await sqliteService.saveMessage({
-            id: formattedMessage._id,
-            clientId: formattedMessage._id,
-            chatId: formattedMessage.chatId,
-            content: formattedMessage.text,
-            text: formattedMessage.text,
-            senderId: formattedMessage.senderId,
-            timestamp: formattedMessage.createdAt,
-            createdAt: formattedMessage.createdAt,
-            status: formattedMessage.status,
-            senderName: formattedMessage.user.name
-          });
-          console.log('💾 [SocketService] Message saved to SQLite:', formattedMessage._id);
+          const messageExists = await sqliteService.messageExistsEnhanced(formattedMessage._id, formattedMessage._id);
+          if (!messageExists) {
+            await sqliteService.saveMessage({
+              id: formattedMessage._id,
+              clientId: formattedMessage._id,
+              chatId: formattedMessage.chatId,
+              content: formattedMessage.text,
+              text: formattedMessage.text,
+              senderId: formattedMessage.senderId,
+              timestamp: formattedMessage.createdAt,
+              createdAt: formattedMessage.createdAt,
+              status: formattedMessage.status,
+              senderName: formattedMessage.user.name
+            });
+            console.log('💾 [SocketService] Message saved to SQLite:', formattedMessage._id);
+          } else {
+            console.log('💾 [SocketService] Message already exists in SQLite, skipping save:', formattedMessage._id);
+          }
         } catch (saveError) {
           console.error('❌ [SocketService] Failed to save message to SQLite:', saveError);
           // Continue with Redux dispatch even if SQLite save fails
@@ -301,6 +312,7 @@ class SocketService {
 
         // Dispatch to Redux for immediate UI update
         store.dispatch(addMessage(formattedMessage as any));
+        console.log('📨 [SocketService] Message dispatched to Redux:', formattedMessage._id);
 
         // Update chat last message
         try {
@@ -349,13 +361,30 @@ class SocketService {
         }
       });
 
-      this.socket.on('messageDelivered', (data) => {
+      this.socket.on('messageDelivered', async (data) => {
         console.log('📨 [SocketService] Message delivered:', data);
         store.dispatch(updateMessageStatus({ messageId: data.messageId, status: 'delivered' }));
+
+        // Update SQLite with delivery status
+        try {
+          await sqliteService.updateMessageStatus(data.messageId, 'delivered');
+          console.log('💾 [SocketService] Updated message status to delivered in SQLite:', data.messageId);
+        } catch (error) {
+          console.error('❌ [SocketService] Failed to update message status in SQLite:', error);
+        }
       });
-      this.socket.on('messageRead', (data) => {
+
+      this.socket.on('messageRead', async (data) => {
         console.log('📨 [SocketService] Message read:', data);
         store.dispatch(updateMessageStatus({ messageId: data.messageId, status: 'read' }));
+
+        // Update SQLite with read status
+        try {
+          await sqliteService.updateMessageStatus(data.messageId, 'read');
+          console.log('💾 [SocketService] Updated message status to read in SQLite:', data.messageId);
+        } catch (error) {
+          console.error('❌ [SocketService] Failed to update message status in SQLite:', error);
+        }
       });
 
       // Handle message edits
@@ -454,6 +483,8 @@ class SocketService {
 
   disconnect() {
     if (this.socket) {
+      console.log('🔌 [SocketService] Disconnecting socket...');
+
       // Clean up all event listeners
       this.eventListeners.forEach((listeners, event) => {
         listeners.forEach((listener) => {
@@ -462,6 +493,13 @@ class SocketService {
       });
       this.eventListeners.clear();
 
+      // Clear typing timeouts
+      this.typingTimeouts.forEach((timeout) => clearTimeout(timeout));
+      this.typingTimeouts.clear();
+
+      // Clear processed messages cache
+      this.processedMessages.clear();
+
       this.socket.disconnect();
       this.socket = null;
       this.isConnected = false;
@@ -469,6 +507,9 @@ class SocketService {
       this.connectionPromise = null;
       this.isInitialized = false;
       this.currentUserId = null;
+      this.reconnectAttempts = 0;
+
+      console.log('✅ [SocketService] Socket disconnected and cleaned up');
     }
   }
 
@@ -540,8 +581,66 @@ class SocketService {
     if (this.socket?.connected) this.socket.emit('leaveChat', { chatId });
   }
 
-  createChat(chatData: any) {
-    if (this.socket?.connected) this.socket.emit('createChat', chatData);
+  createChat(chatData: any): Promise<any> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) {
+        reject(new Error('Socket not connected'));
+        return;
+      }
+
+      // Set up one-time listener for chat creation response
+      let handleChatCreated = (response: any) => {
+        console.log('📨 [SocketService] Chat created response:', response);
+        this.socket?.off('chatCreated', handleChatCreated);
+        this.socket?.off('chatCreationError', handleChatError);
+
+        if (response.success) {
+          resolve(response.chat);
+        } else {
+          reject(new Error(response.error || 'Chat creation failed'));
+        }
+      };
+
+      let handleChatError = (error: any) => {
+        console.error('❌ [SocketService] Chat creation error:', error);
+        this.socket?.off('chatCreated', handleChatCreated);
+        this.socket?.off('chatCreationError', handleChatError);
+        reject(new Error(error.message || 'Chat creation failed'));
+      };
+
+      // Set up listeners
+      this.socket.on('chatCreated', handleChatCreated);
+      this.socket.on('chatCreationError', handleChatError);
+
+      // Set timeout for chat creation
+      const timeout = setTimeout(() => {
+        this.socket?.off('chatCreated', handleChatCreated);
+        this.socket?.off('chatCreationError', handleChatError);
+        reject(new Error('Chat creation timeout'));
+      }, 10000); // 10 second timeout
+
+      // Clean up timeout on success/error
+      const originalHandleChatCreated = handleChatCreated;
+      const originalHandleChatError = handleChatError;
+
+      const wrappedHandleChatCreated = (response: any) => {
+        clearTimeout(timeout);
+        originalHandleChatCreated(response);
+      };
+
+      const wrappedHandleChatError = (error: any) => {
+        clearTimeout(timeout);
+        originalHandleChatError(error);
+      };
+
+      // Replace the original handlers with wrapped versions
+      handleChatCreated = wrappedHandleChatCreated;
+      handleChatError = wrappedHandleChatError;
+
+      // Emit the createChat event
+      console.log('📤 [SocketService] Emitting createChat event:', chatData);
+      this.socket.emit('createChat', chatData);
+    });
   }
 
   joinRoom(roomId: string) {
@@ -586,6 +685,11 @@ class SocketService {
 
   getConnectionStatusString() {
     return this.connectionStatus;
+  }
+
+  // Check if socket should be connected based on current context
+  shouldBeConnected(): boolean {
+    return this.isConnected && !!this.socket?.connected;
   }
 
   on(event: string, handler: (...args: any[]) => void) {

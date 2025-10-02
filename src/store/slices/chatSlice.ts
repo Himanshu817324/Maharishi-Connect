@@ -175,69 +175,99 @@ export const loadChatMessages = createAsyncThunk('chat/loadChatMessages', async 
     try {
       console.log(`📥 [loadChatMessages] Performing comprehensive server sync...`);
 
-      // Always fetch ALL messages from server for complete sync
-      let allServerMessages: any[] = [];
-      let hasMoreMessages = true;
-      let offset = 0;
-      const limit = 100; // Fetch in larger batches
+      // Enhanced server sync with better error handling and retry logic
+      let retryCount = 0;
+      const maxRetries = 3;
 
-      while (hasMoreMessages) {
-        const batchOptions: any = { limit, offset };
+      while (retryCount < maxRetries && !serverSyncSuccessful) {
+        try {
+          console.log(`📥 [loadChatMessages] Server sync attempt ${retryCount + 1}/${maxRetries}`);
 
-        console.log(`📥 [loadChatMessages] Fetching batch ${offset / limit + 1} (offset: ${offset}, limit: ${limit})`);
-        const rawApiMessages = await chatApiService.getChatMessages(chatId, batchOptions);
+          // Always fetch ALL messages from server for complete sync
+          let allServerMessages: any[] = [];
+          let hasMoreMessages = true;
+          let offset = 0;
+          const limit = 100; // Fetch in larger batches
 
-        if (rawApiMessages.length === 0) {
-          hasMoreMessages = false;
-          break;
-        }
+          while (hasMoreMessages) {
+            const batchOptions: any = { limit, offset };
 
-        allServerMessages.push(...rawApiMessages);
-        console.log(`📥 [loadChatMessages] Fetched ${rawApiMessages.length} messages in this batch`);
+            console.log(`📥 [loadChatMessages] Fetching batch ${offset / limit + 1} (offset: ${offset}, limit: ${limit})`);
+            const rawApiMessages = await chatApiService.getChatMessages(chatId, batchOptions);
 
-        // If we got fewer messages than requested, we've reached the end
-        if (rawApiMessages.length < limit) {
-          hasMoreMessages = false;
-        } else {
-          offset += limit;
-        }
+            if (rawApiMessages.length === 0) {
+              hasMoreMessages = false;
+              break;
+            }
 
-        // Safety check to prevent infinite loops
-        if (offset > 1000) {
-          console.warn(`📥 [loadChatMessages] Reached safety limit for message fetching`);
-          break;
+            allServerMessages.push(...rawApiMessages);
+            console.log(`📥 [loadChatMessages] Fetched ${rawApiMessages.length} messages in this batch`);
+
+            // If we got fewer messages than requested, we've reached the end
+            if (rawApiMessages.length < limit) {
+              hasMoreMessages = false;
+            } else {
+              offset += limit;
+            }
+
+            // Safety check to prevent infinite loops
+            if (offset > 1000) {
+              console.warn(`📥 [loadChatMessages] Reached safety limit for message fetching`);
+              break;
+            }
+          }
+
+          // Step 2.1: Get chat metadata and participants for better sync
+          try {
+            const chatDetails = await chatApiService.getChatDetails(chatId);
+            console.log(`📥 [loadChatMessages] Fetched chat details:`, chatDetails);
+
+            // Update chat in Redux with latest server data
+            if (chatDetails) {
+              const normalizedChat = normalizeChat(chatDetails);
+              store.dispatch(mergeChats([normalizedChat]));
+            }
+          } catch (chatDetailsError) {
+            console.warn('📥 [loadChatMessages] Failed to fetch chat details:', chatDetailsError);
+            // Continue with message sync even if chat details fail
+          }
+
+          // Process server messages
+          apiMessages = allServerMessages.map(msg => ({
+            _id: msg._id || msg.id,
+            text: msg.content || msg.text,
+            chatId,
+            senderId: msg.senderId || msg.sender_id,
+            createdAt: msg.createdAt || msg.created_at,
+            status: msg.status || 'sent',
+            user: {
+              _id: msg.senderId || msg.sender_id,
+              name: msg.senderName || msg.sender_name || 'User'
+            }
+          }));
+
+          console.log(`📥 [loadChatMessages] Found ${apiMessages.length} server messages (${allServerMessages.length} total fetched)`);
+
+          // Mark server sync as successful
+          serverSyncSuccessful = true;
+          console.log(`✅ [loadChatMessages] Server sync successful on attempt ${retryCount + 1}`);
+          break; // Exit retry loop on success
+
+        } catch (retryError) {
+          retryCount++;
+          console.error(`❌ [loadChatMessages] Server sync attempt ${retryCount} failed:`, retryError);
+
+          if (retryCount >= maxRetries) {
+            console.error(`❌ [loadChatMessages] All ${maxRetries} server sync attempts failed`);
+            throw retryError;
+          } else {
+            // Wait before retry (exponential backoff)
+            const delay = Math.pow(2, retryCount) * 1000; // 2s, 4s, 8s
+            console.log(`⏳ [loadChatMessages] Waiting ${delay}ms before retry...`);
+            await new Promise<void>(resolve => setTimeout(resolve, delay));
+          }
         }
       }
-
-      // Step 2.1: Get chat metadata and participants for better sync
-      try {
-        const chatDetails = await chatApiService.getChatDetails(chatId);
-        console.log(`📥 [loadChatMessages] Fetched chat details:`, chatDetails);
-
-        // Update chat in Redux with latest server data
-        if (chatDetails) {
-          const normalizedChat = normalizeChat(chatDetails);
-          store.dispatch(mergeChats([normalizedChat]));
-        }
-      } catch (chatDetailsError) {
-        console.warn('📥 [loadChatMessages] Failed to fetch chat details:', chatDetailsError);
-        // Continue with message sync even if chat details fail
-      }
-
-      apiMessages = allServerMessages.map(msg => ({
-        _id: msg._id || msg.id,
-        text: msg.content || msg.text,
-        chatId,
-        senderId: msg.senderId || msg.sender_id,
-        createdAt: msg.createdAt || msg.created_at,
-        status: msg.status || 'sent',
-        user: {
-          _id: msg.senderId || msg.sender_id,
-          name: msg.senderName || msg.sender_name || 'User'
-        }
-      }));
-
-      console.log(`📥 [loadChatMessages] Found ${apiMessages.length} server messages (${allServerMessages.length} total fetched)`);
 
       // Save new messages from server to SQLite with better duplicate handling
       let newMessagesSaved = 0;

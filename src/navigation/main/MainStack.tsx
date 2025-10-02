@@ -12,7 +12,10 @@ export default function MainStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Tabs" component={TabNavigator} />
       <Stack.Screen name="ConversationScreen" component={ConversationScreen} />
-      <Stack.Screen name="FilteredContactsScreen" component={FilteredContactsScreen} />
+      <Stack.Screen
+        name="FilteredContactsScreen"
+        component={FilteredContactsScreen}
+      />
       <Stack.Screen name="UserInfoScreen" component={UserInfoScreen} />
     </Stack.Navigator>
   );

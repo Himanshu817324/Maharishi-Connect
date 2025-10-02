@@ -34,6 +34,8 @@ import ChatHeader from '@/components/atoms/chats/ChatHeader';
 import ChatInput from '@/components/atoms/chats/ChatInput';
 import MessageBubble from '@/components/atoms/chats/MessageBubble';
 import { fontSize, spacing } from '@/theme/responsive';
+import { useSocketLifecycle } from '@/hooks/useSocketLifecycle';
+import offlineMessageQueue from '@/services/offlineMessageQueue';
 
 type ConversationRouteParams = {
   id: string;
@@ -68,6 +70,13 @@ const ConversationScreen: React.FC = () => {
   const flatListRef = useRef<FlatList>(null);
   const loadedRef = useRef(false);
   const [lastSyncTime, setLastSyncTime] = useState<number>(0);
+
+  // Socket lifecycle management for conversation - keep connection active
+  const { cancelDisconnection } = useSocketLifecycle({
+    connectOnFocus: true,
+    disconnectOnBlur: false, // Don't disconnect when leaving conversation (user might go back to chat list)
+    disconnectDelay: 0,
+  });
 
   // Load messages function with enhanced sync
   const loadMessages = async (forceFullSync = false) => {
@@ -212,22 +221,29 @@ const ConversationScreen: React.FC = () => {
     };
   }, [chatId, currentUser?.id, dispatch]);
 
-  // Socket connection
+  // Socket connection - ensure socket is connected for real-time messaging
   useEffect(() => {
     if (!currentUser?.id) return;
 
     const initSocket = async () => {
       try {
         console.log(
-          '🔌 [ConversationScreen] Initializing socket connection...',
+          '🔌 [ConversationScreen] Ensuring socket connection for real-time messaging...',
         );
 
-        // Only connect if not already connected
+        // Connect socket if not already connected (should be connected from ChatScreen)
         if (!socketService.getConnectionStatus()) {
+          console.log(
+            '🔌 [ConversationScreen] Socket not connected, connecting now...',
+          );
           await socketService.connect(currentUser.id, currentUser.token);
-          console.log('🔌 [ConversationScreen] Socket connected');
+          console.log(
+            '✅ [ConversationScreen] Socket connected for conversation',
+          );
         } else {
-          console.log('🔌 [ConversationScreen] Socket already connected');
+          console.log(
+            '✅ [ConversationScreen] Socket already connected, ready for messaging',
+          );
         }
 
         console.log('🔌 [ConversationScreen] Joining chat:', chatId);
@@ -412,15 +428,24 @@ const ConversationScreen: React.FC = () => {
             chatId,
           );
           socketService.joinChat(chatId);
+
+          // Process offline message queue when socket reconnects
+          offlineMessageQueue.startProcessing();
         });
 
         return () => {
+          console.log(
+            '🧹 [ConversationScreen] Cleaning up conversation socket listeners...',
+          );
           unsubMessage?.();
           unsubDelivered?.();
           unsubRead?.();
           unsubTyping?.();
           unsubReconnect?.();
           socketService.leaveChat(chatId);
+
+          // Note: We don't disconnect socket here as user might go back to ChatScreen
+          // Socket will be disconnected when user leaves all chat-related screens
         };
       } catch (error) {
         console.error('Socket init error:', error);
@@ -448,7 +473,7 @@ const ConversationScreen: React.FC = () => {
     [],
   );
 
-  // Send message handler
+  // Enhanced send message handler with dual approach and better error handling
   const handleSendMessage = useCallback(
     async (messageText: string) => {
       if (!messageText.trim() || !currentUser) return;
@@ -456,39 +481,99 @@ const ConversationScreen: React.FC = () => {
       const tempId = `temp_${Date.now()}_${Math.random()
         .toString(36)
         .substr(2, 9)}`;
+      const messageTimestamp = new Date().toISOString();
+
       const optimisticMessage = {
         _id: tempId,
         text: messageText.trim(),
         chatId,
         senderId: currentUser.id,
-        createdAt: new Date().toISOString(),
+        createdAt: messageTimestamp,
         status: 'sending' as const,
         user: { _id: currentUser.id, name: currentUser.name || 'You' },
       };
 
-      // Add optimistic message
+      // Step 1: Add optimistic message to UI immediately
       dispatch(addMessage(optimisticMessage));
 
+      // Step 2: Save optimistic message to SQLite for offline persistence
       try {
-        // Send via socket
-        socketService.sendMessage({
+        await sqliteService.saveMessage({
+          id: tempId,
+          clientId: tempId,
           chatId,
           content: messageText.trim(),
-          messageType: 'text',
-          tempId,
+          text: messageText.trim(),
           senderId: currentUser.id,
-          createdAt: new Date().toISOString(),
+          timestamp: messageTimestamp,
+          createdAt: messageTimestamp,
+          status: 'sending',
+          senderName: currentUser.name || 'You',
         });
+        console.log(
+          '💾 [ConversationScreen] Optimistic message saved to SQLite:',
+          tempId,
+        );
+      } catch (sqliteError) {
+        console.error(
+          '❌ [ConversationScreen] Failed to save optimistic message:',
+          sqliteError,
+        );
+      }
 
-        // Send via API
-        const serverMessage = await chatApiService.sendMessage(chatId, {
-          content: messageText.trim(),
-          messageType: 'text',
-        });
+      let socketSent = false;
+      let apiSent = false;
+      let serverId: string | null = null;
 
-        const serverId = serverMessage?._id || serverMessage?.id;
+      try {
+        // Step 3: Send via socket for real-time delivery
+        if (socketService.getConnectionStatus()) {
+          socketSent = socketService.sendMessage({
+            chatId,
+            content: messageText.trim(),
+            messageType: 'text',
+            tempId,
+            senderId: currentUser.id,
+            createdAt: messageTimestamp,
+          });
+          console.log(
+            '📤 [ConversationScreen] Message sent via socket:',
+            socketSent,
+          );
+        } else {
+          console.log(
+            '⚠️ [ConversationScreen] Socket not connected, skipping socket send',
+          );
+        }
+
+        // Step 4: Send via API for server persistence and delivery confirmation
+        try {
+          const serverMessage = await chatApiService.sendMessage(chatId, {
+            content: messageText.trim(),
+            messageType: 'text',
+          });
+
+          serverId = serverMessage?._id || serverMessage?.id;
+          apiSent = true;
+          console.log(
+            '📤 [ConversationScreen] Message sent via API:',
+            serverId,
+          );
+        } catch (apiError) {
+          console.error('❌ [ConversationScreen] API send failed:', apiError);
+          throw apiError;
+        }
+
+        // Step 5: Update message with server ID and status
         if (serverId) {
-          console.log('✅ Message sent, updating ID:', tempId, '->', serverId);
+          console.log(
+            '✅ [ConversationScreen] Message sent successfully, updating ID:',
+            tempId,
+            '->',
+            serverId,
+          );
+
+          // Update Redux state
           dispatch({
             type: 'chat/replaceMessageId',
             payload: { tempId, serverId, chatId },
@@ -496,13 +581,42 @@ const ConversationScreen: React.FC = () => {
           dispatch(
             updateMessageStatus({ messageId: serverId, status: 'sent' }),
           );
+
+          // Update SQLite with server ID
+          try {
+            await sqliteService.updateMessageIdByClientId(tempId, serverId);
+            await sqliteService.updateMessageStatus(serverId, 'sent');
+            console.log(
+              '💾 [ConversationScreen] Updated message in SQLite with server ID:',
+              serverId,
+            );
+          } catch (updateError) {
+            console.error(
+              '❌ [ConversationScreen] Failed to update message in SQLite:',
+              updateError,
+            );
+          }
         } else {
+          // If no server ID but API succeeded, mark as sent
           dispatch(updateMessageStatus({ messageId: tempId, status: 'sent' }));
         }
       } catch (error) {
-        console.error('❌ Send message error:', error);
+        console.error('❌ [ConversationScreen] Send message error:', error);
+
+        // Update message status to failed
         dispatch(updateMessageStatus({ messageId: tempId, status: 'failed' }));
 
+        // Update SQLite status
+        try {
+          await sqliteService.updateMessageStatus(tempId, 'failed');
+        } catch (sqliteError) {
+          console.error(
+            '❌ [ConversationScreen] Failed to update message status in SQLite:',
+            sqliteError,
+          );
+        }
+
+        // Show appropriate error message
         if (error instanceof Error) {
           if (error.message.includes('Network request failed')) {
             Alert.alert(
@@ -514,6 +628,8 @@ const ConversationScreen: React.FC = () => {
               'Timeout Error',
               'Message sending timed out. It may still be delivered.',
             );
+          } else if (error.message.includes('Chat not found')) {
+            Alert.alert('Chat Error', 'This chat is no longer available.');
           } else {
             Alert.alert('Error', 'Failed to send message. Please try again.');
           }

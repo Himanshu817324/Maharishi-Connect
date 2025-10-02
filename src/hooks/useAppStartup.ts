@@ -88,17 +88,8 @@ export const useAppStartup = () => {
             await messageSyncService.initialize();
             console.log('✅ [useAppStartup] Message sync service initialized');
 
-            // Step 2: Connect socket for real-time updates
-            try {
-                if (!socketService.getConnectionStatus()) {
-                    await socketService.connect(currentUser.id, currentUser.token);
-                    console.log('✅ [useAppStartup] Socket connected');
-                } else {
-                    console.log('✅ [useAppStartup] Socket already connected');
-                }
-            } catch (socketError) {
-                console.error('❌ [useAppStartup] Socket connection failed:', socketError);
-            }
+            // Step 2: Skip global socket connection - will be connected on-demand when user opens chat screens
+            console.log('✅ [useAppStartup] Socket connection deferred to chat screens for better resource management');
 
             // Step 3: Perform full data synchronization (server first, then local fallback)
             console.log('🔄 [useAppStartup] Starting full data synchronization...');

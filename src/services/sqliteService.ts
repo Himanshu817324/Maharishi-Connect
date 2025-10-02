@@ -463,10 +463,11 @@ class SQLiteService {
         return [];
       }
 
+      // Enhanced query with better performance and ordering
       const query = `
         SELECT * FROM messages 
         WHERE chatId = ? 
-        ORDER BY timestamp ASC
+        ORDER BY timestamp ASC, createdAt ASC
       `;
 
       const result = await new Promise((resolve, reject) => {
