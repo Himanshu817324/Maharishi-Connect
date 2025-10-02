@@ -17,14 +17,28 @@ const normalizeChat = (c: any, currentUserId?: string) => {
       return participantId !== currentUserId;
     });
     if (other) {
+      // Prioritize participant data over phone number formatting
       name = other?.userDetails?.fullName ||
         other?.fullName ||
         other?.name ||
         other?.user_name ||
         other?.displayName ||
-        (other?.user_mobile ? `+91${other.user_mobile}` : null) ||
-        (other?.phone ? `+91${other.phone}` : null) ||
         'Unknown User';
+
+      // Only format phone number if no name is available
+      if (name === 'Unknown User') {
+        const phoneNumber = other?.user_mobile || other?.phone;
+        if (phoneNumber) {
+          const normalizedNumber = phoneNumber.replace(/\D/g, '');
+          if (normalizedNumber.length === 10) {
+            name = `+91${normalizedNumber}`;
+          } else if (normalizedNumber.length > 10) {
+            name = `+91${normalizedNumber.slice(-10)}`;
+          } else {
+            name = phoneNumber;
+          }
+        }
+      }
     } else {
       name = 'Unknown';
     }
@@ -316,20 +330,43 @@ export const deleteChat = createAsyncThunk('chat/deleteChat', async (chatId: str
   try {
     console.log(`🗑️ [deleteChat] Deleting chat: ${chatId}`);
 
-    // Delete from server
-    await chatApiService.deleteChat(chatId);
-
-    // Clean up socket state
+    // Step 1: Clean up socket state first to prevent new messages
     socketService.cleanupChatState(chatId);
 
     // Remove from Redux state
     dispatch(removeChat(chatId));
 
-    // Delete from SQLite
+    // Step 3: Delete from SQLite
     await sqliteService.deleteChat(chatId);
 
-    console.log(`✅ [deleteChat] Chat deleted successfully: ${chatId}`);
-    return { chatId };
+    // Step 4: Delete from server (with retry logic)
+    let serverDeleteSuccess = false;
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    while (!serverDeleteSuccess && retryCount < maxRetries) {
+      try {
+        await chatApiService.deleteChat(chatId);
+        serverDeleteSuccess = true;
+        console.log(`✅ [deleteChat] Server deletion successful: ${chatId}`);
+      } catch (serverError) {
+        retryCount++;
+        console.warn(`⚠️ [deleteChat] Server deletion attempt ${retryCount} failed:`, serverError);
+
+        if (retryCount < maxRetries) {
+          // Wait before retry with exponential backoff
+          await new Promise<void>(resolve => setTimeout(resolve, 1000 * retryCount));
+        }
+      }
+    }
+
+    if (!serverDeleteSuccess) {
+      console.error(`❌ [deleteChat] Failed to delete chat from server after ${maxRetries} attempts: ${chatId}`);
+      // Don't throw error - local deletion was successful
+    }
+
+    console.log(`✅ [deleteChat] Chat deletion completed: ${chatId}`);
+    return { chatId, serverDeleted: serverDeleteSuccess };
   } catch (error) {
     console.error('❌ [deleteChat] Failed to delete chat:', error);
     return rejectWithValue(`Failed to delete chat: ${error}`);
@@ -451,11 +488,28 @@ const chatSlice = createSlice({
     clearChats: (state) => { state.chats = []; state.messages = {}; state.currentChat = null; },
     removeChat: (state, action: PayloadAction<string>) => {
       const chatId = action.payload;
+      console.log(`🗑️ [removeChat] Removing chat from state: ${chatId}`);
+
+      // Remove chat from chats array
       state.chats = state.chats.filter(chat => chat.id !== chatId);
+
+      // Remove all messages for this chat
       delete state.messages[chatId];
+
+      // Clear current chat if it's the one being deleted
       if (state.currentChat?.id === chatId) {
         state.currentChat = null;
       }
+
+      // Clear typing indicators for this chat
+      delete state.typingUsers[chatId];
+
+      // Clear any errors related to this chat
+      if (state.error && state.error.includes(chatId)) {
+        state.error = null;
+      }
+
+      console.log(`✅ [removeChat] Chat removed from state: ${chatId}`);
     },
     clearChatState: (state) => {
       state.chats = [];

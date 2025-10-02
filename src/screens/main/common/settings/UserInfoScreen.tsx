@@ -1,24 +1,109 @@
 import { useNavigation } from '@react-navigation/native';
 import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../../../store';
 import { useTheme } from '../../../../theme';
 import CustomStatusBar from '../../../../components/atoms/ui/StatusBar';
 import AvatarWithInitials from '../../../../components/atoms/ui/AvatarWithInitials';
+import { logout } from '../../../../store/slices/authSlice';
 
 export default function UserInfoScreen() {
   const navigation = useNavigation();
+  const dispatch = useDispatch();
   const { colors } = useTheme();
   const user = useSelector((state: RootState) => state.auth.user);
+  const profileCompleted = useSelector((state: RootState) => state.auth.profileCompleted);
 
+  // Debug: Log user data to see what we're working with
+  console.log('🔍 UserInfoScreen - Current user data:', user);
+  console.log('🔍 UserInfoScreen - User fullName:', user?.fullName);
+  console.log('🔍 UserInfoScreen - User country:', user?.country);
+  console.log('🔍 UserInfoScreen - User state:', user?.state);
+  console.log('🔍 UserInfoScreen - User status:', user?.status);
+  console.log('🔍 UserInfoScreen - User avatar:', user?.avatar);
+  console.log('🔍 UserInfoScreen - Profile completed:', profileCompleted);
+  console.log('🔍 UserInfoScreen - Complete Redux auth state:', useSelector((state: RootState) => state.auth));
+
+  // Enhanced info items with all available user data
   const infoItems = [
-    { label: 'Phone', value: user?.phone || 'Not set', icon: 'call-outline' },
-    { label: 'Country', value: user?.country || 'Not set', icon: 'location-outline' },
-    { label: 'State', value: user?.state || 'Not set', icon: 'location-outline' },
-    { label: 'Status', value: user?.status || 'Not set', icon: 'ellipse-outline' },
+    { 
+      label: 'Phone Number', 
+      value: user?.phone || 'Not set', 
+      icon: 'call-outline',
+      type: 'phone'
+    },
+    { 
+      label: 'Full Name', 
+      value: user?.fullName || user?.name || 'Not set', 
+      icon: 'person-outline',
+      type: 'name'
+    },
+    { 
+      label: 'Country', 
+      value: user?.country || 'Not set', 
+      icon: 'location-outline',
+      type: 'location'
+    },
+    { 
+      label: 'State/Region', 
+      value: user?.state || 'Not set', 
+      icon: 'location-outline',
+      type: 'location'
+    },
+    { 
+      label: 'Status', 
+      value: user?.status || 'Not set', 
+      icon: 'ellipse-outline',
+      type: 'status'
+    },
+    { 
+      label: 'Verification Status', 
+      value: user?.isVerified ? 'Verified ✅' : 'Not Verified ❌', 
+      icon: 'checkmark-circle-outline',
+      type: 'verification'
+    },
+    { 
+      label: 'Profile Completion', 
+      value: user?.profileCompleted ? 'Complete ✅' : 'Incomplete ⚠️', 
+      icon: 'document-text-outline',
+      type: 'completion'
+    },
+    { 
+      label: 'User ID', 
+      value: user?.firebaseUid || user?.id || 'Not available', 
+      icon: 'key-outline',
+      type: 'id'
+    },
   ];
+
+  const handleEditProfile = () => {
+    // Navigate to profile editing screen
+    navigation.navigate('ProfileScreen' as never);
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: () => {
+            console.log('🚪 User logging out from UserInfoScreen...');
+            dispatch(logout());
+            // Navigation will be handled by SplashScreen after logout
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -37,7 +122,7 @@ export default function UserInfoScreen() {
       <View style={styles.profileSection}>
         <AvatarWithInitials
           name={user?.fullName || 'User Name'}
-          profilePicture={user?.avatar}
+          profilePicture={user?.avatar || user?.profilePicture}
           size={100}
         />
         <Text style={[styles.profileName, { color: colors.text }]}>
@@ -64,7 +149,16 @@ export default function UserInfoScreen() {
                 {item.label}
               </Text>
             </View>
-            <Text style={[styles.infoValue, { color: colors.subText }]}>
+            <Text 
+              style={[
+                styles.infoValue, 
+                { 
+                  color: item.type === 'verification' || item.type === 'completion' 
+                    ? (item.value.includes('✅') ? '#4CAF50' : '#FF9800')
+                    : colors.subText 
+                }
+              ]}
+            >
               {item.value}
             </Text>
           </View>
@@ -74,9 +168,7 @@ export default function UserInfoScreen() {
       <View style={styles.actionsSection}>
         <TouchableOpacity
           style={[styles.actionButton, { backgroundColor: colors.card }]}
-          onPress={() => {
-            // Handle edit profile
-          }}
+          onPress={handleEditProfile}
         >
           <Icon name="create-outline" size={20} color={colors.primary} />
           <Text style={[styles.actionText, { color: colors.text }]}>
@@ -87,9 +179,7 @@ export default function UserInfoScreen() {
 
         <TouchableOpacity
           style={[styles.actionButton, { backgroundColor: colors.card }]}
-          onPress={() => {
-            // Handle logout
-          }}
+          onPress={handleLogout}
         >
           <Icon name="log-out-outline" size={20} color="#ef4444" />
           <Text style={[styles.actionText, { color: '#ef4444' }]}>
@@ -146,18 +236,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 16,
+    paddingHorizontal: 4,
     borderBottomWidth: 1,
   },
   infoLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
   infoLabel: {
     fontSize: 16,
     marginLeft: 12,
+    fontWeight: '500',
   },
   infoValue: {
     fontSize: 16,
+    textAlign: 'right',
+    flex: 1,
+    marginLeft: 12,
   },
   actionsSection: {
     paddingHorizontal: 24,

@@ -19,6 +19,7 @@ export const useAuthPersistence = () => {
             profileCompleted: storedAuthState.profileCompleted,
             hasUser: !!storedAuthState.user,
           });
+          console.log('✅ Stored user data:', storedAuthState.user);
           
           // Restore the auth state to Redux
           dispatch(restoreAuthState(storedAuthState));

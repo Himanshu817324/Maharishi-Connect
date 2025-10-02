@@ -25,15 +25,28 @@ const normalizeChat = (c: any, currentUserId?: string) => {
       return participantId !== currentUserId;
     });
     if (other) {
-      // Enhanced name resolution with better fallbacks
+      // Prioritize participant data over phone number formatting
       name = other?.userDetails?.fullName ||
         other?.fullName ||
         other?.name ||
         other?.user_name ||
         other?.displayName ||
-        (other?.user_mobile ? `+91${other.user_mobile}` : null) ||
-        (other?.phone ? `+91${other.phone}` : null) ||
         'Unknown User';
+
+      // Only format phone number if no name is available
+      if (name === 'Unknown User') {
+        const phoneNumber = other?.user_mobile || other?.phone;
+        if (phoneNumber) {
+          const normalizedNumber = phoneNumber.replace(/\D/g, '');
+          if (normalizedNumber.length === 10) {
+            name = `+91${normalizedNumber}`;
+          } else if (normalizedNumber.length > 10) {
+            name = `+91${normalizedNumber.slice(-10)}`;
+          } else {
+            name = phoneNumber;
+          }
+        }
+      }
     } else {
       name = 'Unknown';
     }
@@ -71,17 +84,28 @@ class SocketService {
   private typingTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
   private isTyping = false;
   private processedMessages = new Set<string>(); // Track processed messages to prevent duplicates
+  private connectionPromise: Promise<void> | null = null;
+  private eventListeners = new Map<string, Set<Function>>();
+  private currentUserId: string | null = null;
+  private isInitialized = false;
 
   connect(userId: string, token?: string): Promise<void> {
+    // Prevent multiple simultaneous connection attempts
+    if (this.connectionPromise) {
+      console.log('🔌 Connection already in progress, waiting...');
+      return this.connectionPromise;
+    }
+
     // If already connected with same user, don't reconnect
-    if (this.socket?.connected && this.isConnected) {
-      console.log('🔌 Socket already connected, skipping reconnection');
+    if (this.socket?.connected && this.isConnected && this.currentUserId === userId) {
+      console.log('🔌 Socket already connected for same user, skipping reconnection');
       return Promise.resolve();
     }
 
-    return new Promise((resolve, reject) => {
+    this.connectionPromise = new Promise<void>((resolve, reject) => {
       console.log('🔌 Connecting to socket server...');
       this.connectionStatus = 'connecting';
+      this.currentUserId = userId;
 
       // Disconnect existing socket if any
       if (this.socket) {
@@ -114,6 +138,8 @@ class SocketService {
         this.isConnected = true;
         this.connectionStatus = 'connected';
         this.reconnectAttempts = 0;
+        this.connectionPromise = null;
+        this.isInitialized = true;
         this.socket?.off('connect_error', onConnectError);
         resolve();
       };
@@ -122,6 +148,7 @@ class SocketService {
         console.error('❌ Socket connect error:', err);
         this.isConnected = false;
         this.connectionStatus = 'disconnected';
+        this.connectionPromise = null;
         this.socket?.off('connect', onConnect);
         reject(err);
       };
@@ -151,27 +178,31 @@ class SocketService {
       const handleIncoming = async (message: any) => {
         console.log('📨 [SocketService] Incoming message:', message);
 
-        // Prevent processing the same message multiple times
+        // Enhanced message deduplication with content hashing
         const messageId = message._id || message.id;
         if (!messageId) {
           console.warn('📨 [SocketService] Message missing ID, skipping:', message);
           return;
         }
 
+        // Create a unique key combining message ID and content hash for better deduplication
+        const contentHash = this.hashMessageContent(message);
+        const messageKey = `${messageId}_${contentHash}`;
+
         // Check if message was already processed
-        if (this.processedMessages.has(messageId)) {
+        if (this.processedMessages.has(messageKey)) {
           console.log('📨 [SocketService] Message already processed, skipping:', messageId);
           return;
         }
 
         // Mark message as being processed
-        this.processedMessages.add(messageId);
+        this.processedMessages.add(messageKey);
 
-        // Clean up old processed messages (keep only last 1000)
-        if (this.processedMessages.size > 1000) {
+        // Clean up old processed messages (keep only last 2000)
+        if (this.processedMessages.size > 2000) {
           const messagesArray = Array.from(this.processedMessages);
           this.processedMessages.clear();
-          messagesArray.slice(-500).forEach(id => this.processedMessages.add(id));
+          messagesArray.slice(-1000).forEach(key => this.processedMessages.add(key));
         }
 
         // Enhanced user name resolution
@@ -417,13 +448,27 @@ class SocketService {
         console.error('Socket error:', err);
       });
     });
+
+    return this.connectionPromise;
   }
 
   disconnect() {
     if (this.socket) {
+      // Clean up all event listeners
+      this.eventListeners.forEach((listeners, event) => {
+        listeners.forEach((listener) => {
+          this.socket?.off(event, listener as (...args: any[]) => void);
+        });
+      });
+      this.eventListeners.clear();
+
       this.socket.disconnect();
       this.socket = null;
       this.isConnected = false;
+      this.connectionStatus = 'disconnected';
+      this.connectionPromise = null;
+      this.isInitialized = false;
+      this.currentUserId = null;
     }
   }
 
@@ -544,16 +589,37 @@ class SocketService {
   }
 
   on(event: string, handler: (...args: any[]) => void) {
+    if (!this.eventListeners.has(event)) {
+      this.eventListeners.set(event, new Set());
+    }
+    this.eventListeners.get(event)!.add(handler);
+
     this.socket?.on(event, handler);
-    return () => this.socket?.off(event, handler);
+    return () => this.off(event, handler);
+  }
+
+  off(event: string, handler?: (...args: any[]) => void) {
+    if (handler) {
+      this.eventListeners.get(event)?.delete(handler);
+      this.socket?.off(event, handler);
+    } else {
+      // Remove all listeners for this event
+      const listeners = this.eventListeners.get(event);
+      if (listeners) {
+        listeners.forEach(listener => {
+          this.socket?.off(event, listener as (...args: any[]) => void);
+        });
+        this.eventListeners.delete(event);
+      }
+    }
   }
 
   addMessageListener(handler: (message: any) => void) {
-    if (this.socket) this.socket.on('message', handler);
+    if (this.socket) this.socket.on('message', handler as (...args: any[]) => void);
   }
 
   removeMessageListener(handler: (message: any) => void) {
-    if (this.socket) this.socket.off('message', handler);
+    if (this.socket) this.socket.off('message', handler as (...args: any[]) => void);
   }
 
   sendMessageToChat(chatId: string, message: any) {
@@ -620,11 +686,28 @@ class SocketService {
   }
 
   onMessageReaction(handler: (data: { messageId: string; emoji: string; userId: string }) => void) {
-    if (this.socket) this.socket.on('messageReactionAdded', handler);
+    if (this.socket) this.socket.on('messageReactionAdded', handler as (...args: any[]) => void);
   }
 
   onMessageReactionRemoved(handler: (data: { messageId: string; emoji: string; userId: string }) => void) {
-    if (this.socket) this.socket.on('messageReactionRemoved', handler);
+    if (this.socket) this.socket.on('messageReactionRemoved', handler as (...args: any[]) => void);
+  }
+
+  // Helper method to create content hash for message deduplication
+  private hashMessageContent(message: any): string {
+    const content = message.content || message.text || '';
+    const timestamp = message.createdAt || message.created_at || '';
+    const senderId = message.senderId || message.sender_id || '';
+
+    // Create a simple hash of the content, timestamp, and sender
+    const hashInput = `${content}_${timestamp}_${senderId}`;
+    let hash = 0;
+    for (let i = 0; i < hashInput.length; i++) {
+      const char = hashInput.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return Math.abs(hash).toString(36);
   }
 }
 

@@ -41,7 +41,6 @@ const OTPScreen = () => {
 
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
-
   useEffect(() => {
     const interval = setInterval(() => {
       setTimer(prev => (prev > 0 ? prev - 1 : 0));
@@ -70,7 +69,6 @@ const OTPScreen = () => {
 
   const handleVerifyOtp = async () => {
     const otpString = otp.join('');
-
 
     if (!otpString || otpString.length !== 6) {
       Toast.show({ type: 'error', text1: 'Please enter complete OTP' });
@@ -115,17 +113,90 @@ const OTPScreen = () => {
       const mobileNo = phoneNumber.replace(/^\+91/, '');
       const data = await apiService.login(mobileNo);
 
-      dispatch(
-        login({
-          id: firebaseUid, // Use firebaseUid as id
-          firebaseUid,
-          phone: mobileNo,
-          isVerified: true,
-          isNewUser: data.isNewUser,
-          profileCompleted: !data.isNewUser,
-          token: data.token,
-        }),
-      );
+      console.log('🔐 [OTPScreen] Login response:', data);
+
+      // If user is not new, fetch complete profile data
+      if (!data.isNewUser && data.token) {
+        try {
+          console.log('🔐 [OTPScreen] Fetching complete user profile...');
+          const profileData = await apiService.getUserProfile(
+            firebaseUid,
+            data.token,
+          );
+          console.log('🔐 [OTPScreen] Profile data received:', profileData);
+
+          // Extract user data from profile response
+          const userProfile = profileData.user || profileData.data;
+
+          if (userProfile) {
+            // Handle location object structure
+            const location = userProfile.location || {};
+            const country = location.country || '';
+            const state = location.state || '';
+
+            dispatch(
+              login({
+                id: firebaseUid,
+                firebaseUid,
+                phone: mobileNo,
+                isVerified: true,
+                isNewUser: data.isNewUser,
+                profileCompleted: true, // Profile is complete for existing users
+                token: data.token,
+                // Add complete profile data
+                fullName: userProfile.fullName || '',
+                avatar: userProfile.profilePicture || '',
+                country: country,
+                state: state,
+                status: userProfile.status || '',
+              }),
+            );
+          } else {
+            // Fallback to basic login if profile data not available
+            dispatch(
+              login({
+                id: firebaseUid,
+                firebaseUid,
+                phone: mobileNo,
+                isVerified: true,
+                isNewUser: data.isNewUser,
+                profileCompleted: !data.isNewUser,
+                token: data.token,
+              }),
+            );
+          }
+        } catch (profileError) {
+          console.error(
+            '❌ [OTPScreen] Error fetching profile data:',
+            profileError,
+          );
+          // Fallback to basic login if profile fetch fails
+          dispatch(
+            login({
+              id: firebaseUid,
+              firebaseUid,
+              phone: mobileNo,
+              isVerified: true,
+              isNewUser: data.isNewUser,
+              profileCompleted: !data.isNewUser,
+              token: data.token,
+            }),
+          );
+        }
+      } else {
+        // For new users, use basic login data
+        dispatch(
+          login({
+            id: firebaseUid,
+            firebaseUid,
+            phone: mobileNo,
+            isVerified: true,
+            isNewUser: data.isNewUser,
+            profileCompleted: !data.isNewUser,
+            token: data.token,
+          }),
+        );
+      }
 
       if (data.isNewUser) {
         rootNavigation.navigate('AuthStack', { screen: 'ProfileScreen' });
@@ -133,21 +204,26 @@ const OTPScreen = () => {
         // For existing users, request contacts permission before navigating to main app
         console.log('🔐 Requesting contacts permission for existing user...');
         try {
-          const permissionResult = await requestContactsPermissionWithAlert(false);
+          const permissionResult = await requestContactsPermissionWithAlert(
+            false,
+          );
           if (permissionResult.granted) {
             console.log('✅ Contacts permission granted for existing user');
           } else {
             console.log('⚠️ Contacts permission denied for existing user');
             Toast.show({
-              type: "info",
-              text1: "Contacts permission denied",
-              text2: "You can enable it later in settings to find friends"
+              type: 'info',
+              text1: 'Contacts permission denied',
+              text2: 'You can enable it later in settings to find friends',
             });
           }
         } catch (error) {
-          console.error('❌ Error requesting contacts permission for existing user:', error);
+          console.error(
+            '❌ Error requesting contacts permission for existing user:',
+            error,
+          );
         }
-        
+
         // For existing users, the RootNavigator will handle the switch to MainStack
         // automatically because isLoggedIn and profileCompleted are now true.
       }
@@ -161,7 +237,6 @@ const OTPScreen = () => {
         verificationId,
         stack: err?.stack || null,
       };
-
 
       // Handle API "User not found" case
       if (safeError.message.includes('User not found')) {
@@ -202,7 +277,6 @@ const OTPScreen = () => {
         errorMessage = safeError.message;
       }
 
-
       Toast.show({
         type: 'error',
         text1: 'OTP Verification Failed',
@@ -234,7 +308,6 @@ const OTPScreen = () => {
     setResendLoading(true);
 
     try {
-
       const confirmation = await auth().signInWithPhoneNumber(phoneNumber);
 
       // Note: You might want to update the verificationId here
@@ -248,9 +321,7 @@ const OTPScreen = () => {
         text1: 'OTP resent successfully',
         text2: 'Please check your messages',
       });
-
     } catch (error: any) {
-
       Toast.show({
         type: 'error',
         text1: 'Failed to resend OTP',

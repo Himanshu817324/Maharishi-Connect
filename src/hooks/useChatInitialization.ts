@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { selectCurrentUser } from '../store/slices/authSlice';
-import { setChats } from '../store/slices/chatSlice';
-import sqliteService from '../services/sqliteService';
+import { setLoading, setError } from '../store/slices/chatSlice';
+import messageSyncService from '../services/messageSyncService';
 import socketService from '../services/socketService';
 import chatService from '../services/chatService';
 
@@ -10,74 +10,80 @@ export const useChatInitialization = () => {
   const currentUser = useSelector(selectCurrentUser);
   const dispatch = useDispatch();
 
-  useEffect(() => {
-    const initializeChat = async () => {
+  const initializeChat = useCallback(async () => {
+    if (!currentUser?.id || !currentUser?.token) {
+      console.log('🚀 [useChatInitialization] No user authenticated, skipping initialization');
+      return;
+    }
+
+    try {
+      console.log('🚀 [useChatInitialization] Starting chat system initialization...');
+      dispatch(setLoading(true));
+
+      // Step 1: Initialize message sync service
+      await messageSyncService.initialize();
+      console.log('✅ [useChatInitialization] Message sync service initialized');
+
+      // Step 2: Initialize chat service
+      await chatService.initialize();
+      console.log('✅ [useChatInitialization] Chat service initialized');
+
+      // Step 3: Connect socket for real-time updates
       try {
-        console.log('🚀 Initializing chat system...');
-
-        // Step 1: Initialize SQLite database
-        if (!sqliteService.isInitialized()) {
-          await sqliteService.init();
-          console.log('✅ SQLite initialized successfully');
+        if (!socketService.getConnectionStatus()) {
+          await socketService.connect(currentUser.id, currentUser.token);
+          console.log('✅ [useChatInitialization] Socket connected for real-time updates');
+        } else {
+          console.log('✅ [useChatInitialization] Socket already connected');
         }
-
-        // Step 2: Initialize chat service
-        await chatService.initialize();
-        console.log('✅ Chat service initialized successfully');
-
-        // Step 3: Load cached data if user is authenticated
-        if (currentUser?.id) {
-          console.log('🚀 Loading cached chats for session recovery...');
-          try {
-            const cachedChats = await sqliteService.getChats();
-            if (cachedChats.length > 0) {
-              // Normalize and format cached chats
-              const normalizedChats = cachedChats.map(chat => ({
-                id: chat.id,
-                name: chat.name,
-                type: chat.type || 'direct',
-                lastMessage: chat.lastMessage || '',
-                lastMessageTime: chat.lastMessageTime,
-                unreadCount: chat.unreadCount || 0,
-                participants: JSON.parse(chat.participants || '[]'),
-                avatar: chat.avatar
-              }));
-
-              // Sort by last message time (most recent first)
-              normalizedChats.sort((a, b) => {
-                const timeA = new Date(a.lastMessageTime || 0).getTime();
-                const timeB = new Date(b.lastMessageTime || 0).getTime();
-                return timeB - timeA;
-              });
-
-              dispatch(setChats(normalizedChats));
-              console.log(`✅ Session recovery: Loaded ${normalizedChats.length} cached chats`);
-            }
-
-            // Step 4: Connect socket for real-time updates
-            try {
-              await socketService.connect(currentUser.id, currentUser.token);
-              console.log('✅ Socket connected for real-time updates');
-            } catch (socketError) {
-              console.error('❌ Socket connection failed (app will work offline):', socketError);
-            }
-
-          } catch (cacheError) {
-            console.error('❌ Failed to load cached data:', cacheError);
-          }
-        }
-
-        console.log('✅ Chat system initialization completed');
-      } catch (error) {
-        console.error('❌ Error initializing chat system:', error);
+      } catch (socketError) {
+        console.error('❌ [useChatInitialization] Socket connection failed (app will work offline):', socketError);
       }
-    };
 
-    // Initialize when component mounts or user changes
-    initializeChat();
+      // Step 4: Perform full data synchronization (server first, then local fallback)
+      console.log('🔄 [useChatInitialization] Starting full data synchronization...');
+      const syncResult = await messageSyncService.syncAllData({
+        forceServerSync: true,
+        backgroundSync: false
+      });
+
+      if (syncResult.success) {
+        console.log(`✅ [useChatInitialization] Sync completed successfully:`);
+        console.log(`   📊 Chats: ${syncResult.chatsCount}`);
+        console.log(`   📊 Messages: ${syncResult.messagesCount}`);
+        console.log(`   📊 Source: ${syncResult.source}`);
+      } else {
+        console.error('❌ [useChatInitialization] Sync failed:', syncResult.errors);
+        dispatch(setError('Failed to sync data. Using offline mode.'));
+      }
+
+      // Step 5: Start background sync
+      messageSyncService.startBackgroundSync(120000); // Sync every 2 minutes
+      console.log('🔄 [useChatInitialization] Background sync started');
+
+      console.log('✅ [useChatInitialization] Chat system initialization completed');
+    } catch (error) {
+      console.error('❌ [useChatInitialization] Error initializing chat system:', error);
+      dispatch(setError('Failed to initialize chat system. Please restart the app.'));
+    } finally {
+      dispatch(setLoading(false));
+    }
   }, [currentUser?.id, currentUser?.token, dispatch]);
 
+  useEffect(() => {
+    initializeChat();
+  }, [initializeChat]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      console.log('🧹 [useChatInitialization] Cleaning up...');
+      messageSyncService.stopBackgroundSync();
+    };
+  }, []);
+
   return {
-    isInitialized: !!currentUser?.id && sqliteService.isInitialized(),
+    isInitialized: !!currentUser?.id && messageSyncService.getSyncStatus().isInitialized,
+    syncStatus: messageSyncService.getSyncStatus(),
   };
 };

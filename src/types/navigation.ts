@@ -27,7 +27,11 @@ export type TabStackParamList = {
 // -------- Main Stack --------
 export type MainStackParamList = {
   Tabs: NavigatorScreenParams<TabStackParamList>;
-  ConversationScreen: undefined;
+  ConversationScreen: {
+    id: string;
+    name?: string;
+    avatar?: string;
+  };
   FilteredContactsScreen: undefined;
   UserInfoScreen: undefined;
   // EditProfileScreen: undefined;

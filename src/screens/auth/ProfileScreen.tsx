@@ -2,56 +2,69 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import React, { useEffect, useState } from 'react';
 import {
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-    Alert,
-    ActivityIndicator
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
-import { launchCamera, launchImageLibrary, ImagePickerResponse, MediaType } from 'react-native-image-picker';
+import {
+  launchCamera,
+  launchImageLibrary,
+  ImagePickerResponse,
+  MediaType,
+} from 'react-native-image-picker';
 import Toast from 'react-native-toast-message';
 import { useDispatch, useSelector } from 'react-redux';
 import { apiService } from '../../services/apiService';
 import { locationsService } from '../../services/locationsService';
 import { imageUploadService } from '../../services/imageUploadService';
 import { RootState } from '../../store';
-import { login } from '../../store/slices/authSlice';
+import { login, updateUserProfile } from '../../store/slices/authSlice';
 import { LightColors } from '../../theme/colors';
 import { RootStackParamList } from '../../types/navigation';
 import ModernDropdown from '../../components/atoms/ui/ModernDropdown';
 import { requestContactsPermissionWithAlert } from '../../utils/permissions';
 
-type ProfileScreenNavigationProp = StackNavigationProp<RootStackParamList, 'AuthStack'>;
+type ProfileScreenNavigationProp = StackNavigationProp<
+  RootStackParamList,
+  'AuthStack'
+>;
 
 const ProfileScreen = () => {
   const navigation = useNavigation<ProfileScreenNavigationProp>();
   const dispatch = useDispatch();
   const user = useSelector((state: RootState) => state.auth.user);
 
-  console.log("🎯 ProfileScreen loaded!");
-  console.log("User data:", user);
-  console.log("Is logged in:", useSelector((state: RootState) => state.auth.isLoggedIn));
+  console.log('🎯 ProfileScreen loaded!');
+  console.log('User data:', user);
+  console.log(
+    'Is logged in:',
+    useSelector((state: RootState) => state.auth.isLoggedIn),
+  );
 
   // Prefill fields if user data exists
-  const [fullName, setFullName] = useState(user?.fullName || "");
-  const [selectedCountry, setSelectedCountry] = useState(user?.country || "");
-  const [selectedState, setSelectedState] = useState(user?.state || "");
-  const [selectedStatus, setSelectedStatus] = useState(user?.status || "");
+  const [fullName, setFullName] = useState(user?.fullName || '');
+  const [selectedCountry, setSelectedCountry] = useState(user?.country || '');
+  const [selectedState, setSelectedState] = useState(user?.state || '');
+  const [selectedStatus, setSelectedStatus] = useState(user?.status || '');
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
-  
+
   // Image upload state
-  const [profileImage, setProfileImage] = useState<string | null>((user as any)?.profilePicture || null);
+  const [profileImage, setProfileImage] = useState<string | null>(
+    (user as any)?.profilePicture || null,
+  );
   const [uploading, setUploading] = useState(false);
   const [uploadTempId, setUploadTempId] = useState<string | null>(null);
-  
+
   // Dynamic location data
   const [countries, setCountries] = useState<string[]>([]);
   const [states, setStates] = useState<string[]>([]);
@@ -68,11 +81,11 @@ const ProfileScreen = () => {
     const loadLocations = async () => {
       try {
         setLoadingLocations(true);
-        
+
         // Load countries
         const countriesData = await locationsService.getCountries();
         setCountries(countriesData);
-        
+
         // If user has a pre-selected country, load its states
         if (user?.country) {
           const statesData = await locationsService.getStates(user.country);
@@ -90,7 +103,7 @@ const ProfileScreen = () => {
   }, [user?.country]);
 
   if (!user) {
-    return null; 
+    return null;
   }
 
   const { firebaseUid, phone } = user;
@@ -98,13 +111,13 @@ const ProfileScreen = () => {
   // Image picker functions
   const showImagePicker = () => {
     Alert.alert(
-      "Select Profile Picture",
-      "Choose how you want to select your profile picture",
+      'Select Profile Picture',
+      'Choose how you want to select your profile picture',
       [
-        { text: "Camera", onPress: () => openCamera() },
-        { text: "Gallery", onPress: () => openImageLibrary() },
-        { text: "Cancel", style: "cancel" }
-      ]
+        { text: 'Camera', onPress: () => openCamera() },
+        { text: 'Gallery', onPress: () => openImageLibrary() },
+        { text: 'Cancel', style: 'cancel' },
+      ],
     );
   };
 
@@ -122,13 +135,13 @@ const ProfileScreen = () => {
       if (response.didCancel) {
         return;
       }
-      
+
       if (response.errorMessage) {
         console.error('Camera error:', response.errorMessage);
-        Toast.show({ 
-          type: "error", 
-          text1: "Camera Error",
-          text2: response.errorMessage
+        Toast.show({
+          type: 'error',
+          text1: 'Camera Error',
+          text2: response.errorMessage,
         });
         return;
       }
@@ -156,13 +169,13 @@ const ProfileScreen = () => {
       if (response.didCancel) {
         return;
       }
-      
+
       if (response.errorMessage) {
         console.error('Gallery error:', response.errorMessage);
-        Toast.show({ 
-          type: "error", 
-          text1: "Gallery Error",
-          text2: response.errorMessage
+        Toast.show({
+          type: 'error',
+          text1: 'Gallery Error',
+          text2: response.errorMessage,
         });
         return;
       }
@@ -179,41 +192,40 @@ const ProfileScreen = () => {
   const uploadImage = async (imageUri: string) => {
     try {
       setUploading(true);
-      
+
       // Show initial upload status
-      Toast.show({ 
-        type: "info", 
-        text1: "Uploading image...",
-        text2: "Please wait"
+      Toast.show({
+        type: 'info',
+        text1: 'Uploading image...',
+        text2: 'Please wait',
       });
-      
+
       // Upload image and get tempId for signup
       const result = await imageUploadService.uploadImageForSignup(imageUri);
-      
+
       if (result.success) {
         // Set tempId if available
         if (result.tempId) {
           setUploadTempId(result.tempId);
         }
-        
+
         // Use uploaded image URL for preview if available, otherwise use local URI
         setProfileImage(result.imageUrl || result.url || imageUri);
-        
-        Toast.show({ 
-          type: "success", 
-          text1: "✅ Image uploaded successfully!",
-          text2: "Profile picture ready for signup"
+
+        Toast.show({
+          type: 'success',
+          text1: '✅ Image uploaded successfully!',
+          text2: 'Profile picture ready for signup',
         });
       } else {
         throw new Error(result.error || 'Failed to upload image');
       }
-      
     } catch (error) {
-      console.error("Upload error:", error);
-      Toast.show({ 
-        type: "error", 
-        text1: "❌ Upload failed",
-        text2: error instanceof Error ? error.message : "Please try again"
+      console.error('Upload error:', error);
+      Toast.show({
+        type: 'error',
+        text1: '❌ Upload failed',
+        text2: error instanceof Error ? error.message : 'Please try again',
       });
       // Reset image upload state on error
       resetImageUpload();
@@ -231,12 +243,15 @@ const ProfileScreen = () => {
   // Save Profile Logic
   const onSubmit = async () => {
     if (loadingLocations) {
-      Toast.show({ type: "error", text1: "Please wait while locations are loading" });
+      Toast.show({
+        type: 'error',
+        text1: 'Please wait while locations are loading',
+      });
       return;
     }
-    
+
     if (!fullName || !selectedCountry || !selectedState || !selectedStatus) {
-      Toast.show({ type: "error", text1: "Please fill all fields" });
+      Toast.show({ type: 'error', text1: 'Please fill all fields' });
       return;
     }
 
@@ -247,7 +262,7 @@ const ProfileScreen = () => {
       mobileNo: phone,
       location: {
         country: selectedCountry,
-        state: selectedState
+        state: selectedState,
       },
       status: selectedStatus,
       // Send tempId if image was uploaded, otherwise use manual URL
@@ -261,87 +276,105 @@ const ProfileScreen = () => {
 
       // Update Redux with latest user info from backend
       if (response && response.user) {
-        // Handle location object structure
-        const location = response.user.location || { country: selectedCountry, state: selectedState };
+        console.log('📝 API Response received:', response);
+        console.log('📝 User data from API:', response.user);
+
+        // Handle location object structure from API response
+        const location = response.user.location || {
+          country: selectedCountry,
+          state: selectedState,
+        };
         const country = location.country || selectedCountry;
         const state = location.state || selectedState;
-        
-        dispatch(
-          login({
-            id: response.user.firebaseUid, // Use firebaseUid as id
-            firebaseUid: response.user.firebaseUid,
-            phone: response.user.mobileNo,
-            isVerified: response.user.isVerified,
-            fullName: response.user.fullName,
-            avatar: response.user.profilePicture || "https://picsum.photos/200",
-            country: country,
-            state: state,
-            status: response.user.status,
-          })
-        );
+
+        // Prepare user data for Redux store
+        const userData = {
+          fullName: response.user.fullName,
+          avatar: response.user.profilePicture || 'https://picsum.photos/200',
+          country: country,
+          state: state,
+          status: response.user.status,
+          isVerified: response.user.isVerified,
+          profileCompleted: true, // Mark profile as completed
+          token: response.token, // Store the JWT token
+        };
+
+        console.log('📝 Updating Redux with user data:', userData);
+
+        // Use updateUserProfile to update existing user data
+        dispatch(updateUserProfile(userData));
       }
 
-      Toast.show({ type: "success", text1: "Profile saved successfully!" });
-      
+      Toast.show({ type: 'success', text1: 'Profile saved successfully!' });
+
       // Reset image upload state
       resetImageUpload();
-      
+
       // Request contacts permission after successful profile completion
       try {
-        const permissionResult = await requestContactsPermissionWithAlert(false);
+        const permissionResult = await requestContactsPermissionWithAlert(
+          false,
+        );
         if (permissionResult.granted) {
           // Contacts permission granted
         } else {
           // Contacts permission denied, but proceeding to main app
           Toast.show({
-            type: "info",
-            text1: "Contacts permission denied",
-            text2: "You can enable it later in settings to find friends"
+            type: 'info',
+            text1: 'Contacts permission denied',
+            text2: 'You can enable it later in settings to find friends',
           });
         }
       } catch (error) {
         console.error('❌ Error requesting contacts permission:', error);
       }
-      
+
       navigation.navigate('MainStack' as never);
     } catch (err: unknown) {
-      console.error("❌ Profile save error:", err);
-      console.error("Error type:", typeof err);
-      console.error("Error details:", JSON.stringify(err, null, 2));
+      console.error('❌ Profile save error:', err);
+      console.error('Error type:', typeof err);
+      console.error('Error details:', JSON.stringify(err, null, 2));
 
-      let errorMessage = "Failed to save profile";
+      let errorMessage = 'Failed to save profile';
 
       if (err instanceof Error) {
         errorMessage = err.message;
-        console.error("Error message:", err.message);
-        console.error("Error stack:", err.stack);
+        console.error('Error message:', err.message);
+        console.error('Error stack:', err.stack);
 
-        if (err.message.includes("Network request failed")) {
-          errorMessage = "Network error: Please check your internet connection";
-        } else if (err.message.includes("timeout")) {
-          errorMessage = "Request timeout: Please try again";
-        } else if (err.message.includes("CORS")) {
-          errorMessage = "Server configuration error: Please contact support";
-        } else if (err.message.includes("User not found")) {
-          errorMessage = "User not found. Please try logging in again.";
-        } else if (err.message.includes("Validation")) {
-          errorMessage = "Please check all fields are filled correctly";
+        if (err.message.includes('Network request failed')) {
+          errorMessage = 'Network error: Please check your internet connection';
+        } else if (err.message.includes('timeout')) {
+          errorMessage = 'Request timeout: Please try again';
+        } else if (err.message.includes('CORS')) {
+          errorMessage = 'Server configuration error: Please contact support';
+        } else if (err.message.includes('User not found')) {
+          errorMessage = 'User not found. Please try logging in again.';
+        } else if (err.message.includes('Validation')) {
+          errorMessage = 'Please check all fields are filled correctly';
         }
       }
 
-      Toast.show({ type: "error", text1: "Profile Save Failed", text2: errorMessage });
+      Toast.show({
+        type: 'error',
+        text1: 'Profile Save Failed',
+        text2: errorMessage,
+      });
     } finally {
       setLoading(false);
     }
   };
 
-
   const getCountryEmoji = (country: string) => {
-    switch(country) {
-      case 'India': return '🇮🇳';
-      case 'UK': return '🇬🇧';
-      case 'USA': return '🇺🇸';
-      default: return '🌍';
+    switch (country) {
+      case 'India':
+        return '🇮🇳';
+      case 'UK':
+        return '🇬🇧';
+      case 'USA':
+        return '🇺🇸';
+      default:
+        return '🌍';
     }
   };
 
@@ -353,8 +386,8 @@ const ProfileScreen = () => {
   // Reset state when country changes and load new states
   const handleCountryChange = async (country: string) => {
     setSelectedCountry(country);
-    setSelectedState(""); // Reset state when country changes
-    
+    setSelectedState(''); // Reset state when country changes
+
     // Load states for the selected country
     try {
       const statesData = await locationsService.getStates(country);
@@ -366,13 +399,13 @@ const ProfileScreen = () => {
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-      
-      <ScrollView 
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -387,13 +420,16 @@ const ProfileScreen = () => {
 
         {/* Profile Image Section */}
         <View style={styles.imageSection}>
-          <TouchableOpacity 
-            style={[styles.imageContainer, uploading && styles.imageContainerDisabled]}
+          <TouchableOpacity
+            style={[
+              styles.imageContainer,
+              uploading && styles.imageContainerDisabled,
+            ]}
             onPress={showImagePicker}
             disabled={uploading}
           >
             <Image
-              source={{ uri: profileImage || "https://picsum.photos/200" }}
+              source={{ uri: profileImage || 'https://picsum.photos/200' }}
               style={styles.profileImage}
             />
             <View style={styles.imageOverlay}>
@@ -411,7 +447,7 @@ const ProfileScreen = () => {
             </View>
           </TouchableOpacity>
           <Text style={styles.imageText}>
-            {uploading ? "Uploading image..." : "Tap to select profile picture"}
+            {uploading ? 'Uploading image...' : 'Tap to select profile picture'}
           </Text>
           {profileImage && !uploading && (
             <Text style={styles.imageStatusText}>
@@ -428,7 +464,7 @@ const ProfileScreen = () => {
             <TextInput
               style={[
                 styles.input,
-                focusedField === 'fullName' && styles.inputFocused
+                focusedField === 'fullName' && styles.inputFocused,
               ]}
               placeholder="Enter your full name"
               placeholderTextColor={LightColors.subText}
@@ -446,7 +482,7 @@ const ProfileScreen = () => {
             options={countries.map(country => ({
               label: country,
               value: country,
-              emoji: getCountryEmoji(country)
+              emoji: getCountryEmoji(country),
             }))}
             selectedValue={selectedCountry}
             onValueChange={handleCountryChange}
@@ -462,16 +498,16 @@ const ProfileScreen = () => {
             options={states.map(state => ({
               label: state,
               value: state,
-              emoji: getStateEmoji(state)
+              emoji: getStateEmoji(state),
             }))}
             selectedValue={selectedState}
-            onValueChange={(value) => setSelectedState(value)}
+            onValueChange={value => setSelectedState(value)}
             placeholder={
-              loadingLocations 
-                ? "Loading states..." 
-                : selectedCountry 
-                  ? "Select your state/region" 
-                  : "Select country first"
+              loadingLocations
+                ? 'Loading states...'
+                : selectedCountry
+                ? 'Select your state/region'
+                : 'Select country first'
             }
             loading={loadingLocations}
             disabled={!selectedCountry || loadingLocations}
@@ -482,13 +518,13 @@ const ProfileScreen = () => {
             label="Status"
             emoji="📊"
             options={[
-              { label: "Available", value: "Available", emoji: "🟢" },
-              { label: "Working", value: "Working", emoji: "💼" },
-              { label: "Busy", value: "Busy", emoji: "🔴" },
-              { label: "Away", value: "Away", emoji: "⏰" },
+              { label: 'Available', value: 'Available', emoji: '🟢' },
+              { label: 'Working', value: 'Working', emoji: '💼' },
+              { label: 'Busy', value: 'Busy', emoji: '🔴' },
+              { label: 'Away', value: 'Away', emoji: '⏰' },
             ]}
             selectedValue={selectedStatus}
-            onValueChange={(value) => setSelectedStatus(value)}
+            onValueChange={value => setSelectedStatus(value)}
             placeholder="Select your status"
           />
         </View>
@@ -497,20 +533,24 @@ const ProfileScreen = () => {
       {/* Bottom Section */}
       <View style={styles.bottomSection}>
         <TouchableOpacity
-          style={[styles.saveButton, (loading || loadingLocations) && styles.saveButtonDisabled]}
+          style={[
+            styles.saveButton,
+            (loading || loadingLocations) && styles.saveButtonDisabled,
+          ]}
           onPress={onSubmit}
           disabled={loading || loadingLocations}
           activeOpacity={0.8}
         >
           <Text style={styles.saveButtonText}>
-            {loadingLocations 
-              ? "Loading locations..." 
-              : loading 
-                ? "Setting up your profile..." 
-                : "Complete Setup"
-            }
+            {loadingLocations
+              ? 'Loading locations...'
+              : loading
+              ? 'Setting up your profile...'
+              : 'Complete Setup'}
           </Text>
-          {!loading && !loadingLocations && <Text style={styles.buttonArrow}>✨</Text>}
+          {!loading && !loadingLocations && (
+            <Text style={styles.buttonArrow}>✨</Text>
+          )}
         </TouchableOpacity>
 
         {/* Footer */}
@@ -544,7 +584,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontWeight: "700",
+    fontWeight: '700',
     color: LightColors.text,
     marginBottom: 8,
     textAlign: 'center',
@@ -628,7 +668,7 @@ const styles = StyleSheet.create({
   },
   inputLabel: {
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: '600',
     color: LightColors.text,
     marginBottom: 12,
   },
@@ -656,7 +696,7 @@ const styles = StyleSheet.create({
   },
   bottomSection: {
     paddingHorizontal: 24,
-    paddingBottom: Platform.OS === "ios" ? 40 : 24,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
     paddingTop: 20,
     backgroundColor: LightColors.background,
   },
@@ -686,7 +726,7 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: LightColors.textOnPrimary,
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: '600',
     marginRight: 8,
   },
   buttonArrow: {

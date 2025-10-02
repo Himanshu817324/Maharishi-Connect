@@ -11,17 +11,28 @@ class ContactResolver {
   private avatarCache: Map<string, string> = new Map();
   private serverContactCache: Map<string, any> = new Map();
   private initialized = false;
+  private initializationPromise: Promise<void> | null = null;
 
   // Initialize the resolver with local contacts
   async initialize(contacts: Contact[] = []) {
+    // If already initializing, wait for that to complete
+    if (this.initializationPromise) {
+      return this.initializationPromise;
+    }
+
+    this.initializationPromise = this._doInitialize(contacts);
+    return this.initializationPromise;
+  }
+
+  private async _doInitialize(contacts: Contact[] = []) {
     this.contactCache.clear();
     this.avatarCache.clear();
-    
+
     for (const contact of contacts) {
       if (contact.phoneNumbers && contact.phoneNumbers.length > 0) {
         const displayName = contact.displayName || contact.givenName || contact.familyName || 'Unknown';
         const avatar = contact.thumbnailPath || contact.hasThumbnail ? contact.thumbnailPath : null;
-        
+
         for (const phoneNumber of contact.phoneNumbers) {
           const cleanNumber = this.normalizePhoneNumber(phoneNumber.number);
           if (cleanNumber) {
@@ -33,7 +44,7 @@ class ContactResolver {
         }
       }
     }
-    
+
     this.initialized = true;
     console.log(`📞 ContactResolver initialized with ${this.contactCache.size} phone numbers`);
   }
@@ -82,7 +93,7 @@ class ContactResolver {
     const normalizedNumber = this.normalizePhoneNumber(phoneNumber);
     return this.contactCache.get(normalizedNumber) || null;
   }
-  
+
   // FIXED: Renamed to be a private helper method for clarity
   private _resolveAvatarFromCache(phoneNumber: string): string | null {
     if (!this.initialized || !phoneNumber) return null;
@@ -114,14 +125,14 @@ class ContactResolver {
         if (localName) {
           return localName;
         }
-        
+
         // 2. Fallback to server data if not in local contacts.
         const serverContact = this.getServerContact(phoneNumber);
         if (serverContact) {
           return serverContact.localName || serverContact.name || serverContact.fullName || `+91${phoneNumber}`;
         }
       }
-      
+
       // 3. Final fallback to the name from the participant object (sender's profile name).
       return otherParticipant?.user_name || otherParticipant?.fullName || otherParticipant?.name || 'Unknown User';
     }
@@ -132,23 +143,23 @@ class ContactResolver {
   // Resolve contact name by phone number or user ID
   resolveContactName(phoneNumberOrId: string, fallbackName?: string): string {
     if (!phoneNumberOrId) return fallbackName || 'Unknown User';
-    
+
     // First try to resolve by phone number from local contacts
     const localName = this._resolveNameFromCache(phoneNumberOrId);
     if (localName) return localName;
-    
+
     // Try to resolve from server contacts
     const serverContact = this.getServerContact(phoneNumberOrId);
     if (serverContact) {
       return serverContact.localName || serverContact.name || serverContact.fullName || fallbackName || 'Unknown User';
     }
-    
+
     // If it looks like a phone number, format it nicely
     const normalizedNumber = this.normalizePhoneNumber(phoneNumberOrId);
     if (normalizedNumber && normalizedNumber.length === 10) {
       return `+91${normalizedNumber}`;
     }
-    
+
     // Return fallback name or unknown
     return fallbackName || 'Unknown User';
   }
@@ -167,7 +178,7 @@ class ContactResolver {
       if (phoneNumber) {
         const localAvatar = this._resolveAvatarFromCache(phoneNumber);
         if (localAvatar) return localAvatar;
-        
+
         const serverContact = this.getServerContact(phoneNumber);
         if (serverContact?.profilePicture) return serverContact.profilePicture;
       }
@@ -183,6 +194,65 @@ class ContactResolver {
 
   isInitialized(): boolean {
     return this.initialized;
+  }
+
+  // Wait for initialization to complete
+  async waitForInitialization(): Promise<void> {
+    if (this.initialized) {
+      return;
+    }
+    if (this.initializationPromise) {
+      await this.initializationPromise;
+    }
+  }
+
+  // Enhanced name resolution with better fallbacks
+  resolveChatNameEnhanced(chat: any, currentUserId: string): string {
+    if (!chat) return 'Unknown';
+    if (chat.type !== 'direct') {
+      return chat.name || 'Group Chat';
+    }
+
+    const participants = chat.participants || [];
+    const otherParticipant = participants.find((p: any) => (p?.user_id || p?.uid || p?.id || p) !== currentUserId);
+
+    if (otherParticipant) {
+      const phoneNumber = otherParticipant?.user_mobile || otherParticipant?.phone || otherParticipant?.mobile;
+
+      // 1. Try to get name from participant data first (most reliable)
+      const participantName = otherParticipant?.user_name ||
+        otherParticipant?.fullName ||
+        otherParticipant?.name ||
+        otherParticipant?.userDetails?.fullName;
+
+      if (participantName && participantName !== 'Unknown User') {
+        return participantName;
+      }
+
+      // 2. If we have a phone number, try contact resolution
+      if (phoneNumber && this.initialized) {
+        const localName = this._resolveNameFromCache(phoneNumber);
+        if (localName) {
+          return localName;
+        }
+
+        const serverContact = this.getServerContact(phoneNumber);
+        if (serverContact) {
+          return serverContact.localName || serverContact.name || serverContact.fullName || `+91${phoneNumber}`;
+        }
+      }
+
+      // 3. Format phone number nicely as fallback
+      if (phoneNumber) {
+        const normalizedNumber = this.normalizePhoneNumber(phoneNumber);
+        if (normalizedNumber && normalizedNumber.length === 10) {
+          return `+91${normalizedNumber}`;
+        }
+        return phoneNumber;
+      }
+    }
+
+    return chat.name || 'Unknown User';
   }
 }
 

@@ -18,7 +18,7 @@ class ApiService {
   ): Promise<ApiResponse<T>> {
     const url = `${API_BASE_URL}${endpoint}`;
     console.log("🌐 Making API request to:", url);
-    
+
     const defaultHeaders = {
       "Content-Type": "application/json",
       "Accept": "application/json",
@@ -35,17 +35,17 @@ class ApiService {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), NETWORK_CONFIG.TIMEOUT);
-      
+
       const response = await fetch(url, {
         ...config,
         signal: controller.signal,
       });
-      
+
       clearTimeout(timeoutId);
       console.log("📡 Response status:", response.status, response.statusText);
-      
+
       let data: ApiResponse<T>;
-      
+
       try {
         data = await response.json();
       } catch (parseError) {
@@ -61,7 +61,7 @@ class ApiService {
       return data;
     } catch (error) {
       console.error("API request failed:", error);
-      
+
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
           throw new Error(NETWORK_ERRORS.TIMEOUT);
@@ -71,7 +71,7 @@ class ApiService {
           throw new Error(NETWORK_ERRORS.CORS_ERROR);
         }
       }
-      
+
       throw error;
     }
   }
@@ -90,7 +90,7 @@ class ApiService {
   }): Promise<ApiResponse> {
     // Remove null/empty values before sending
     const cleanedData = Object.fromEntries(
-      Object.entries(userData).filter(([_, value]) => 
+      Object.entries(userData).filter(([_, value]) =>
         value !== null && value !== "" && value !== undefined
       )
     );
@@ -106,6 +106,42 @@ class ApiService {
       method: "POST",
       body: JSON.stringify({ mobileNo }),
     });
+  }
+
+  // Fetch complete user profile data
+  async getUserProfile(firebaseUid: string, token: string): Promise<ApiResponse> {
+    console.log('🔍 [getUserProfile] Fetching profile for user:', firebaseUid);
+    console.log('🔍 [getUserProfile] Using token:', token.substring(0, 20) + '...');
+
+    // Try multiple endpoints in order of preference
+    const endpoints = [
+      `/users/${firebaseUid}`,
+      `/auth/profile`,
+      `/user/profile`,
+      `/profile`
+    ];
+
+    for (const endpoint of endpoints) {
+      try {
+        console.log(`🔍 [getUserProfile] Trying endpoint: ${endpoint}`);
+        const response = await this.makeRequest(endpoint, {
+          method: "GET",
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        console.log('✅ [getUserProfile] Profile data received from', endpoint, ':', response);
+        return response;
+      } catch (error) {
+        console.log(`❌ [getUserProfile] Endpoint ${endpoint} failed:`, error);
+        // Continue to next endpoint
+      }
+    }
+
+    // If all endpoints fail, throw the last error
+    throw new Error('All profile endpoints failed. Please check your backend API.');
   }
 
   private async makeFormDataRequest<T>(
@@ -169,24 +205,24 @@ class ApiService {
   async filterContacts(phoneNumbers: string[]): Promise<ApiResponse> {
     console.log("🔍 API: Filtering contacts with numbers:", phoneNumbers.length);
     console.log("🔍 API: Sample numbers:", phoneNumbers.slice(0, 3));
-    
+
     // Retry mechanism with exponential backoff for rate limiting
     const maxRetries = 3;
     let lastError: Error | null = null;
-    
+
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const response = await this.makeRequest("/user/check-contacts", {
           method: "POST",
           body: JSON.stringify({ contacts: phoneNumbers }),
         });
-        
+
         console.log("🔍 API: Filter response received:", response);
         return response;
       } catch (error) {
         lastError = error as Error;
         console.log(`🔍 API: Attempt ${attempt + 1} failed:`, error);
-        
+
         // Check if it's a rate limiting error
         if (error instanceof Error && error.message.includes('Too many authentication attempts')) {
           if (attempt < maxRetries - 1) {
@@ -196,12 +232,12 @@ class ApiService {
             continue;
           }
         }
-        
+
         // For non-rate-limiting errors or final attempt, throw immediately
         throw error;
       }
     }
-    
+
     // If we get here, all retries failed
     throw lastError || new Error('All retry attempts failed');
   }
@@ -220,7 +256,7 @@ class ApiService {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
-      
+
       const response = await fetch(`${API_BASE_URL}/health`, {
         method: "GET",
         headers: {
@@ -229,7 +265,7 @@ class ApiService {
         },
         signal: controller.signal,
       });
-      
+
       clearTimeout(timeoutId);
       return response.ok;
     } catch (error) {

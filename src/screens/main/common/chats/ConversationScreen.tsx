@@ -152,20 +152,25 @@ const ConversationScreen: React.FC = () => {
     return () => clearInterval(syncInterval);
   }, [chatId, currentUser?.id, lastSyncTime]);
 
-  // Enhanced real-time message handling
+  // Enhanced real-time message handling with proper cleanup
   useEffect(() => {
     if (!chatId || !currentUser?.id) return;
+
+    console.log(
+      '📨 [ConversationScreen] Setting up real-time message listeners for chat:',
+      chatId,
+    );
 
     // Listen for message updates (edits, deletions)
     const unsubMessageUpdate = socketService.on(
       'messageEdited',
       (data: any) => {
         console.log('📨 [ConversationScreen] Message edited:', data);
-        if (data.chatId === chatId) {
+        if (data.chatId === chatId || data.chat_id === chatId) {
           dispatch({
             type: 'chat/updateMessage',
             payload: {
-              messageId: data.messageId,
+              messageId: data.messageId || data.message_id,
               content: data.content,
             },
           });
@@ -177,18 +182,33 @@ const ConversationScreen: React.FC = () => {
       'messageDeleted',
       (data: any) => {
         console.log('📨 [ConversationScreen] Message deleted:', data);
-        if (data.chatId === chatId) {
+        if (data.chatId === chatId || data.chat_id === chatId) {
           dispatch({
             type: 'chat/removeMessage',
-            payload: data.messageId,
+            payload: data.messageId || data.message_id,
           });
         }
       },
     );
 
+    // Listen for typing indicators
+    const unsubTyping = socketService.on(
+      'typingUpdate',
+      (data: { userId: string; chatId: string; isTyping: boolean }) => {
+        if (data.chatId === chatId && data.userId !== currentUser.id) {
+          handleTypingUpdate(data);
+        }
+      },
+    );
+
     return () => {
+      console.log(
+        '📨 [ConversationScreen] Cleaning up message listeners for chat:',
+        chatId,
+      );
       unsubMessageUpdate?.();
       unsubMessageDelete?.();
+      unsubTyping?.();
     };
   }, [chatId, currentUser?.id, dispatch]);
 
@@ -239,7 +259,7 @@ const ConversationScreen: React.FC = () => {
                 if (senderId === currentUser.id) {
                   senderName = 'You';
                 } else {
-                  // Try to get sender name from message data
+                  // Try to get sender name from message data first
                   senderName =
                     message.sender_name ||
                     message.senderName ||
@@ -258,14 +278,32 @@ const ConversationScreen: React.FC = () => {
                           (p?.user_id || p?.uid || p?.id || p) === senderId,
                       );
                       if (participant) {
+                        // Prioritize participant data over phone number formatting
                         senderName =
                           participant?.user_name ||
                           participant?.fullName ||
                           participant?.name ||
                           participant?.userDetails?.fullName ||
-                          `+91${
-                            participant?.user_mobile || participant?.phone || ''
-                          }`.replace(/^\+91$/, 'Unknown User');
+                          'Unknown User';
+
+                        // Only format phone number if no name is available
+                        if (senderName === 'Unknown User') {
+                          const phoneNumber =
+                            participant?.user_mobile || participant?.phone;
+                          if (phoneNumber) {
+                            const normalizedNumber = phoneNumber.replace(
+                              /\D/g,
+                              '',
+                            );
+                            if (normalizedNumber.length === 10) {
+                              senderName = `+91${normalizedNumber}`;
+                            } else if (normalizedNumber.length > 10) {
+                              senderName = `+91${normalizedNumber.slice(-10)}`;
+                            } else {
+                              senderName = phoneNumber;
+                            }
+                          }
+                        }
                       }
                     }
                   }

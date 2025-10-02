@@ -28,6 +28,7 @@ import AvatarWithInitials from '@/components/atoms/ui/AvatarWithInitials';
 import chatApiService from '@/services/chatApiService';
 import sqliteService from '@/services/sqliteService';
 import socketService from '@/services/socketService';
+import chatManagementService from '@/services/chatManagementService';
 import { useTheme } from '@/theme';
 import {
   dimensions,
@@ -156,6 +157,7 @@ export default function ChatScreen() {
   const [socketConnected, setSocketConnected] = useState(
     socketService.getConnectionStatus(),
   );
+  const [contactResolverReady, setContactResolverReady] = useState(false);
 
   const syncChatsFromServer = useCallback(
     async (isInitialLoad = false) => {
@@ -314,6 +316,9 @@ export default function ChatScreen() {
       console.log('🚀 Performing initial chat load from local DB...');
 
       try {
+        // Initialize chat management service
+        await chatManagementService.initialize();
+
         // Always load from SQLite first to show cached data immediately
         const localChats = await sqliteService.getChats();
         console.log(`🚀 Found ${localChats.length} chats in SQLite`);
@@ -427,10 +432,26 @@ export default function ChatScreen() {
       console.log('📞 Initializing contact resolver...');
       const localContacts = await fetchContacts();
       await ContactResolver.initialize(localContacts);
+      setContactResolverReady(true);
       console.log('✅ Contact resolver initialized');
     } catch (error) {
       console.error('❌ Failed to initialize contact resolver:', error);
+      // Still mark as ready to prevent infinite loading
+      setContactResolverReady(true);
     }
+  };
+
+  // Enhanced name resolution that prevents flickering
+  const getDisplayName = (item: any): string => {
+    // Always use the enhanced resolver which has better fallbacks
+    return ContactResolver.resolveChatNameEnhanced(item, currentUser?.id || '');
+  };
+
+  const getDisplayAvatar = (item: any): string | null => {
+    if (item.type !== 'direct') {
+      return item.avatar || null;
+    }
+    return ContactResolver.resolveChatAvatar(item, currentUser?.id || '');
   };
 
   const handleAddPress = async () => {
@@ -443,7 +464,7 @@ export default function ChatScreen() {
     }
   };
 
-  if (isLoading && chats.length === 0) {
+  if ((isLoading && chats.length === 0) || !contactResolverReady) {
     return (
       <SafeAreaView
         style={[styles.container, { backgroundColor: colors.background }]}
@@ -452,7 +473,7 @@ export default function ChatScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.text }]}>
-            Loading chats...
+            {!contactResolverReady ? 'Loading contacts...' : 'Loading chats...'}
           </Text>
         </View>
       </SafeAreaView>
@@ -487,12 +508,8 @@ export default function ChatScreen() {
           />
         }
         renderItem={({ item }) => {
-          const displayName = ContactResolver.isInitialized()
-            ? ContactResolver.resolveChatName(item, currentUser?.id || '')
-            : item.name;
-          const displayAvatar = ContactResolver.isInitialized()
-            ? ContactResolver.resolveChatAvatar(item, currentUser?.id || '')
-            : item.avatar;
+          const displayName = getDisplayName(item);
+          const displayAvatar = getDisplayAvatar(item);
           return (
             <TouchableOpacity
               style={[styles.chatItem, { backgroundColor: colors.background }]}
