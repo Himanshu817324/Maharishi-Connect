@@ -1,0 +1,353 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  View,
+  StyleSheet,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Text,
+  FlatList,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
+import { useDispatch, useSelector } from 'react-redux';
+import { RootState } from '@/store';
+import { 
+  markChatAsRead, 
+  setCurrentChat, 
+  addMessage, 
+  updateMessageStatus,
+  loadChatMessages
+} from '@/store/slices/chatSlice';
+import { selectCurrentUser } from '@/store/slices/authSlice';
+import socketService from '@/services/socketService';
+import chatApiService from '@/services/chatApiService';
+import { useTheme } from '@/theme';
+import CustomStatusBar from '@/components/atoms/ui/StatusBar';
+import ChatHeader from '@/components/atoms/chats/ChatHeader';
+import ChatInput from '@/components/atoms/chats/ChatInput';
+import MessageBubble from '@/components/atoms/chats/MessageBubble';
+import { fontSize, spacing } from '@/theme/responsive';
+
+type ConversationRouteParams = {
+  id: string;
+  name?: string;
+  avatar?: string;
+};
+
+type ConversationRouteProp = RouteProp<{ ConversationScreen: ConversationRouteParams }, 'ConversationScreen'>;
+
+const ConversationScreen: React.FC = () => {
+  const route = useRoute<ConversationRouteProp>();
+  const dispatch = useDispatch();
+  const { colors } = useTheme();
+  
+  const { id: chatId } = route.params;
+  const currentUser = useSelector(selectCurrentUser);
+  
+  const allMessages = useSelector((state: RootState) => state.chat.messages);
+  
+  // Get messages for this chat and sort newest-to-oldest for inverted list
+  const chatMessages = [...(allMessages[chatId] || [])].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+  
+  const [isTyping, setIsTyping] = useState(false);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const flatListRef = useRef<FlatList>(null);
+  const loadedRef = useRef(false);
+
+  // Load messages function
+  const loadMessages = async () => {
+    if (isLoading || !chatId || !currentUser?.id) return;
+    
+    try {
+      setIsLoading(true);
+      console.log('📥 Loading messages for chat:', chatId);
+      
+      if (currentUser?.token) {
+        chatApiService.setAuthToken(currentUser.token);
+      }
+      
+      // Use Redux thunk which handles SQLite + API sync with deduplication
+      await dispatch(loadChatMessages(chatId) as any);
+      
+      loadedRef.current = true;
+    } catch (error) {
+      console.error('Error loading messages:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Load messages on mount
+  useEffect(() => {
+    if (chatId && currentUser?.id && !loadedRef.current) {
+      loadMessages();
+    }
+  }, [chatId, currentUser?.id]);
+  
+  // Reload on focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log('📄 ConversationScreen focused');
+      if (chatId && currentUser?.id) {
+        loadMessages();
+      }
+    }, [chatId, currentUser?.id])
+  );
+
+  // Socket connection
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const initSocket = async () => {
+      try {
+        await socketService.connect(currentUser.id, currentUser.token);
+        socketService.joinChat(chatId);
+
+        const unsubMessage = socketService.on('newMessage', (message: any) => {
+          if (message.chatId === chatId || message.chat_id === chatId) {
+            const messageId = message._id || message.id;
+            
+            // Check if message already exists to prevent duplication
+            const exists = chatMessages.find(m => m._id === messageId);
+            if (!exists) {
+              dispatch(addMessage({
+                _id: messageId,
+                text: message.content || message.text,
+                chatId,
+                senderId: message.senderId || message.sender_id,
+                createdAt: message.createdAt || message.created_at || new Date().toISOString(),
+                status: 'sent',
+                user: {
+                  _id: message.senderId || message.sender_id,
+                  name: message.senderId === currentUser.id ? 'You' : 'Other User'
+                }
+              }));
+            }
+          }
+        });
+
+        const unsubDelivered = socketService.on('messageDelivered', (data: any) => {
+          if (data.chatId === chatId) {
+            dispatch(updateMessageStatus({ messageId: data.messageId, status: 'delivered' }));
+          }
+        });
+
+        const unsubRead = socketService.on('messageRead', (data: any) => {
+          if (data.chatId === chatId) {
+            dispatch(updateMessageStatus({ messageId: data.messageId, status: 'read' }));
+          }
+        });
+
+        const unsubTyping = socketService.on('typingUpdate', (data: { userId: string; isTyping: boolean }) => {
+          if (data.userId !== currentUser.id) handleTypingUpdate(data);
+        });
+
+        return () => {
+          unsubMessage?.();
+          unsubDelivered?.();
+          unsubRead?.();
+          unsubTyping?.();
+          socketService.leaveChat(chatId);
+        };
+      } catch (error) {
+        console.error('Socket init error:', error);
+      }
+    };
+
+    const cleanup = initSocket();
+    return () => {
+      cleanup?.then(fn => fn?.());
+    };
+  }, [chatId, currentUser?.id]);
+
+  const handleTypingUpdate = useCallback((data: { userId: string; isTyping: boolean }) => {
+    if (data.isTyping) {
+      setTypingUsers(prev => prev.includes(data.userId) ? prev : [...prev, data.userId]);
+      setIsTyping(true);
+    } else {
+      setTypingUsers(prev => prev.filter(id => id !== data.userId));
+      setIsTyping(false);
+    }
+  }, []);
+
+  // Send message handler
+  const handleSendMessage = useCallback(async (messageText: string) => {
+    if (!messageText.trim() || !currentUser) return;
+
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const optimisticMessage = {
+      _id: tempId,
+      text: messageText.trim(),
+      chatId,
+      senderId: currentUser.id,
+      createdAt: new Date().toISOString(),
+      status: 'sending' as const,
+      user: { _id: currentUser.id, name: currentUser.name || 'You' }
+    };
+
+    // Add optimistic message
+    dispatch(addMessage(optimisticMessage));
+
+    try {
+      // Send via socket
+      socketService.sendMessage({
+        chatId,
+        content: messageText.trim(),
+        messageType: 'text',
+        tempId,
+        senderId: currentUser.id,
+        createdAt: new Date().toISOString()
+      });
+
+      // Send via API
+      const serverMessage = await chatApiService.sendMessage(chatId, { 
+        content: messageText.trim(), 
+        messageType: 'text' 
+      });
+      
+      const serverId = serverMessage?._id || serverMessage?.id;
+      if (serverId) {
+        console.log('✅ Message sent, updating ID:', tempId, '->', serverId);
+        dispatch({ type: 'chat/replaceMessageId', payload: { tempId, serverId, chatId } });
+        dispatch(updateMessageStatus({ messageId: serverId, status: 'sent' }));
+      } else {
+        dispatch(updateMessageStatus({ messageId: tempId, status: 'sent' }));
+      }
+      
+    } catch (error) {
+      console.error('❌ Send message error:', error);
+      dispatch(updateMessageStatus({ messageId: tempId, status: 'failed' }));
+      
+      if (error instanceof Error) {
+        if (error.message.includes('Network request failed')) {
+          Alert.alert('Network Error', 'Please check your internet connection and try again.');
+        } else if (error.message.includes('timeout')) {
+          Alert.alert('Timeout Error', 'Message sending timed out. It may still be delivered.');
+        } else {
+          Alert.alert('Error', 'Failed to send message. Please try again.');
+        }
+      }
+    }
+  }, [currentUser, chatId, dispatch]);
+
+  const handleEditMessage = useCallback(async (messageId: string, newContent: string) => {
+    // Implementation
+  }, [dispatch]);
+  
+  const handleDeleteMessage = useCallback(async (messageId: string) => {
+    // Implementation
+  }, [dispatch]);
+  
+  const handleAddReaction = useCallback(async (messageId: string, emoji: string) => {
+    // Implementation
+  }, [currentUser, dispatch]);
+  
+  const handleRemoveReaction = useCallback(async (messageId: string, emoji: string) => {
+    // Implementation
+  }, [currentUser, dispatch]);
+
+  const renderMessage = ({ item, index }: { item: any; index: number }) => {
+    const isMe = item.senderId === currentUser?.id;
+
+    // For inverted list, check the next item in the array (which is earlier in time)
+    const prevMessageInTimeline = chatMessages[index + 1];
+    const showTime = index === chatMessages.length - 1 || 
+      (prevMessageInTimeline && prevMessageInTimeline.senderId !== item.senderId) ||
+      index === 0;
+
+    return (
+      <MessageBubble
+        message={{
+          id: item._id,
+          content: item.text,
+          timestamp: item.createdAt,
+          sender: isMe ? 'me' : 'other',
+          type: item.type || 'text',
+          status: item.status,
+          isEdited: item.isEdited
+        }}
+        isMe={isMe}
+        showTime={showTime}
+        onEdit={handleEditMessage}
+        onDelete={handleDeleteMessage}
+        onAddReaction={handleAddReaction}
+        onRemoveReaction={handleRemoveReaction} onPress={function (): void {
+          throw new Error('Function not implemented.');
+        } }      />
+    );
+  };
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <CustomStatusBar />
+        <ChatHeader />
+
+        <FlatList
+          ref={flatListRef}
+          data={chatMessages}
+          keyExtractor={(item) => item._id}
+          renderItem={renderMessage}
+          style={styles.messagesList}
+          showsVerticalScrollIndicator={false}
+          inverted
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={[styles.emptyText, { color: colors.subText }]}>
+                No messages yet. Start the conversation!
+              </Text>
+            </View>
+          }
+          ListHeaderComponent={
+            isTyping && typingUsers.length > 0 ? (
+              <View style={[styles.typingIndicator, { backgroundColor: colors.background }]}>
+                <View style={styles.typingDots}>
+                  <View style={[styles.typingDot, { backgroundColor: colors.subText }]} />
+                  <View style={[styles.typingDot, { backgroundColor: colors.subText }]} />
+                  <View style={[styles.typingDot, { backgroundColor: colors.subText }]} />
+                </View>
+                <Text style={[styles.typingText, { color: colors.subText }]}>
+                  {typingUsers.length === 1 ? 'Someone is typing...' : `${typingUsers.length} people are typing...`}
+                </Text>
+              </View>
+            ) : null
+          }
+        />
+
+        <ChatInput onSendMessage={handleSendMessage} chatId={chatId} />
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  keyboardAvoidingView: { flex: 1 },
+  messagesList: { flex: 1, paddingHorizontal: spacing.sm },
+  emptyContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    paddingVertical: spacing.xl,
+    transform: [{ scaleY: -1 }]
+  },
+  emptyText: { fontSize: fontSize.md, textAlign: 'center' },
+  typingIndicator: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingHorizontal: spacing.md, 
+    paddingVertical: spacing.sm 
+  },
+  typingDots: { flexDirection: 'row', marginRight: spacing.sm },
+  typingDot: { width: 6, height: 6, borderRadius: 3, marginHorizontal: 2, opacity: 0.4 },
+  typingText: { fontSize: fontSize.sm, fontStyle: 'italic' },
+});
+
+export default ConversationScreen;

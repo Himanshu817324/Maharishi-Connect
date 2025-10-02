@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "340851225464",
+    "project_id": "maharishi-connect",
+    "storage_bucket": "maharishi-connect.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:340851225464:android:cd823f00c071cc4f204e8d",
+        "android_client_info": {
+          "package_name": "com.Maharishi_Connect"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDCMavmhl-2KuP2-hRQZuxBpMo0MApGlzY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

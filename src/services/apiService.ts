@@ -1,0 +1,241 @@
+import { NETWORK_CONFIG, NETWORK_ERRORS } from "../config/network";
+
+const API_BASE_URL = NETWORK_CONFIG.BASE_URL;
+
+interface ApiResponse<T = any> {
+  status: string;
+  message?: string;
+  data?: T;
+  user?: T;
+  isNewUser?: boolean;
+  token?: string;
+}
+
+class ApiService {
+  private async makeRequest<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<ApiResponse<T>> {
+    const url = `${API_BASE_URL}${endpoint}`;
+    console.log("🌐 Making API request to:", url);
+    
+    const defaultHeaders = {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    };
+
+    const config: RequestInit = {
+      ...options,
+      headers: {
+        ...defaultHeaders,
+        ...options.headers,
+      },
+    };
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), NETWORK_CONFIG.TIMEOUT);
+      
+      const response = await fetch(url, {
+        ...config,
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      console.log("📡 Response status:", response.status, response.statusText);
+      
+      let data: ApiResponse<T>;
+      
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        console.error("Failed to parse JSON response:", parseError);
+        throw new Error(NETWORK_ERRORS.INVALID_RESPONSE);
+      }
+
+      if (!response.ok) {
+        const errorMessage = data.message || `HTTP ${response.status}: ${response.statusText}`;
+        throw new Error(errorMessage);
+      }
+
+      return data;
+    } catch (error) {
+      console.error("API request failed:", error);
+      
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          throw new Error(NETWORK_ERRORS.TIMEOUT);
+        } else if (error.message.includes('Network request failed')) {
+          throw new Error(NETWORK_ERRORS.NETWORK_FAILED);
+        } else if (error.message.includes('CORS')) {
+          throw new Error(NETWORK_ERRORS.CORS_ERROR);
+        }
+      }
+      
+      throw error;
+    }
+  }
+
+  async signup(userData: {
+    firebaseUid: string;
+    isVerified: boolean;
+    fullName: string;
+    mobileNo: string;
+    location: {
+      country: string;
+      state: string;
+    };
+    status: string;
+    profilePicture?: string | null; // Can be tempId, URL, or null
+  }): Promise<ApiResponse> {
+    // Remove null/empty values before sending
+    const cleanedData = Object.fromEntries(
+      Object.entries(userData).filter(([_, value]) => 
+        value !== null && value !== "" && value !== undefined
+      )
+    );
+
+    return this.makeRequest("/auth/signup", {
+      method: "POST",
+      body: JSON.stringify(cleanedData),
+    });
+  }
+
+  async login(mobileNo: string): Promise<ApiResponse> {
+    return this.makeRequest("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ mobileNo }),
+    });
+  }
+
+  private async makeFormDataRequest<T>(
+    endpoint: string,
+    formData: FormData,
+    timeout: number = 30000 // 30s for file uploads
+  ): Promise<ApiResponse<T>> {
+    const url = `${API_BASE_URL}${endpoint}`;
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      const response = await fetch(url, {
+        method: "POST",
+        body: formData,
+        headers: {
+          Accept: "application/json",
+          // Don't set Content-Type for FormData, RN sets it with boundary
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      let data: ApiResponse<T>;
+
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        console.error("Failed to parse JSON response:", parseError);
+        throw new Error(NETWORK_ERRORS.INVALID_RESPONSE);
+      }
+
+      if (!response.ok) {
+        const errorMessage =
+          data.message || `HTTP ${response.status}: ${response.statusText}`;
+        throw new Error(errorMessage);
+      }
+
+      return data;
+    } catch (error) {
+      console.error("FormData request failed:", error);
+
+      if (error instanceof Error) {
+        if (error.name === "AbortError") {
+          throw new Error(
+            "Upload timeout: Please try again with a smaller image"
+          );
+        } else if (error.message.includes("Network request failed")) {
+          throw new Error("Network error: Please check your internet connection");
+        } else if (error.message.includes("CORS")) {
+          throw new Error("Server configuration error: Please contact support");
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  async filterContacts(phoneNumbers: string[]): Promise<ApiResponse> {
+    console.log("🔍 API: Filtering contacts with numbers:", phoneNumbers.length);
+    console.log("🔍 API: Sample numbers:", phoneNumbers.slice(0, 3));
+    
+    // Retry mechanism with exponential backoff for rate limiting
+    const maxRetries = 3;
+    let lastError: Error | null = null;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const response = await this.makeRequest("/user/check-contacts", {
+          method: "POST",
+          body: JSON.stringify({ contacts: phoneNumbers }),
+        });
+        
+        console.log("🔍 API: Filter response received:", response);
+        return response;
+      } catch (error) {
+        lastError = error as Error;
+        console.log(`🔍 API: Attempt ${attempt + 1} failed:`, error);
+        
+        // Check if it's a rate limiting error
+        if (error instanceof Error && error.message.includes('Too many authentication attempts')) {
+          if (attempt < maxRetries - 1) {
+            const delay = Math.pow(2, attempt) * 1000; // Exponential backoff: 1s, 2s, 4s
+            console.log(`🔍 API: Rate limited, waiting ${delay}ms before retry...`);
+            await new Promise<void>(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+        }
+        
+        // For non-rate-limiting errors or final attempt, throw immediately
+        throw error;
+      }
+    }
+    
+    // If we get here, all retries failed
+    throw lastError || new Error('All retry attempts failed');
+  }
+
+  async uploadProfileImage(formData: FormData): Promise<ApiResponse> {
+    return this.makeFormDataRequest("/upload/profile-image", formData);
+  }
+
+  async uploadImageToCloud(formData: FormData): Promise<ApiResponse> {
+    return this.makeFormDataRequest("/upload/image", formData);
+  }
+
+
+  // Debug method to test server connectivity
+  async testServerConnectivity(): Promise<boolean> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      
+      const response = await fetch(`${API_BASE_URL}/health`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      return response.ok;
+    } catch (error) {
+      return false;
+    }
+  }
+}
+
+export const apiService = new ApiService();
