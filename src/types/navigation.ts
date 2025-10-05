@@ -18,7 +18,7 @@ export type AuthStackParamList = {
 
 // -------- Main Tab Stack --------
 export type TabStackParamList = {
-  Chat: undefined;
+  Chats: undefined;
   Calls: undefined;
   Updates: undefined;
   Settings: undefined;
@@ -27,13 +27,9 @@ export type TabStackParamList = {
 // -------- Main Stack --------
 export type MainStackParamList = {
   Tabs: NavigatorScreenParams<TabStackParamList>;
-  ConversationScreen: {
-    id: string;
-    name?: string;
-    avatar?: string;
-  };
-  FilteredContactsScreen: undefined;
   UserInfoScreen: undefined;
+  ConversationScreen: { chat: any };
+  FilteredContactsScreen: undefined;
   // EditProfileScreen: undefined;
 };
 

@@ -5,9 +5,10 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../../../store';
 import { useTheme } from '../../../../theme';
-import CustomStatusBar from '../../../../components/atoms/ui/StatusBar';
+import CustomHeader from '../../../../components/atoms/ui/CustomHeader';
 import AvatarWithInitials from '../../../../components/atoms/ui/AvatarWithInitials';
 import { logout } from '../../../../store/slices/authSlice';
+import { moderateScale, responsiveFont, wp, hp } from '../../../../theme/responsive';
 
 export default function UserInfoScreen() {
   const navigation = useNavigation();
@@ -16,70 +17,74 @@ export default function UserInfoScreen() {
   const user = useSelector((state: RootState) => state.auth.user);
   const profileCompleted = useSelector((state: RootState) => state.auth.profileCompleted);
 
-  // Debug: Log user data to see what we're working with
   console.log('🔍 UserInfoScreen - Current user data:', user);
-  console.log('🔍 UserInfoScreen - User fullName:', user?.fullName);
-  console.log('🔍 UserInfoScreen - User country:', user?.country);
-  console.log('🔍 UserInfoScreen - User state:', user?.state);
-  console.log('🔍 UserInfoScreen - User status:', user?.status);
-  console.log('🔍 UserInfoScreen - User avatar:', user?.avatar);
   console.log('🔍 UserInfoScreen - Profile completed:', profileCompleted);
-  console.log('🔍 UserInfoScreen - Complete Redux auth state:', useSelector((state: RootState) => state.auth));
 
-  // Enhanced info items with all available user data
-  const infoItems = [
-    { 
-      label: 'Phone Number', 
-      value: user?.phone || 'Not set', 
-      icon: 'call-outline',
-      type: 'phone'
+  const infoSections = [
+    {
+      title: 'Personal Information',
+      items: [
+        { 
+          label: 'Full Name', 
+          value: user?.fullName || user?.name || 'Not set', 
+          icon: 'person-outline',
+          iconColor: '#6366F1'
+        },
+        { 
+          label: 'Phone Number', 
+          value: user?.phone || 'Not set', 
+          icon: 'call-outline',
+          iconColor: '#10B981'
+        },
+        { 
+          label: 'Status', 
+          value: user?.status || 'Available', 
+          icon: 'chatbubble-ellipses-outline',
+          iconColor: '#F59E0B'
+        },
+      ]
     },
-    { 
-      label: 'Full Name', 
-      value: user?.fullName || user?.name || 'Not set', 
-      icon: 'person-outline',
-      type: 'name'
+    {
+      title: 'Location',
+      items: [
+        { 
+          label: 'Country', 
+          value: user?.country || 'Not set', 
+          icon: 'earth-outline',
+          iconColor: '#3B82F6'
+        },
+        { 
+          label: 'State/Region', 
+          value: user?.state || 'Not set', 
+          icon: 'location-outline',
+          iconColor: '#8B5CF6'
+        },
+      ]
     },
-    { 
-      label: 'Country', 
-      value: user?.country || 'Not set', 
-      icon: 'location-outline',
-      type: 'location'
-    },
-    { 
-      label: 'State/Region', 
-      value: user?.state || 'Not set', 
-      icon: 'location-outline',
-      type: 'location'
-    },
-    { 
-      label: 'Status', 
-      value: user?.status || 'Not set', 
-      icon: 'ellipse-outline',
-      type: 'status'
-    },
-    { 
-      label: 'Verification Status', 
-      value: user?.isVerified ? 'Verified ✅' : 'Not Verified ❌', 
-      icon: 'checkmark-circle-outline',
-      type: 'verification'
-    },
-    { 
-      label: 'Profile Completion', 
-      value: user?.profileCompleted ? 'Complete ✅' : 'Incomplete ⚠️', 
-      icon: 'document-text-outline',
-      type: 'completion'
-    },
-    { 
-      label: 'User ID', 
-      value: user?.firebaseUid || user?.id || 'Not available', 
-      icon: 'key-outline',
-      type: 'id'
+    {
+      title: 'Account Status',
+      items: [
+        { 
+          label: 'Verification', 
+          value: user?.isVerified ? 'Verified' : 'Not Verified', 
+          icon: user?.isVerified ? 'shield-checkmark-outline' : 'shield-outline',
+          iconColor: user?.isVerified ? '#10B981' : '#EF4444',
+          showBadge: true,
+          badgeStatus: user?.isVerified
+        },
+        { 
+          label: 'Profile Status', 
+          value: user?.profileCompleted ? 'Complete' : 'Incomplete', 
+          icon: user?.profileCompleted ? 'checkmark-circle-outline' : 'alert-circle-outline',
+          iconColor: user?.profileCompleted ? '#10B981' : '#F59E0B',
+          showBadge: true,
+          badgeStatus: user?.profileCompleted
+        },
+      ]
     },
   ];
 
   const handleEditProfile = () => {
-    // Navigate to profile editing screen
     navigation.navigate('ProfileScreen' as never);
   };
 
@@ -98,7 +103,6 @@ export default function UserInfoScreen() {
           onPress: () => {
             console.log('🚪 User logging out from UserInfoScreen...');
             dispatch(logout());
-            // Navigation will be handled by SplashScreen after logout
           },
         },
       ]
@@ -106,89 +110,129 @@ export default function UserInfoScreen() {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
-      <CustomStatusBar />
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Icon name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text }]}>Account</Text>
-        <View style={styles.placeholder} />
-      </View>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <CustomHeader 
+        title="Profile" 
+        showBackButton={true}
+        onBackPress={() => navigation.goBack()}
+      />
+      
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+      >
 
-      <View style={styles.profileSection}>
-        <AvatarWithInitials
-          name={user?.fullName || 'User Name'}
-          profilePicture={user?.avatar || user?.profilePicture}
-          size={100}
-        />
+      {/* Profile Section */}
+      <View style={[styles.profileSection, { backgroundColor: colors.surface }]}>
+        <View style={styles.avatarContainer}>
+          <AvatarWithInitials
+            name={user?.fullName || 'User Name'}
+            profilePicture={user?.avatar || user?.profilePicture}
+            size={moderateScale(100)}
+          />
+          <TouchableOpacity 
+            style={[styles.editAvatarButton, { backgroundColor: colors.accent }]}
+            onPress={handleEditProfile}
+          >
+            <Icon name="camera" size={moderateScale(16)} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+        
         <Text style={[styles.profileName, { color: colors.text }]}>
           {user?.fullName || 'User Name'}
         </Text>
-        <Text style={[styles.profileSubtitle, { color: colors.subText }]}>
+        <Text style={[styles.profilePhone, { color: colors.textSecondary }]}>
           {user?.phone || 'Phone number'}
         </Text>
-      </View>
-
-      <View style={styles.infoSection}>
-        {infoItems.map((item, index) => (
-          <View
-            key={index}
-            style={[
-              styles.infoItem,
-              { borderBottomColor: colors.border },
-              index === infoItems.length - 1 && { borderBottomWidth: 0 }
-            ]}
-          >
-            <View style={styles.infoLeft}>
-              <Icon name={item.icon} size={20} color={colors.primary} />
-              <Text style={[styles.infoLabel, { color: colors.text }]}>
-                {item.label}
-              </Text>
-            </View>
-            <Text 
-              style={[
-                styles.infoValue, 
-                { 
-                  color: item.type === 'verification' || item.type === 'completion' 
-                    ? (item.value.includes('✅') ? '#4CAF50' : '#FF9800')
-                    : colors.subText 
-                }
-              ]}
-            >
-              {item.value}
+        
+        {/* Quick Stats */}
+        <View style={styles.quickStats}>
+          <View style={[styles.statItem, { backgroundColor: colors.accent + '15' }]}>
+            <Icon name="shield-checkmark" size={moderateScale(20)} color={colors.accent} />
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+              {user?.isVerified ? 'Verified' : 'Unverified'}
             </Text>
           </View>
-        ))}
+          <View style={[styles.statItem, { backgroundColor: colors.accent + '15' }]}>
+            <Icon name="checkmark-circle" size={moderateScale(20)} color={colors.accent} />
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+              {user?.profileCompleted ? 'Complete' : 'Incomplete'}
+            </Text>
+          </View>
+        </View>
       </View>
 
+      {/* Info Sections */}
+      {infoSections.map((section, sectionIndex) => (
+        <View key={section.title} style={styles.infoSectionContainer}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            {section.title}
+          </Text>
+          <View style={[styles.infoCard, { backgroundColor: colors.surface }]}>
+            {section.items.map((item, itemIndex) => (
+              <View
+                key={item.label}
+                style={[
+                  styles.infoItem,
+                  itemIndex !== section.items.length - 1 && { 
+                    borderBottomWidth: 1, 
+                    borderBottomColor: colors.border + '30' 
+                  }
+                ]}
+              >
+                <View style={styles.infoLeft}>
+                  <View style={[styles.infoIconContainer, { backgroundColor: item.iconColor + '15' }]}>
+                    <Icon name={item.icon} size={moderateScale(20)} color={item.iconColor} />
+                  </View>
+                  <Text style={[styles.infoLabel, { color: colors.text }]}>
+                    {item.label}
+                  </Text>
+                </View>
+                <View style={styles.infoRight}>
+                  <Text style={[styles.infoValue, { color: colors.textSecondary }]}>
+                    {item.value}
+                  </Text>
+                  {item.showBadge && (
+                    <View style={[
+                      styles.statusBadge, 
+                      { backgroundColor: item.badgeStatus ? '#10B981' : '#F59E0B' }
+                    ]}>
+                      <Icon 
+                        name={item.badgeStatus ? 'checkmark' : 'close'} 
+                        size={moderateScale(12)} 
+                        color="#FFFFFF" 
+                      />
+                    </View>
+                  )}
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      ))}
+
+      {/* Action Buttons */}
       <View style={styles.actionsSection}>
         <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: colors.card }]}
+          style={[styles.primaryButton, { backgroundColor: colors.accent }]}
           onPress={handleEditProfile}
+          activeOpacity={0.8}
         >
-          <Icon name="create-outline" size={20} color={colors.primary} />
-          <Text style={[styles.actionText, { color: colors.text }]}>
-            Edit Profile
-          </Text>
-          <Icon name="chevron-forward" size={20} color={colors.subText} />
+          <Icon name="create-outline" size={moderateScale(20)} color="#FFFFFF" />
+          <Text style={styles.primaryButtonText}>Edit Profile</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: colors.card }]}
+          style={[styles.dangerButton, { backgroundColor: '#EF4444' + '15', borderColor: '#EF4444' + '30' }]}
           onPress={handleLogout}
+          activeOpacity={0.8}
         >
-          <Icon name="log-out-outline" size={20} color="#ef4444" />
-          <Text style={[styles.actionText, { color: '#ef4444' }]}>
-            Logout
-          </Text>
-          <Icon name="chevron-forward" size={20} color={colors.subText} />
+          <Icon name="log-out-outline" size={moderateScale(20)} color="#EF4444" />
+          <Text style={styles.dangerButtonText}>Logout</Text>
         </TouchableOpacity>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -196,80 +240,168 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  scrollView: {
+    flex: 1,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 24,
+    paddingHorizontal: wp(5),
+    paddingTop: hp(2),
+    paddingBottom: hp(1.5),
   },
   backButton: {
-    padding: 8,
+    padding: moderateScale(8),
   },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  headerTitle: {
+    fontSize: responsiveFont(20),
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   placeholder: {
-    width: 40,
+    width: moderateScale(40),
   },
   profileSection: {
     alignItems: 'center',
-    paddingVertical: 32,
-    paddingHorizontal: 24,
+    paddingVertical: hp(4),
+    paddingHorizontal: wp(5),
+    marginBottom: hp(2),
+  },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: hp(2),
+  },
+  editAvatarButton: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: moderateScale(36),
+    height: moderateScale(36),
+    borderRadius: moderateScale(18),
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
   },
   profileName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 8,
+    fontSize: responsiveFont(26),
+    fontWeight: '800',
+    marginBottom: hp(0.5),
+    letterSpacing: 0.5,
   },
-  profileSubtitle: {
-    fontSize: 16,
+  profilePhone: {
+    fontSize: responsiveFont(15),
+    fontWeight: '500',
+    marginBottom: hp(2),
   },
-  infoSection: {
-    paddingHorizontal: 24,
-    marginBottom: 32,
+  quickStats: {
+    flexDirection: 'row',
+    gap: moderateScale(12),
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: moderateScale(16),
+    paddingVertical: moderateScale(8),
+    borderRadius: moderateScale(12),
+    gap: moderateScale(6),
+  },
+  statLabel: {
+    fontSize: responsiveFont(13),
+    fontWeight: '600',
+  },
+  infoSectionContainer: {
+    marginBottom: hp(2),
+  },
+  sectionTitle: {
+    fontSize: responsiveFont(13),
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    paddingHorizontal: wp(5),
+    marginBottom: hp(1),
+  },
+  infoCard: {
+    marginHorizontal: wp(4),
+    borderRadius: moderateScale(16),
+    overflow: 'hidden',
   },
   infoItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
-    paddingHorizontal: 4,
-    borderBottomWidth: 1,
+    paddingVertical: hp(1.5),
+    paddingHorizontal: wp(4),
   },
   infoLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
+  infoIconContainer: {
+    width: moderateScale(40),
+    height: moderateScale(40),
+    borderRadius: moderateScale(20),
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: wp(3),
+  },
   infoLabel: {
-    fontSize: 16,
-    marginLeft: 12,
-    fontWeight: '500',
+    fontSize: responsiveFont(15),
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
-  infoValue: {
-    fontSize: 16,
-    textAlign: 'right',
-    flex: 1,
-    marginLeft: 12,
-  },
-  actionsSection: {
-    paddingHorizontal: 24,
-    paddingBottom: 32,
-  },
-  actionButton: {
+  infoRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+    gap: moderateScale(8),
   },
-  actionText: {
-    fontSize: 16,
-    marginLeft: 12,
-    flex: 1,
+  infoValue: {
+    fontSize: responsiveFont(15),
+    fontWeight: '500',
+    textAlign: 'right',
+  },
+  statusBadge: {
+    width: moderateScale(20),
+    height: moderateScale(20),
+    borderRadius: moderateScale(10),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionsSection: {
+    paddingHorizontal: wp(5),
+    paddingTop: hp(2),
+    paddingBottom: hp(4),
+    gap: moderateScale(12),
+  },
+  primaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: hp(1.8),
+    borderRadius: moderateScale(16),
+    gap: moderateScale(8),
+  },
+  primaryButtonText: {
+    fontSize: responsiveFont(16),
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+  dangerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: hp(1.8),
+    borderRadius: moderateScale(16),
+    borderWidth: 1,
+    gap: moderateScale(8),
+  },
+  dangerButtonText: {
+    fontSize: responsiveFont(16),
+    fontWeight: '700',
+    color: '#EF4444',
+    letterSpacing: 0.3,
   },
 });

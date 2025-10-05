@@ -23,6 +23,7 @@ const THEME_STORAGE_KEY = '@maharishi_theme';
 const SYSTEM_THEME_KEY = '@maharishi_system_theme';
 
 export default function ThemeProvider({ children }: ThemeProviderProps) {
+  console.log('🎨 ThemeProvider rendered');
   const [isDark, setIsDark] = useState(false);
   const [isSystemTheme, setIsSystemTheme] = useState(true);
   const [isThemeLoaded, setIsThemeLoaded] = useState(false);
@@ -54,6 +55,7 @@ export default function ThemeProvider({ children }: ThemeProviderProps) {
   }, [isDark, isThemeLoaded]);
 
   const loadThemeFromStorage = async () => {
+    console.log('🎨 Loading theme from storage...');
     try {
       const [savedTheme, savedSystemTheme] = await Promise.all([
         AsyncStorage.getItem(THEME_STORAGE_KEY),
@@ -76,6 +78,7 @@ export default function ThemeProvider({ children }: ThemeProviderProps) {
     } catch (error) {
       console.error('Error loading theme from storage:', error);
     } finally {
+      console.log('🎨 Theme loaded, setting isThemeLoaded to true');
       setIsThemeLoaded(true);
     }
   };
@@ -130,6 +133,8 @@ export default function ThemeProvider({ children }: ThemeProviderProps) {
   };
 
   const colors = isDark ? DarkColors : LightColors;
+
+  console.log('🎨 ThemeProvider rendering children, isThemeLoaded:', isThemeLoaded);
 
   return (
     <ThemeContext.Provider 

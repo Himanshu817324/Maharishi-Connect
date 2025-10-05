@@ -16,13 +16,11 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({
   const { colors, isDark, toggleTheme, isSystemTheme, setIsSystemTheme } = useTheme();
 
   const handleToggle = () => {
-    console.log('🎨 Theme toggle clicked, current isDark:', isDark);
     toggleTheme();
     onToggle?.();
   };
 
   const handleSystemToggle = () => {
-    console.log('🎨 System theme toggle clicked, current isSystemTheme:', isSystemTheme);
     setIsSystemTheme(!isSystemTheme);
   };
 
@@ -32,7 +30,7 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({
         <Icon 
           name={isDark ? 'moon' : 'sunny'} 
           size={dimensions.iconMedium} 
-          color={colors.primary} 
+          color={colors.accent} 
         />
         <Text style={[styles.title, { color: colors.text }]}>
           Theme Settings
@@ -62,7 +60,7 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({
                 console.log('🎨 System Switch onValueChange called with value:', value);
                 handleSystemToggle();
               }}
-              trackColor={{ false: colors.border, true: colors.primary }}
+              trackColor={{ false: colors.border, true: colors.accent }}
               thumbColor={isSystemTheme ? colors.accent : colors.textTertiary}
             />
           </TouchableOpacity>
@@ -96,23 +94,10 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({
               handleToggle();
             }}
             disabled={isSystemTheme}
-            trackColor={{ false: colors.border, true: colors.primary }}
+            trackColor={{ false: colors.border, true: colors.accent }}
             thumbColor={isDark ? colors.accent : colors.textTertiary}
           />
         </TouchableOpacity>
-
-        {/* Theme Preview */}
-        <View style={[styles.preview, { backgroundColor: colors.card }]}>
-          <Text style={[styles.previewText, { color: colors.textSecondary }]}>
-            Preview
-          </Text>
-          <View style={styles.previewColors}>
-            <View style={[styles.colorPreview, { backgroundColor: colors.primary }]} />
-            <View style={[styles.colorPreview, { backgroundColor: colors.accent }]} />
-            <View style={[styles.colorPreview, { backgroundColor: colors.success }]} />
-            <View style={[styles.colorPreview, { backgroundColor: colors.warning }]} />
-          </View>
-        </View>
       </View>
     </View>
   );
@@ -121,7 +106,7 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({
 const styles = StyleSheet.create({
   container: {
     borderRadius: borderRadius.lg,
-    margin: spacing.md,
+    margin: spacing.sm,
     overflow: 'hidden',
     ...shadow.md,
   },

@@ -107,10 +107,12 @@ const ModernDropdown: React.FC<ModernDropdownProps> = ({
   return (
     <View style={[styles.container, style]}>
       {label && (
-        <Text style={[styles.label, error && styles.errorLabel]}>
+        <View style={styles.labelContainer}>
           {emoji && <Text style={styles.labelEmoji}>{emoji} </Text>}
-          {label}
-        </Text>
+          <Text style={[styles.label, error && styles.errorLabel]}>
+            {label}
+          </Text>
+        </View>
       )}
       
       <TouchableOpacity
@@ -182,10 +184,12 @@ const ModernDropdown: React.FC<ModernDropdownProps> = ({
             ]}
           >
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
+              <View style={styles.modalTitleContainer}>
                 {emoji && <Text style={styles.modalTitleEmoji}>{emoji} </Text>}
-                {label || "Select Option"}
-              </Text>
+                <Text style={styles.modalTitle}>
+                  {label || "Select Option"}
+                </Text>
+              </View>
               <TouchableOpacity
                 style={styles.closeButton}
                 onPress={toggleDropdown}
@@ -214,11 +218,15 @@ const styles = StyleSheet.create({
   container: {
     marginBottom: 20,
   },
+  labelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   label: {
     fontSize: 16,
     fontWeight: '700',
     color: LightColors.text,
-    marginBottom: 12,
     letterSpacing: 0.5,
   },
   labelEmoji: {
@@ -329,6 +337,10 @@ const styles = StyleSheet.create({
     backgroundColor: LightColors.primary + '05',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+  },
+  modalTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   modalTitle: {
     fontSize: 20,

@@ -1,201 +1,394 @@
-import { useTheme } from "@/theme";
-import Icon from "react-native-vector-icons/Ionicons";
-import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
-import React, { useEffect, useState, useCallback } from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { dimensions, fontSize, moderateScale, spacing, shadow, borderRadius } from "@/theme/responsive";
-import chatApiService from "@/services/chatApiService";
-import ContactResolver from "@/utils/contactResolver";
-import { useSelector } from "react-redux";
-import { RootState } from "@/store";
-import { selectCurrentUser } from "@/store/slices/authSlice";
-import { MainStackParamList } from "@/types/navigation";
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+  Modal,
+  Pressable,
+  Platform,
+} from 'react-native';
+import Icon from 'react-native-vector-icons/Ionicons';
+import { useTheme } from '@/theme';
+import {
+  responsiveFont,
+  wp,
+  hp,
+  moderateScale,
+  dimensions,
+} from '@/theme/responsive';
+import CustomStatusBar from '@/components/atoms/ui/StatusBar';
+import { ChatData } from '@/services/chatService';
 
-interface ChatUser {
-  _id: string;
-  name: string;
-  avatar?: string;
+interface ChatHeaderProps {
+  chat: ChatData;
+  currentUserId?: string;
+  onBack?: () => void;
+  onCall?: () => void;
+  onVideoCall?: () => void;
+  onSearch?: () => void;
+  onInfo?: () => void;
+  onMore?: () => void;
   isOnline?: boolean;
+  lastSeen?: string;
+  backgroundColor?: string;
 }
 
-type ConversationRouteProp = RouteProp<MainStackParamList, 'ConversationScreen'>;
-
-const ChatHeader = () => {
-  const navigation = useNavigation();
-  const route = useRoute<ConversationRouteProp>();
-  const { id, name, avatar } = route.params;
+const ChatHeader: React.FC<ChatHeaderProps> = ({
+  chat,
+  currentUserId,
+  onBack,
+  onCall,
+  onVideoCall,
+  onSearch,
+  onInfo,
+  onMore,
+  isOnline = false,
+  lastSeen,
+  backgroundColor,
+}) => {
   const { colors } = useTheme();
-  const currentUser = useSelector(selectCurrentUser);
-  const [user, setUser] = useState<ChatUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isMenuVisible, setIsMenuVisible] = useState(false);
 
-
-  const loadChatData = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const chatData = await chatApiService.getChat(id);
-      console.log('🔍 ChatHeader received chat data:', chatData);
-      
-      if (chatData) {
-        // Use enhanced name resolution for consistent naming
-        const resolvedName = ContactResolver.resolveChatNameEnhanced(chatData, currentUser?.id || '');
-        const resolvedAvatar = ContactResolver.resolveChatAvatar(chatData, currentUser?.id || '');
-        
-        // Only update if we got a better name than what we have
-        const currentName = user?.name || name;
-        if (resolvedName && resolvedName !== 'Chat' && resolvedName !== 'Unknown User' && resolvedName !== currentName) {
-          console.log('🔍 Updating with resolved name:', resolvedName);
-          setUser({
-            _id: 'other-user',
-            name: resolvedName,
-            avatar: resolvedAvatar || chatData.avatar_url || chatData.avatar,
-            isOnline: false
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error loading chat data:', error);
-      // Don't override if we already have a good name from route params
-      if (!user || user.name === 'Chat') {
-        console.log('🔍 Using route params as fallback due to error');
-        setUser({
-          _id: 'other-user',
-          name: name || 'Chat',
-          avatar: avatar,
-          isOnline: false
-        });
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [id, name, avatar, currentUser?.id, user]);
-
-  // Set initial user from route params immediately to prevent "Chat" display
-  useEffect(() => {
-    if (name && name !== 'Chat') {
-      console.log('🔍 Setting initial user from route params:', name);
-      setUser({
-        _id: 'other-user',
-        name: name,
-        avatar: avatar,
-        isOnline: false
-      });
-    }
-  }, [name, avatar]);
-
-  useEffect(() => {
-    loadChatData();
-  }, [loadChatData]);
-
-  // Refresh when ContactResolver becomes available
-  useEffect(() => {
-    const checkAndRefresh = () => {
-      if (ContactResolver.isInitialized() && user && (user.name === 'Chat' || user.name === 'Unknown User')) {
-        console.log('🔄 ContactResolver became available, refreshing header');
-        loadChatData();
-      }
-    };
-
-    // Check immediately
-    checkAndRefresh();
-
-    // Set up a small interval to check periodically
-    const interval = setInterval(checkAndRefresh, 1000);
-    
-    return () => clearInterval(interval);
-  }, [user, loadChatData]);
-
-  // Always show header, use route params as fallback with enhanced name resolution
-  const displayUser = user || {
-    _id: 'other-user',
-    name: name || 'Chat',
-    avatar: avatar,
-    isOnline: false
+  const handleMenuPress = () => setIsMenuVisible(!isMenuVisible);
+  const handleMenuClose = () => setIsMenuVisible(false);
+  const handleMenuAction = (action: () => void) => {
+    action();
+    setIsMenuVisible(false);
   };
 
+  const getChatTitle = () => {
+    if (chat.type === 'group') return chat.name || 'Group Chat';
+    const other = chat.participants.find(
+      p => p.user_id !== currentUserId && p.user_id !== chat.created_by
+    );
+    return (
+      other?.userDetails.localName ||
+      other?.userDetails.fullName ||
+      'Unknown User'
+    );
+  };
 
+  const getChatSubtitle = () => {
+    if (chat.type === 'group') return `${chat.participants.length} members`;
+    if (isOnline) return 'Online';
+    if (lastSeen) return `Last seen ${new Date(lastSeen).toLocaleTimeString()}`;
+    return 'Offline';
+  };
 
-  return (
-    <View style={[styles.header, { backgroundColor: colors.primary }]}>
-      <TouchableOpacity 
-        onPress={() => navigation.goBack()}
-        style={styles.backButton}
-      >
-        <Icon name="arrow-back" size={moderateScale(24)} color={colors.textOnPrimary} />
-      </TouchableOpacity>
-      
-      {displayUser.avatar ? (
-        <Image source={{ uri: displayUser.avatar }} style={styles.avatar} />
-      ) : (
-        <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: colors.primaryLight }]}>
+  const getAvatarInitials = () => {
+    if (chat.type === 'group') {
+      return chat.name?.charAt(0).toUpperCase() || 'G';
+    } else {
+      const other = chat.participants.find(
+        p => p.user_id !== currentUserId && p.user_id !== chat.created_by
+      );
+      const name =
+        other?.userDetails.localName || other?.userDetails.fullName || '';
+      return name.charAt(0).toUpperCase() || 'U';
+    }
+  };
+
+  const renderAvatar = () => {
+    if (chat.type === 'group') {
+      return (
+        <View style={[styles.avatar, { backgroundColor: colors.accent }]}>
           <Text style={[styles.avatarText, { color: colors.textOnPrimary }]}>
-            {displayUser.name?.charAt(0)?.toUpperCase() || '?'}
+            {getAvatarInitials()}
           </Text>
         </View>
-      )}
-      
-      <View style={styles.userInfo}>
-        <Text style={[styles.userName, { color: colors.textOnPrimary }]}>
-          {displayUser.name}
-        </Text>
-        <Text style={[styles.userStatus, { color: colors.textOnPrimary }]}>
-          {isLoading ? "Loading..." : (displayUser.isOnline ? "Online" : "Last seen recently")}
-        </Text>
+      );
+    } else {
+      const other = chat.participants.find(
+        p => p.user_id !== currentUserId && p.user_id !== chat.created_by
+      );
+      const profilePicture =
+        other?.userDetails.localProfilePicture ||
+        other?.userDetails.profilePicture;
+
+      if (profilePicture) {
+        return (
+          <View style={styles.avatar}>
+            <Image
+              source={{ uri: profilePicture }}
+              style={styles.avatarImage}
+              defaultSource={require('@/assets/logo.png')}
+            />
+          </View>
+        );
+      }
+      return (
+        <View style={[styles.avatar, { backgroundColor: colors.accent }]}>
+          <Text style={[styles.avatarText, { color: colors.textOnPrimary }]}>
+            {getAvatarInitials()}
+          </Text>
+        </View>
+      );
+    }
+  };
+
+  return (
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: backgroundColor || colors.primary,
+          shadowColor: '#000',
+        },
+      ]}
+    >
+      <CustomStatusBar backgroundColor={colors.primary} />
+      <View style={styles.headerContent}>
+        <View style={styles.leftSection}>
+          {onBack && (
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={onBack}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Icon
+                name="arrow-back"
+                size={moderateScale(24)}
+                color={colors.textOnPrimary}
+              />
+            </TouchableOpacity>
+          )}
+          <View style={styles.avatarContainer}>
+            {renderAvatar()}
+            {chat.type === 'direct' && (
+              <View
+                style={[
+                  styles.statusIndicator,
+                  {
+                    backgroundColor: isOnline
+                      ? colors.accent
+                      : colors.textSecondary,
+                  },
+                ]}
+              />
+            )}
+          </View>
+          <View style={styles.titleContainer}>
+            <Text
+              style={[styles.title, { color: colors.textOnPrimary }]}
+              numberOfLines={1}
+            >
+              {getChatTitle()}
+            </Text>
+            <Text
+              style={[styles.subtitle, { color: colors.textOnPrimary }]}
+              numberOfLines={1}
+            >
+              {getChatSubtitle()}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.rightSection}>
+          {onCall && (
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={onCall}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Icon
+                name="call"
+                size={moderateScale(20)}
+                color={colors.textOnPrimary}
+              />
+            </TouchableOpacity>
+          )}
+
+          {onVideoCall && (
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={onVideoCall}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Icon
+                name="videocam"
+                size={moderateScale(20)}
+                color={colors.textOnPrimary}
+              />
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={handleMenuPress}
+          >
+            <Icon
+              name="ellipsis-vertical"
+              size={moderateScale(20)}
+              color={colors.textOnPrimary}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
-      
-      <TouchableOpacity style={styles.actionButton}>
-        <Icon name="call" size={moderateScale(22)} color={colors.textOnPrimary} />
-      </TouchableOpacity>
-      
-      <TouchableOpacity style={styles.actionButton}>
-        <Icon name="videocam" size={moderateScale(22)} color={colors.textOnPrimary} />
-      </TouchableOpacity>
+
+      {/* Dropdown Menu */}
+      <Modal
+        visible={isMenuVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleMenuClose}
+      >
+        <Pressable style={styles.menuOverlay} onPress={handleMenuClose}>
+          <View style={[styles.menuContainer, { backgroundColor: colors.surface }]}>
+            {onSearch && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => handleMenuAction(onSearch)}
+              >
+                <Icon name="search" size={moderateScale(20)} color={colors.text} />
+                <Text style={[styles.menuItemText, { color: colors.text }]}>
+                  Search
+                </Text>
+              </TouchableOpacity>
+            )}
+            {onInfo && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => handleMenuAction(onInfo)}
+              >
+                <Icon
+                  name="information-circle"
+                  size={moderateScale(20)}
+                  color={colors.text}
+                />
+                <Text style={[styles.menuItemText, { color: colors.text }]}>
+                  Chat Info
+                </Text>
+              </TouchableOpacity>
+            )}
+            {onMore && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => handleMenuAction(onMore)}
+              >
+                <Icon name="settings" size={moderateScale(20)} color={colors.text} />
+                <Text style={[styles.menuItemText, { color: colors.text }]}>
+                  More Options
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    ...shadow.md,
+  container: {
+    paddingTop: Platform.OS === 'ios' ? hp(6) : hp(1),
+    paddingBottom: hp(1.5),
+    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: wp(4),
+    height: hp(6),
+  },
+  leftSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
   },
   backButton: {
-    padding: spacing.xs,
-    marginRight: spacing.xs,
+    marginRight: wp(2),
+  },
+  avatarContainer: {
+    position: 'relative',
+    marginRight: wp(3),
   },
   avatar: {
     width: dimensions.avatarMedium,
     height: dimensions.avatarMedium,
-    borderRadius: borderRadius.round,
-    marginRight: spacing.sm,
-  },
-  avatarText: {
-    fontSize: fontSize.lg,
-    fontWeight: "600",
-  },
-  avatarPlaceholder: {
+    borderRadius: dimensions.avatarMedium / 2,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  userInfo: {
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: dimensions.avatarMedium / 2,
+  },
+  avatarText: {
+    fontSize: responsiveFont(16),
+    fontWeight: '600',
+  },
+  statusIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: wp(3),
+    height: wp(3),
+    borderRadius: wp(1.5),
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  titleContainer: {
     flex: 1,
-    justifyContent: "center",
+    minWidth: 0,
   },
-  userName: {
-    fontSize: fontSize.lg,
-    fontWeight: "600",
+  title: {
+    fontSize: responsiveFont(19),
+    fontWeight: '700',
+    textAlign: 'left',
   },
-  userStatus: {
-    fontSize: fontSize.xs,
-    opacity: 0.8,
+  subtitle: {
+    fontSize: responsiveFont(14),
+    opacity: 0.9,
+    marginTop: hp(0.25),
+  },
+  rightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   actionButton: {
-    padding: spacing.xs,
-    marginLeft: spacing.xs,
+    paddingHorizontal: wp(2),
+  },
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: dimensions.headerHeight + hp(1),
+    paddingRight: wp(4),
+  },
+  menuContainer: {
+    borderRadius: wp(2),
+    paddingVertical: hp(1),
+    minWidth: wp(40),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.5),
+  },
+  menuItemText: {
+    fontSize: responsiveFont(16),
+    marginLeft: wp(3),
+    fontWeight: '500',
   },
 });
 

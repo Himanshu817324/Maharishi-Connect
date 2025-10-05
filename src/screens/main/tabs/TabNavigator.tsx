@@ -1,14 +1,15 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import React from 'react';
-import { Platform } from 'react-native';
+import { Platform, View, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { useTheme } from '../../../theme';
-import { moderateScale } from '../../../theme/responsive';
-import { TabStackParamList } from '../../../types/navigation';
+import { useTheme } from '@/theme';
+import { moderateScale } from '@/theme/responsive';
+import { TabStackParamList } from '@/types/navigation';
 import ChatScreen from './ChatScreen';
 import CallsScreen from './CallsScreen';
 import UpdatesScreen from './UpdatesScreen';
 import SettingsScreen from './SettingsScreen';
+import GestureNavigationBar from '@/components/atoms/ui/GestureNavigationBar';
 
 // Import screens
 
@@ -19,7 +20,7 @@ const TabBarIcon = ({ route, color, focused }: { route: any; color: string; focu
   let iconName: string;
 
   switch (route.name) {
-    case 'Chat':
+    case 'Chats':
       iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
       break;
     case 'Calls':
@@ -49,9 +50,10 @@ export default function TabNavigator() {
   const { colors } = useTheme();
 
   return (
-    <Tab.Navigator  
-        screenOptions={({ route }) => ({
-          headerShown: true,
+    <View style={styles.container}>
+      <Tab.Navigator  
+          screenOptions={({ route }) => ({
+          headerShown: false,
           headerStyle: {
             backgroundColor: colors.primary,
           },
@@ -63,62 +65,70 @@ export default function TabNavigator() {
           headerBackTitleStyle: {
             color: colors.textOnPrimary,
           },
-          tabBarActiveTintColor: colors.accent,
-          tabBarInactiveTintColor: colors.textOnPrimary,
-          tabBarStyle: {
-            backgroundColor: colors.primary,
-            borderTopColor: colors.primary,
-            borderTopWidth: 0,
-            height: Platform.OS === 'ios' ? moderateScale(90) : moderateScale(70),
-            paddingBottom: Platform.OS === 'ios' ? moderateScale(25) : moderateScale(10),
-            paddingTop: moderateScale(10),
-            elevation: 8,
-            shadowColor: colors.primary,
-            shadowOffset: {
-              width: 0,
-              height: -2,
+            tabBarActiveTintColor: colors.accentLight,
+            tabBarInactiveTintColor: colors.textOnPrimary,
+            tabBarStyle: {
+              backgroundColor: colors.primary,
+              borderTopColor: colors.primary,
+              borderTopWidth: 0,
+              height: Platform.OS === 'ios' ? moderateScale(85) : moderateScale(65),
+              paddingBottom: Platform.OS === 'ios' ? moderateScale(25) : moderateScale(10),
+              paddingTop: 0, // Removed extra top padding
+              elevation: 8,
+              shadowColor: colors.primary,
+              shadowOffset: {
+                width: 0,
+                height: -2,
+              },
+              shadowOpacity: 0.1,
+              shadowRadius: 4,
             },
-            shadowOpacity: 0.1,
-            shadowRadius: 4,
-          },
-          tabBarLabelStyle: {
-            fontSize: moderateScale(12),
-            fontWeight: '600',
-            marginTop: moderateScale(4),
-          },
-          tabBarIcon: function TabIcon({ color, focused }) {
-            return <TabBarIcon route={route} color={color} focused={focused} />;
-          },
-        })}
-      >
-        <Tab.Screen 
-          name="Chat" 
-          component={ChatScreen}
-          options={{
-            tabBarLabel: 'Chats',
-          }}
-        />
-        <Tab.Screen 
-          name="Calls" 
-          component={CallsScreen}
-          options={{
-            tabBarLabel: 'Calls',
-          }}
-        />
-        <Tab.Screen 
-          name="Updates" 
-          component={UpdatesScreen}
-          options={{
-            tabBarLabel: 'Updates',
-          }}
-        />
-        <Tab.Screen 
-          name="Settings" 
-          component={SettingsScreen}
-          options={{
-            tabBarLabel: 'Settings',
-          }}
-        />
-      </Tab.Navigator>
+            tabBarLabelStyle: {
+              fontSize: moderateScale(12),
+              fontWeight: '600',
+              marginTop: 0, // Removed extra top margin
+            },
+            tabBarIcon: function TabIcon({ color, focused }) {
+              return <TabBarIcon route={route} color={color} focused={focused} />;
+            },
+          })}
+        >
+          <Tab.Screen 
+            name="Chats" 
+            component={ChatScreen}
+            options={{
+              tabBarLabel: 'Chats',
+            }}
+          />
+          <Tab.Screen 
+            name="Calls" 
+            component={CallsScreen}
+            options={{
+              tabBarLabel: 'Calls',
+            }}
+          />
+          <Tab.Screen 
+            name="Updates" 
+            component={UpdatesScreen}
+            options={{
+              tabBarLabel: 'Updates',
+            }}
+          />
+          <Tab.Screen 
+            name="Settings" 
+            component={SettingsScreen}
+            options={{
+              tabBarLabel: 'Settings',
+            }}
+          />
+        </Tab.Navigator>
+      <GestureNavigationBar />
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+});

@@ -1,26 +1,56 @@
-import { useTheme } from '../../../theme';
-import { moderateScale } from '../../../theme/responsive';
-import { safeFormatDateHeader } from '../../../utils/dateValidation';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { useTheme } from '@/theme';
+import { moderateScale } from '@/theme/responsive';
 
-type Props = {
+interface DateHeaderProps {
   date: string;
-};
+}
 
-export default function DateHeader({ date }: Props) {
+const DateHeader: React.FC<DateHeaderProps> = ({ date }) => {
   const { colors } = useTheme();
+
+  const formatDate = (dateString: string) => {
+    const messageDate = new Date(dateString);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    // Reset time to compare only dates
+    const messageDateOnly = new Date(messageDate.getFullYear(), messageDate.getMonth(), messageDate.getDate());
+    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const yesterdayOnly = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
+
+    if (messageDateOnly.getTime() === todayOnly.getTime()) {
+      return 'Today';
+    } else if (messageDateOnly.getTime() === yesterdayOnly.getTime()) {
+      return 'Yesterday';
+    } else {
+      return messageDate.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    }
+  };
 
   return (
     <View style={styles.container}>
-      <View style={[styles.dateContainer, { backgroundColor: colors.card }]}>
-        <Text style={[styles.dateText, { color: colors.subText }]}>
-          {safeFormatDateHeader(date)}
+      <View style={[
+        styles.dateContainer,
+        { backgroundColor: colors.surface, borderColor: colors.border }
+      ]}>
+        <Text style={[
+          styles.dateText,
+          { color: colors.textSecondary }
+        ]}>
+          {formatDate(date)}
         </Text>
       </View>
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -28,19 +58,15 @@ const styles = StyleSheet.create({
     marginVertical: moderateScale(16),
   },
   dateContainer: {
-    paddingHorizontal: moderateScale(16),
-    paddingVertical: moderateScale(8),
+    paddingHorizontal: moderateScale(12),
+    paddingVertical: moderateScale(6),
     borderRadius: moderateScale(16),
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    borderWidth: 0.5,
-    borderColor: 'rgba(0, 0, 0, 0.1)',
+    borderWidth: 1,
   },
   dateText: {
     fontSize: moderateScale(12),
     fontWeight: '500',
   },
 });
+
+export default DateHeader;

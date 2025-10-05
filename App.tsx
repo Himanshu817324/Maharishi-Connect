@@ -15,11 +15,10 @@ function App() {
     <Provider store={store}>
       <ThemeProvider>
         <SafeAreaProvider>
-          <ChatInitializer>
-            <CustomStatusBar />
-            <RootNavigator />
-            <Toast />
-          </ChatInitializer>
+          <CustomStatusBar />
+          <RootNavigator />
+          <ChatInitializer />
+          <Toast />
         </SafeAreaProvider>
       </ThemeProvider>
     </Provider>

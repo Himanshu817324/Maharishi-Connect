@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   highlight: {
-    color: LightColors.primary,
+    color: LightColors.accent,
     fontWeight: "600",
   },
   checkboxContainer: {
@@ -275,8 +275,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   checkboxChecked: {
-    backgroundColor: LightColors.primary,
-    borderColor: LightColors.primary,
+    backgroundColor: LightColors.accent,
+    borderColor: LightColors.background,
   },
   checkboxText: {
     fontSize: 13,
@@ -290,14 +290,14 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   continueButton: {
-    backgroundColor: LightColors.primary,
+    backgroundColor: LightColors.accent,
     borderRadius: 20,
     paddingVertical: 20,
     paddingHorizontal: 24,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: LightColors.primary,
+    shadowColor: LightColors.accent,
     shadowOffset: {
       width: 0,
       height: 6,
@@ -313,7 +313,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   continueButtonText: {
-    color: LightColors.text,
+    color: LightColors.textOnPrimary,
     fontSize: 18,
     fontWeight: "700",
     marginRight: 12,

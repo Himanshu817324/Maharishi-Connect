@@ -1,805 +1,758 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
+  FlatList,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
+  Alert,
   Text,
-  FlatList,
+  Keyboard,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   useRoute,
-  RouteProp,
-  useFocusEffect,
   useNavigation,
+  useFocusEffect,
 } from '@react-navigation/native';
-import { useDispatch, useSelector } from 'react-redux';
-import { RootState, store } from '@/store';
-import {
-  markChatAsRead,
-  setCurrentChat,
-  addMessage,
-  updateMessageStatus,
-  loadChatMessages,
-} from '@/store/slices/chatSlice';
-import { selectCurrentUser } from '@/store/slices/authSlice';
-import socketService from '@/services/socketService';
-import chatApiService from '@/services/chatApiService';
-import sqliteService from '@/services/sqliteService';
+import { useSelector, useDispatch } from 'react-redux';
 import { useTheme } from '@/theme';
-import CustomStatusBar from '@/components/atoms/ui/StatusBar';
+import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
+import { RootState, AppDispatch } from '@/store';
+import {
+  setCurrentChat,
+  clearCurrentChat,
+  clearUnreadCount,
+  updateChatLastMessage,
+} from '@/store/slices/chatSlice';
+import {
+  fetchChatMessages,
+  addMessage,
+  setCurrentChatMessages,
+  clearCurrentChatMessages,
+} from '@/store/slices/messageSlice';
+import { socketService, MessageData } from '@/services/socketService';
+import { messageService } from '@/services/messageService';
+import { chatService } from '@/services/chatService';
+import { ChatData } from '@/services/chatService';
 import ChatHeader from '@/components/atoms/chats/ChatHeader';
-import ChatInput from '@/components/atoms/chats/ChatInput';
 import MessageBubble from '@/components/atoms/chats/MessageBubble';
-import { fontSize, spacing } from '@/theme/responsive';
-import { useSocketLifecycle } from '@/hooks/useSocketLifecycle';
-import offlineMessageQueue from '@/services/offlineMessageQueue';
+import ChatInput from '@/components/atoms/chats/ChatInput';
+import CustomSafeAreaView from '@/components/atoms/ui/CustomSafeAreaView';
 
-type ConversationRouteParams = {
-  id: string;
-  name?: string;
-  avatar?: string;
-};
-
-type ConversationRouteProp = RouteProp<
-  { ConversationScreen: ConversationRouteParams },
-  'ConversationScreen'
->;
+interface RouteParams {
+  chat: ChatData;
+}
 
 const ConversationScreen: React.FC = () => {
-  const route = useRoute<ConversationRouteProp>();
-  const dispatch = useDispatch();
-  const navigation = useNavigation();
   const { colors } = useTheme();
+  const route = useRoute();
+  const navigation = useNavigation();
+  const dispatch = useDispatch<AppDispatch>();
 
-  const { id: chatId } = route.params;
-  const currentUser = useSelector(selectCurrentUser);
-
-  const allMessages = useSelector((state: RootState) => state.chat.messages);
-
-  // Get messages for this chat and sort newest-to-oldest for inverted list
-  const chatMessages = [...(allMessages[chatId] || [])].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  const { chat: routeChat } = route.params as RouteParams;
+  const { currentChat } = useSelector((state: RootState) => state.chat);
+  const { currentChatMessages, currentChatId, typingUsers } = useSelector(
+    (state: RootState) => state.message,
   );
+  const { user } = useSelector((state: RootState) => state.auth);
 
-  const [isTyping, setIsTyping] = useState(false);
-  const [typingUsers, setTypingUsers] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [replyToMessage, setReplyToMessage] = useState<{
+    id: string;
+    content: string;
+    sender: string;
+  } | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
   const flatListRef = useRef<FlatList>(null);
-  const loadedRef = useRef(false);
-  const [lastSyncTime, setLastSyncTime] = useState<number>(0);
+  const currentChatMessagesRef = useRef<MessageData[]>([]);
 
-  // Socket lifecycle management for conversation - keep connection active
-  const { cancelDisconnection } = useSocketLifecycle({
-    connectOnFocus: true,
-    disconnectOnBlur: false, // Don't disconnect when leaving conversation (user might go back to chat list)
-    disconnectDelay: 0,
+  const chat = routeChat || currentChat;
+
+
+  console.log('🔍 ConversationScreen chat state:', {
+    routeChat: routeChat?.id,
+    currentChat: currentChat?.id,
+    currentChatId: currentChatId,
+    finalChat: chat?.id,
+    routeChatParticipants: routeChat?.participants?.map(p => p.user_id),
+    currentChatParticipants: currentChat?.participants?.map(p => p.user_id),
   });
 
-  // Load messages function with enhanced sync
-  const loadMessages = async (forceFullSync = false) => {
-    if (isLoading || !chatId || !currentUser?.id) return;
+  useEffect(() => {
+    currentChatMessagesRef.current = currentChatMessages;
+    console.log('📱 Current chat messages updated:', {
+      chatId: chat?.id,
+      messageCount: currentChatMessages.length,
+      messages: currentChatMessages.map(m => ({
+        id: m.id,
+        sender_id: m.sender_id,
+        content: m.content,
+      })),
+    });
+  }, [currentChatMessages, chat?.id]);
+
+  useEffect(() => {
+    if (currentChatMessages.length > 0) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 10);
+    }
+  }, [currentChatMessages.length]);
+
+  const setupSocketListeners = useCallback(() => {
+    // Listener for sent messages (confirmation)
+    socketService.addMessageSentListener((message: MessageData) => {
+      if (message.chat_id === chat?.id) {
+        console.log(
+          '📨 [ConversationScreen] Message sent confirmation received:',
+          message.id,
+        );
+        dispatch(addMessage(message));
+        
+        // Update the chat's last message in the chat list
+        dispatch(updateChatLastMessage({
+          chatId: message.chat_id,
+          lastMessage: {
+            id: message.id,
+            content: message.content,
+            sender_id: message.sender_id,
+            created_at: message.created_at,
+          }
+        }));
+        
+        scrollToBottom();
+      }
+    });
+
+    // Listener for incoming messages from other users
+    const removeMessageListener = socketService.addMessageListener((message: MessageData) => {
+      if (message.chat_id === chat?.id) {
+        console.log(
+          '📨 [ConversationScreen] Incoming message received:',
+          message.id,
+        );
+        dispatch(addMessage(message));
+        
+        // Update the chat's last message in the chat list
+        dispatch(updateChatLastMessage({
+          chatId: message.chat_id,
+          lastMessage: {
+            id: message.id,
+            content: message.content,
+            sender_id: message.sender_id,
+            created_at: message.created_at,
+          }
+        }));
+        
+        scrollToBottom();
+      }
+    });
+
+    socketService.addConnectionListener((connected: boolean) => {
+      console.log('🔌 Socket connection status changed:', connected);
+      setIsConnected(connected);
+    });
+
+    const initialConnectionStatus = socketService.isSocketConnected();
+    console.log(
+      '🔌 Initial socket connection status:',
+      initialConnectionStatus,
+    );
+    setIsConnected(initialConnectionStatus);
+
+    return () => {
+      removeMessageListener();
+    };
+  }, [chat?.id, dispatch]);
+
+  const joinChatRoom = useCallback(() => {
+    if (chat && socketService.isSocketConnected()) {
+      socketService.joinChat(chat.id);
+    }
+  }, [chat]);
+
+  const loadMessages = useCallback(async () => {
+    if (!chat) return;
 
     try {
-      setIsLoading(true);
-      console.log(
-        '📥 Loading messages for chat:',
-        chatId,
-        forceFullSync ? '(FORCE FULL SYNC)' : '',
-      );
+      console.log('📱 Loading messages for chat:', chat.id);
+      const result = await dispatch(
+        fetchChatMessages({
+          chatId: chat.id,
+          limit: 50,
+        }),
+      ).unwrap();
+      console.log('📱 Messages loaded:', result);
 
-      if (currentUser?.token) {
-        chatApiService.setAuthToken(currentUser.token);
-      }
-
-      // Always perform full server sync when opening a chat
-      const result = await dispatch(loadChatMessages(chatId) as any);
-
-      if (result.meta.requestStatus === 'fulfilled') {
-        console.log(
-          `📥 Successfully loaded ${result.payload.messages.length} messages`,
-        );
-        console.log(`📥 Source: ${result.payload.source}`);
-
-        // If we got messages from server sync, log the sync success
-        if (result.payload.source === 'server-synced') {
-          console.log('✅ Full server sync completed successfully');
-          setLastSyncTime(Date.now());
-        }
-
-        // If chat was cleaned up (not found on server), navigate back
-        if (result.payload.source === 'cleaned-up') {
-          console.log('🗑️ Chat was cleaned up, navigating back to chat list');
-          navigation.goBack();
-          return;
-        }
-      } else {
-        console.error('📥 Failed to load messages:', result.payload);
-      }
-
-      loadedRef.current = true;
+      dispatch(setCurrentChatMessages(chat.id));
+      scrollToBottom();
     } catch (error) {
       console.error('Error loading messages:', error);
-    } finally {
-      setIsLoading(false);
+    }
+  }, [chat, dispatch]);
+
+  useEffect(() => {
+    if (chat) {
+      console.log('🔄 Switching to chat:', chat.id);
+
+      dispatch(clearCurrentChat());
+      dispatch(clearCurrentChatMessages());
+
+      dispatch(setCurrentChat(chat));
+      loadMessages();
+      joinChatRoom();
+      const cleanup = setupSocketListeners();
+      if (chat?.id) {
+        dispatch(clearUnreadCount(chat.id));
+      }
+
+      return cleanup;
+    }
+
+    return () => {};
+  }, [
+    chat,
+    chat.id,
+    dispatch,
+    joinChatRoom,
+    loadMessages,
+    setupSocketListeners,
+  ]);
+
+  // Clear unread count when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      if (chat?.id) {
+        console.log(
+          '📱 ConversationScreen focused, clearing unread count for chat:',
+          chat.id,
+        );
+        dispatch(clearUnreadCount(chat.id));
+      }
+    }, [chat?.id, dispatch]),
+  );
+
+  // Keyboard event listeners
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      e => {
+        setKeyboardHeight(e.endCoordinates.height);
+        setIsKeyboardVisible(true);
+        // Scroll to bottom when keyboard appears
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      },
+    );
+
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+        setIsKeyboardVisible(false);
+      },
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
+
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 50);
+  };
+
+  const handleSendMessage = async (
+    content: string,
+    messageType: 'text' | 'image' | 'video' | 'audio' | 'file' = 'text',
+  ) => {
+    if (!chat || !content.trim()) return;
+
+    try {
+      console.log('📤 Sending message immediately:', {
+        chatId: chat.id,
+        content,
+        messageType,
+      });
+
+      if (isConnected) {
+        messageService.sendMessageImmediate(chat.id, content, messageType, {
+          replyToMessageId: replyToMessage?.id,
+        });
+      } else {
+        console.log('📤 Sending message via REST API (socket not connected)');
+        try {
+          const response = await chatService.sendMessage(chat.id, {
+            content,
+            messageType,
+            replyToMessageId: replyToMessage?.id,
+          });
+
+          console.log('📥 REST API response:', response);
+
+          if (response && response.data) {
+            console.log('🔄 Adding message to Redux store:', response.data);
+            dispatch(addMessage(response.data));
+            
+            // Update the chat's last message in the chat list
+            dispatch(updateChatLastMessage({
+              chatId: response.data.chat_id,
+              lastMessage: {
+                id: response.data.id,
+                content: response.data.content,
+                sender_id: response.data.sender_id,
+                created_at: response.data.created_at,
+              }
+            }));
+            
+            scrollToBottom();
+          } else {
+            console.log('⚠️ No message data in response');
+          }
+        } catch (error) {
+          console.error('❌ Error sending message via REST API:', error);
+        }
+      }
+
+      setReplyToMessage(null);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      Alert.alert('Error', 'Failed to send message. Please try again.');
     }
   };
 
-  // Load messages on mount
-  useEffect(() => {
-    if (chatId && currentUser?.id && !loadedRef.current) {
-      loadMessages();
-    }
-  }, [chatId, currentUser?.id]);
+  const handleMessagePress = (_message: MessageData) => {};
 
-  // Reload on focus with full sync
-  useFocusEffect(
-    useCallback(() => {
-      console.log('📄 ConversationScreen focused - performing full sync');
-      if (chatId && currentUser?.id) {
-        // Always perform full sync when screen comes into focus
-        loadMessages(true);
-      }
-    }, [chatId, currentUser?.id]),
-  );
-
-  // Periodic sync to handle missed messages (every 30 seconds)
-  useEffect(() => {
-    if (!chatId || !currentUser?.id) return;
-
-    const syncInterval = setInterval(() => {
-      const timeSinceLastSync = Date.now() - lastSyncTime;
-      // Only sync if it's been more than 30 seconds since last sync
-      if (timeSinceLastSync > 30000) {
-        console.log('🔄 Periodic sync triggered');
-        loadMessages(true);
-      }
-    }, 30000); // Check every 30 seconds
-
-    return () => clearInterval(syncInterval);
-  }, [chatId, currentUser?.id, lastSyncTime]);
-
-  // Enhanced real-time message handling with proper cleanup
-  useEffect(() => {
-    if (!chatId || !currentUser?.id) return;
-
-    console.log(
-      '📨 [ConversationScreen] Setting up real-time message listeners for chat:',
-      chatId,
-    );
-
-    // Listen for message updates (edits, deletions)
-    const unsubMessageUpdate = socketService.on(
-      'messageEdited',
-      (data: any) => {
-        console.log('📨 [ConversationScreen] Message edited:', data);
-        if (data.chatId === chatId || data.chat_id === chatId) {
-          dispatch({
-            type: 'chat/updateMessage',
-            payload: {
-              messageId: data.messageId || data.message_id,
-              content: data.content,
-            },
-          });
-        }
+  const handleMessageLongPress = (message: MessageData) => {
+    Alert.alert('Message Options', 'What would you like to do?', [
+      {
+        text: 'Reply',
+        onPress: () =>
+          setReplyToMessage({
+            id: message.id,
+            content: message.content,
+            sender: message.sender.fullName,
+          }),
       },
-    );
+      { text: 'Copy', onPress: () => {} },
+      ...(message.sender_id === user?.id
+        ? [
+            { text: 'Edit', onPress: () => handleEditMessage(message) },
+            { text: 'Delete', onPress: () => handleDeleteMessage(message) },
+          ]
+        : []),
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
 
-    const unsubMessageDelete = socketService.on(
-      'messageDeleted',
-      (data: any) => {
-        console.log('📨 [ConversationScreen] Message deleted:', data);
-        if (data.chatId === chatId || data.chat_id === chatId) {
-          dispatch({
-            type: 'chat/removeMessage',
-            payload: data.messageId || data.message_id,
-          });
-        }
-      },
-    );
-
-    // Listen for typing indicators
-    const unsubTyping = socketService.on(
-      'typingUpdate',
-      (data: { userId: string; chatId: string; isTyping: boolean }) => {
-        if (data.chatId === chatId && data.userId !== currentUser.id) {
-          handleTypingUpdate(data);
-        }
-      },
-    );
-
-    return () => {
-      console.log(
-        '📨 [ConversationScreen] Cleaning up message listeners for chat:',
-        chatId,
-      );
-      unsubMessageUpdate?.();
-      unsubMessageDelete?.();
-      unsubTyping?.();
-    };
-  }, [chatId, currentUser?.id, dispatch]);
-
-  // Socket connection - ensure socket is connected for real-time messaging
-  useEffect(() => {
-    if (!currentUser?.id) return;
-
-    const initSocket = async () => {
-      try {
-        console.log(
-          '🔌 [ConversationScreen] Ensuring socket connection for real-time messaging...',
-        );
-
-        // Connect socket if not already connected (should be connected from ChatScreen)
-        if (!socketService.getConnectionStatus()) {
-          console.log(
-            '🔌 [ConversationScreen] Socket not connected, connecting now...',
-          );
-          await socketService.connect(currentUser.id, currentUser.token);
-          console.log(
-            '✅ [ConversationScreen] Socket connected for conversation',
-          );
-        } else {
-          console.log(
-            '✅ [ConversationScreen] Socket already connected, ready for messaging',
-          );
-        }
-
-        console.log('🔌 [ConversationScreen] Joining chat:', chatId);
-        socketService.joinChat(chatId);
-
-        const unsubMessage = socketService.on(
-          'newMessage',
-          async (message: any) => {
-            console.log(
-              '📨 [ConversationScreen] Received newMessage:',
-              message,
-            );
-
-            if (message.chatId === chatId || message.chat_id === chatId) {
-              const messageId = message._id || message.id;
-
-              // Check if message already exists to prevent duplication
-              const exists = chatMessages.find(m => m._id === messageId);
-              if (!exists) {
-                console.log(
-                  '📨 [ConversationScreen] Processing new message:',
-                  messageId,
-                );
-
-                // Resolve user name properly
-                const senderId = message.senderId || message.sender_id;
-                let senderName = 'Unknown User';
-
-                if (senderId === currentUser.id) {
-                  senderName = 'You';
-                } else {
-                  // Try to get sender name from message data first
-                  senderName =
-                    message.sender_name ||
-                    message.senderName ||
-                    message.user?.name;
-
-                  // If no name in message, try to resolve from chat participants
-                  if (!senderName || senderName === 'Unknown User') {
-                    // Try to get chat info from Redux state
-                    const state = store.getState();
-                    const chat = state.chat.chats.find(
-                      (c: any) => c.id === chatId,
-                    );
-                    if (chat?.participants) {
-                      const participant = chat.participants.find(
-                        (p: any) =>
-                          (p?.user_id || p?.uid || p?.id || p) === senderId,
-                      );
-                      if (participant) {
-                        // Prioritize participant data over phone number formatting
-                        senderName =
-                          participant?.user_name ||
-                          participant?.fullName ||
-                          participant?.name ||
-                          participant?.userDetails?.fullName ||
-                          'Unknown User';
-
-                        // Only format phone number if no name is available
-                        if (senderName === 'Unknown User') {
-                          const phoneNumber =
-                            participant?.user_mobile || participant?.phone;
-                          if (phoneNumber) {
-                            const normalizedNumber = phoneNumber.replace(
-                              /\D/g,
-                              '',
-                            );
-                            if (normalizedNumber.length === 10) {
-                              senderName = `+91${normalizedNumber}`;
-                            } else if (normalizedNumber.length > 10) {
-                              senderName = `+91${normalizedNumber.slice(-10)}`;
-                            } else {
-                              senderName = phoneNumber;
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-
-                const formattedMessage = {
-                  _id: messageId,
-                  text: message.content || message.text,
-                  chatId,
-                  senderId,
-                  createdAt:
-                    message.createdAt ||
-                    message.created_at ||
-                    new Date().toISOString(),
-                  status: 'sent' as const,
-                  user: {
-                    _id: senderId,
-                    name: senderName,
-                  },
-                };
-
-                // Save to SQLite first for persistence
-                try {
-                  await sqliteService.saveMessage({
-                    id: formattedMessage._id,
-                    clientId: formattedMessage._id,
-                    chatId: formattedMessage.chatId,
-                    content: formattedMessage.text,
-                    text: formattedMessage.text,
-                    senderId: formattedMessage.senderId,
-                    timestamp: formattedMessage.createdAt,
-                    createdAt: formattedMessage.createdAt,
-                    status: formattedMessage.status,
-                    senderName: formattedMessage.user.name,
-                  });
-                  console.log(
-                    '💾 [ConversationScreen] Message saved to SQLite:',
-                    formattedMessage._id,
-                  );
-                } catch (saveError) {
-                  console.error(
-                    '❌ [ConversationScreen] Failed to save message to SQLite:',
-                    saveError,
-                  );
-                  // Continue with Redux dispatch even if SQLite save fails
-                }
-
-                console.log(
-                  '📨 [ConversationScreen] Dispatching addMessage:',
-                  formattedMessage,
-                );
-                dispatch(addMessage(formattedMessage));
-              } else {
-                console.log(
-                  '📨 [ConversationScreen] Message already exists, skipping:',
-                  messageId,
-                );
+  const handleEditMessage = (message: MessageData) => {
+    Alert.prompt(
+      'Edit Message',
+      'Enter new message content:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Save',
+          onPress: async (newContent?: string) => {
+            if (newContent && newContent.trim()) {
+              try {
+                await messageService.editMessage(message.id, newContent.trim());
+              } catch (error) {
+                console.error('Error editing message:', error);
+                Alert.alert('Error', 'Failed to edit message.');
               }
-            } else {
-              console.log(
-                '📨 [ConversationScreen] Message not for this chat:',
-                message.chatId || message.chat_id,
-                'vs',
-                chatId,
-              );
             }
           },
-        );
+        },
+      ],
+      'plain-text',
+      message.content,
+    );
+  };
 
-        const unsubDelivered = socketService.on(
-          'messageDelivered',
-          (data: any) => {
-            if (data.chatId === chatId) {
-              dispatch(
-                updateMessageStatus({
-                  messageId: data.messageId,
-                  status: 'delivered',
-                }),
-              );
+  const handleDeleteMessage = (message: MessageData) => {
+    Alert.alert(
+      'Delete Message',
+      'Are you sure you want to delete this message?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await messageService.deleteMessage(message.id);
+            } catch (error) {
+              console.error('Error deleting message:', error);
+              Alert.alert('Error', 'Failed to delete message.');
             }
           },
-        );
+        },
+      ],
+    );
+  };
 
-        const unsubRead = socketService.on('messageRead', (data: any) => {
-          if (data.chatId === chatId) {
-            dispatch(
-              updateMessageStatus({
-                messageId: data.messageId,
-                status: 'read',
-              }),
-            );
-          }
-        });
+  const handleSendImage = () => {
+    Alert.alert('Coming Soon', 'Image picker will be implemented soon.');
+  };
 
-        const unsubTyping = socketService.on(
-          'typingUpdate',
-          (data: { userId: string; isTyping: boolean }) => {
-            if (data.userId !== currentUser.id) handleTypingUpdate(data);
-          },
-        );
+  const handleSendVideo = () => {
+    Alert.alert('Coming Soon', 'Video picker will be implemented soon.');
+  };
 
-        // Handle socket reconnection
-        const unsubReconnect = socketService.on('connect', () => {
-          console.log(
-            '🔌 [ConversationScreen] Socket reconnected, rejoining chat:',
-            chatId,
-          );
-          socketService.joinChat(chatId);
+  const handleSendAudio = () => {
+    Alert.alert('Coming Soon', 'Audio recorder will be implemented soon.');
+  };
 
-          // Process offline message queue when socket reconnects
-          offlineMessageQueue.startProcessing();
-        });
+  const handleSendFile = () => {
+    Alert.alert('Coming Soon', 'File picker will be implemented soon.');
+  };
 
-        return () => {
-          console.log(
-            '🧹 [ConversationScreen] Cleaning up conversation socket listeners...',
-          );
-          unsubMessage?.();
-          unsubDelivered?.();
-          unsubRead?.();
-          unsubTyping?.();
-          unsubReconnect?.();
-          socketService.leaveChat(chatId);
+  const handleBack = () => {
+    navigation.goBack();
+  };
 
-          // Note: We don't disconnect socket here as user might go back to ChatScreen
-          // Socket will be disconnected when user leaves all chat-related screens
-        };
-      } catch (error) {
-        console.error('Socket init error:', error);
-      }
-    };
+  const handleInfo = () => {
+    Alert.alert('Coming Soon', 'Chat info screen will be implemented soon.');
+  };
 
-    const cleanup = initSocket();
-    return () => {
-      cleanup?.then(fn => fn?.());
-    };
-  }, [chatId, currentUser?.id]);
+  const handleCall = () => {
+    Alert.alert('Coming Soon', 'Voice call will be implemented soon.');
+  };
 
-  const handleTypingUpdate = useCallback(
-    (data: { userId: string; isTyping: boolean }) => {
-      if (data.isTyping) {
-        setTypingUsers(prev =>
-          prev.includes(data.userId) ? prev : [...prev, data.userId],
-        );
-        setIsTyping(true);
-      } else {
-        setTypingUsers(prev => prev.filter(id => id !== data.userId));
-        setIsTyping(false);
-      }
-    },
-    [],
-  );
+  const handleVideoCall = () => {
+    Alert.alert('Coming Soon', 'Video call will be implemented soon.');
+  };
 
-  // Enhanced send message handler with dual approach and better error handling
-  const handleSendMessage = useCallback(
-    async (messageText: string) => {
-      if (!messageText.trim() || !currentUser) return;
+  const handleSearch = () => {
+    Alert.alert('Coming Soon', 'Message search will be implemented soon.');
+  };
 
-      const tempId = `temp_${Date.now()}_${Math.random()
-        .toString(36)
-        .substr(2, 9)}`;
-      const messageTimestamp = new Date().toISOString();
+  const handleMore = () => {
+    Alert.alert('Chat Options', 'What would you like to do?', [
+      { text: 'Search Messages', onPress: handleSearch },
+      { text: 'Chat Info', onPress: handleInfo },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
 
-      const optimisticMessage = {
-        _id: tempId,
-        text: messageText.trim(),
-        chatId,
-        senderId: currentUser.id,
-        createdAt: messageTimestamp,
-        status: 'sending' as const,
-        user: { _id: currentUser.id, name: currentUser.name || 'You' },
-      };
+  const renderMessage = ({
+    item,
+    index,
+  }: {
+    item: MessageData;
+    index: number;
+  }) => {
+    const currentUserId = user?.id || user?.firebaseUid;
+    const isOwn =
+      item.sender_id === currentUserId ||
+      item.sender_id === user?.id ||
+      item.sender_id === user?.firebaseUid;
+    const previousMessage = index > 0 ? currentChatMessages[index - 1] : null;
+    
+    // Only show avatar for group chats, not for direct contacts
+    const showAvatar =
+      chat?.type === 'group' &&
+      !isOwn &&
+      (!previousMessage || previousMessage.sender_id !== item.sender_id);
 
-      // Step 1: Add optimistic message to UI immediately
-      dispatch(addMessage(optimisticMessage));
-
-      // Step 2: Save optimistic message to SQLite for offline persistence
-      try {
-        await sqliteService.saveMessage({
-          id: tempId,
-          clientId: tempId,
-          chatId,
-          content: messageText.trim(),
-          text: messageText.trim(),
-          senderId: currentUser.id,
-          timestamp: messageTimestamp,
-          createdAt: messageTimestamp,
-          status: 'sending',
-          senderName: currentUser.name || 'You',
-        });
-        console.log(
-          '💾 [ConversationScreen] Optimistic message saved to SQLite:',
-          tempId,
-        );
-      } catch (sqliteError) {
-        console.error(
-          '❌ [ConversationScreen] Failed to save optimistic message:',
-          sqliteError,
-        );
-      }
-
-      let socketSent = false;
-      let apiSent = false;
-      let serverId: string | null = null;
-
-      try {
-        // Step 3: Send via socket for real-time delivery
-        if (socketService.getConnectionStatus()) {
-          socketSent = socketService.sendMessage({
-            chatId,
-            content: messageText.trim(),
-            messageType: 'text',
-            tempId,
-            senderId: currentUser.id,
-            createdAt: messageTimestamp,
-          });
-          console.log(
-            '📤 [ConversationScreen] Message sent via socket:',
-            socketSent,
-          );
-        } else {
-          console.log(
-            '⚠️ [ConversationScreen] Socket not connected, skipping socket send',
-          );
-        }
-
-        // Step 4: Send via API for server persistence and delivery confirmation
-        try {
-          const serverMessage = await chatApiService.sendMessage(chatId, {
-            content: messageText.trim(),
-            messageType: 'text',
-          });
-
-          serverId = serverMessage?._id || serverMessage?.id;
-          apiSent = true;
-          console.log(
-            '📤 [ConversationScreen] Message sent via API:',
-            serverId,
-          );
-        } catch (apiError) {
-          console.error('❌ [ConversationScreen] API send failed:', apiError);
-          throw apiError;
-        }
-
-        // Step 5: Update message with server ID and status
-        if (serverId) {
-          console.log(
-            '✅ [ConversationScreen] Message sent successfully, updating ID:',
-            tempId,
-            '->',
-            serverId,
-          );
-
-          // Update Redux state
-          dispatch({
-            type: 'chat/replaceMessageId',
-            payload: { tempId, serverId, chatId },
-          });
-          dispatch(
-            updateMessageStatus({ messageId: serverId, status: 'sent' }),
-          );
-
-          // Update SQLite with server ID
-          try {
-            await sqliteService.updateMessageIdByClientId(tempId, serverId);
-            await sqliteService.updateMessageStatus(serverId, 'sent');
-            console.log(
-              '💾 [ConversationScreen] Updated message in SQLite with server ID:',
-              serverId,
-            );
-          } catch (updateError) {
-            console.error(
-              '❌ [ConversationScreen] Failed to update message in SQLite:',
-              updateError,
-            );
-          }
-        } else {
-          // If no server ID but API succeeded, mark as sent
-          dispatch(updateMessageStatus({ messageId: tempId, status: 'sent' }));
-        }
-      } catch (error) {
-        console.error('❌ [ConversationScreen] Send message error:', error);
-
-        // Update message status to failed
-        dispatch(updateMessageStatus({ messageId: tempId, status: 'failed' }));
-
-        // Update SQLite status
-        try {
-          await sqliteService.updateMessageStatus(tempId, 'failed');
-        } catch (sqliteError) {
-          console.error(
-            '❌ [ConversationScreen] Failed to update message status in SQLite:',
-            sqliteError,
-          );
-        }
-
-        // Show appropriate error message
-        if (error instanceof Error) {
-          if (error.message.includes('Network request failed')) {
-            Alert.alert(
-              'Network Error',
-              'Please check your internet connection and try again.',
-            );
-          } else if (error.message.includes('timeout')) {
-            Alert.alert(
-              'Timeout Error',
-              'Message sending timed out. It may still be delivered.',
-            );
-          } else if (error.message.includes('Chat not found')) {
-            Alert.alert('Chat Error', 'This chat is no longer available.');
-          } else {
-            Alert.alert('Error', 'Failed to send message. Please try again.');
-          }
-        }
-      }
-    },
-    [currentUser, chatId, dispatch],
-  );
-
-  const handleEditMessage = useCallback(
-    async (messageId: string, newContent: string) => {
-      // Implementation
-    },
-    [dispatch],
-  );
-
-  const handleDeleteMessage = useCallback(
-    async (messageId: string) => {
-      // Implementation
-    },
-    [dispatch],
-  );
-
-  const handleAddReaction = useCallback(
-    async (messageId: string, emoji: string) => {
-      // Implementation
-    },
-    [currentUser, dispatch],
-  );
-
-  const handleRemoveReaction = useCallback(
-    async (messageId: string, emoji: string) => {
-      // Implementation
-    },
-    [currentUser, dispatch],
-  );
-
-  const renderMessage = ({ item, index }: { item: any; index: number }) => {
-    const isMe = item.senderId === currentUser?.id;
-
-    // For inverted list, check the next item in the array (which is earlier in time)
-    const prevMessageInTimeline = chatMessages[index + 1];
-    const showTime =
-      index === chatMessages.length - 1 ||
-      (prevMessageInTimeline &&
-        prevMessageInTimeline.senderId !== item.senderId) ||
-      index === 0;
+    console.log('📱 Rendering message:', {
+      messageId: item.id,
+      senderId: item.sender_id,
+      currentUserId,
+      user_id: user?.id,
+      user_firebaseUid: user?.firebaseUid,
+      isOwn,
+      chatType: chat?.type,
+      showAvatar,
+      content: item.content,
+    });
 
     return (
       <MessageBubble
-        message={{
-          id: item._id,
-          content: item.text,
-          timestamp: item.createdAt,
-          sender: isMe ? 'me' : 'other',
-          type: item.type || 'text',
-          status: item.status,
-          isEdited: item.isEdited,
-        }}
-        isMe={isMe}
-        showTime={showTime}
-        onEdit={handleEditMessage}
-        onDelete={handleDeleteMessage}
-        onAddReaction={handleAddReaction}
-        onRemoveReaction={handleRemoveReaction}
-        onPress={function (): void {
-          throw new Error('Function not implemented.');
-        }}
+        message={item}
+        isOwn={isOwn}
+        showAvatar={showAvatar}
+        showTime={true}
+        isGroupChat={chat?.type === 'group'}
+        onPress={() => handleMessagePress(item)}
+        onLongPress={() => handleMessageLongPress(item)}
       />
     );
   };
 
-  return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      edges={['top']}
-    >
-      <KeyboardAvoidingView
-        style={styles.keyboardAvoidingView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+  const renderTypingIndicator = () => {
+    const typingUsersInChat = typingUsers[chat?.id || ''] || [];
+
+    if (typingUsersInChat.length === 0) return null;
+
+    return (
+      <View style={styles.typingContainer}>
+        <View style={styles.typingBubble}>
+          <View style={styles.typingDotsContainer}>
+            <View
+              style={[
+                styles.typingDot,
+                styles.typingDot1,
+                { backgroundColor: colors.textSecondary },
+              ]}
+            />
+            <View
+              style={[
+                styles.typingDot,
+                styles.typingDot2,
+                { backgroundColor: colors.textSecondary },
+              ]}
+            />
+            <View
+              style={[
+                styles.typingDot,
+                styles.typingDot3,
+                { backgroundColor: colors.textSecondary },
+              ]}
+            />
+          </View>
+        </View>
+        <Text style={[styles.typingText, { color: colors.textSecondary }]}>
+          {typingUsersInChat.length === 1
+            ? `${typingUsersInChat[0]} is typing`
+            : `${typingUsersInChat.length} people are typing`}
+        </Text>
+      </View>
+    );
+  };
+
+  const renderEmptyState = () => (
+    <View style={styles.emptyContainer}>
+      <View
+        style={[styles.emptyIconContainer, { backgroundColor: colors.surface }]}
       >
-        <CustomStatusBar />
-        <ChatHeader />
+        <Text style={styles.emptyIcon}>💬</Text>
+      </View>
+      <Text style={[styles.emptyTitle, { color: colors.text }]}>
+        No messages yet
+      </Text>
+      <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+        Start the conversation by sending a message
+      </Text>
+    </View>
+  );
 
-        <FlatList
-          ref={flatListRef}
-          data={chatMessages}
-          keyExtractor={item => item._id}
-          renderItem={renderMessage}
-          style={styles.messagesList}
-          showsVerticalScrollIndicator={false}
-          inverted
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={[styles.emptyText, { color: colors.subText }]}>
-                No messages yet. Start the conversation!
-              </Text>
-            </View>
-          }
-          ListHeaderComponent={
-            isTyping && typingUsers.length > 0 ? (
-              <View
-                style={[
-                  styles.typingIndicator,
-                  { backgroundColor: colors.background },
-                ]}
-              >
-                <View style={styles.typingDots}>
-                  <View
-                    style={[
-                      styles.typingDot,
-                      { backgroundColor: colors.subText },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.typingDot,
-                      { backgroundColor: colors.subText },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.typingDot,
-                      { backgroundColor: colors.subText },
-                    ]}
-                  />
-                </View>
-                <Text style={[styles.typingText, { color: colors.subText }]}>
-                  {typingUsers.length === 1
-                    ? 'Someone is typing...'
-                    : `${typingUsers.length} people are typing...`}
-                </Text>
-              </View>
-            ) : null
-          }
-        />
+  if (!chat) {
+    return (
+      <View
+        style={[
+          styles.container,
+          styles.centerContainer,
+          { backgroundColor: colors.background },
+        ]}
+      >
+        <View
+          style={[styles.errorContainer, { backgroundColor: colors.surface }]}
+        >
+          <Text style={styles.errorIcon}>⚠️</Text>
+          <Text style={[styles.errorText, { color: colors.text }]}>
+            Chat not found
+          </Text>
+          <Text style={[styles.errorSubtext, { color: colors.textSecondary }]}>
+            This chat may have been deleted
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
-        <ChatInput onSendMessage={handleSendMessage} chatId={chatId} />
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+  return (
+    <CustomSafeAreaView
+      style={styles.container}
+      topColor={colors.primary}
+      bottomColor={colors.background}
+    >
+
+        <KeyboardAvoidingView
+          style={styles.keyboardContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          enabled={true}
+        >
+          <ChatHeader
+            chat={chat}
+            currentUserId={user?.id || user?.firebaseUid}
+            onBack={handleBack}
+            onCall={handleCall}
+            onVideoCall={handleVideoCall}
+            onSearch={handleSearch}
+            onInfo={handleInfo}
+            onMore={handleMore}
+            isOnline={isConnected}
+          />
+
+          <View
+            style={[
+              styles.messagesWrapper,
+              { backgroundColor: colors.background },
+              isKeyboardVisible &&
+                Platform.OS === 'android' && {
+                  marginBottom: keyboardHeight * 0.1, // Slight adjustment for Android
+                },
+            ]}
+          >
+            <FlatList
+              ref={flatListRef}
+              data={currentChatMessages}
+              keyExtractor={item => item.id}
+              renderItem={renderMessage}
+              ListEmptyComponent={renderEmptyState}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.messagesContainer}
+              onContentSizeChange={scrollToBottom}
+              onLayout={scrollToBottom}
+              maintainVisibleContentPosition={{
+                minIndexForVisible: 0,
+                autoscrollToTopThreshold: 10,
+              }}
+            />
+          </View>
+
+          {renderTypingIndicator()}
+
+          <ChatInput
+            onSendMessage={handleSendMessage}
+            onSendImage={handleSendImage}
+            onSendVideo={handleSendVideo}
+            onSendAudio={handleSendAudio}
+            onSendFile={handleSendFile}
+            replyToMessage={replyToMessage || undefined}
+            onCancelReply={() => setReplyToMessage(null)}
+            disabled={false}
+            keyboardHeight={keyboardHeight}
+            isKeyboardVisible={isKeyboardVisible}
+          />
+        </KeyboardAvoidingView>
+    </CustomSafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  keyboardAvoidingView: { flex: 1 },
-  messagesList: { flex: 1, paddingHorizontal: spacing.sm },
+  container: {
+    flex: 1,
+  },
+  keyboardContainer: {
+    flex: 1,
+    justifyContent: 'flex-end', // Ensure content pushes to bottom
+  },
+  centerContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: wp(8),
+  },
+  errorContainer: {
+    alignItems: 'center',
+    padding: moderateScale(32),
+    borderRadius: moderateScale(24),
+    width: '100%',
+    maxWidth: moderateScale(320),
+  },
+  errorIcon: {
+    fontSize: responsiveFont(48),
+    marginBottom: hp(2),
+  },
+  errorText: {
+    fontSize: responsiveFont(20),
+    fontWeight: '700',
+    marginBottom: hp(1),
+    textAlign: 'center',
+    letterSpacing: 0.3,
+  },
+  errorSubtext: {
+    fontSize: responsiveFont(14),
+    textAlign: 'center',
+    lineHeight: responsiveFont(20),
+  },
+  messagesWrapper: {
+    flex: 1,
+    minHeight: 0, // Critical for proper scrolling
+    maxHeight: '100%', // Ensure it doesn't exceed screen height
+  },
+  messagesContainer: {
+    flexGrow: 1,
+    paddingVertical: hp(1),
+    paddingHorizontal: wp(1), // Reduced horizontal padding for more space
+    paddingBottom: hp(2), // Extra bottom padding to prevent cutting
+  },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: spacing.xl,
-    transform: [{ scaleY: -1 }],
+    paddingHorizontal: wp(10),
+    paddingVertical: hp(8),
   },
-  emptyText: { fontSize: fontSize.md, textAlign: 'center' },
-  typingIndicator: {
+  emptyIconContainer: {
+    width: moderateScale(100),
+    height: moderateScale(100),
+    borderRadius: moderateScale(50),
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: hp(3),
+  },
+  emptyIcon: {
+    fontSize: responsiveFont(48),
+  },
+  emptyTitle: {
+    fontSize: responsiveFont(22),
+    fontWeight: '700',
+    marginBottom: hp(1),
+    textAlign: 'center',
+    letterSpacing: 0.3,
+  },
+  emptySubtitle: {
+    fontSize: responsiveFont(15),
+    textAlign: 'center',
+    lineHeight: responsiveFont(22),
+  },
+  typingContainer: {
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1),
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
   },
-  typingDots: { flexDirection: 'row', marginRight: spacing.sm },
+  typingBubble: {
+    paddingHorizontal: moderateScale(12),
+    paddingVertical: moderateScale(8),
+    borderRadius: moderateScale(16),
+    marginRight: moderateScale(8),
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  typingDotsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   typingDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginHorizontal: 2,
+    width: moderateScale(6),
+    height: moderateScale(6),
+    borderRadius: moderateScale(3),
+    marginHorizontal: moderateScale(2),
+  },
+  typingDot1: {
     opacity: 0.4,
   },
-  typingText: { fontSize: fontSize.sm, fontStyle: 'italic' },
+  typingDot2: {
+    opacity: 0.6,
+  },
+  typingDot3: {
+    opacity: 0.8,
+  },
+  typingText: {
+    fontSize: responsiveFont(13),
+    fontWeight: '500',
+    fontStyle: 'italic',
+  },
 });
 
 export default ConversationScreen;

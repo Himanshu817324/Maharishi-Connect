@@ -1,5 +1,6 @@
 // src/store/slices/authSlice.ts
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { saveAuthState, clearAuthState } from "../../utils/storage";
 
 export interface AuthUser {
@@ -67,6 +68,11 @@ const authSlice = createSlice({
         profileCompleted: state.profileCompleted,
         hasSeenOnboarding: state.hasSeenOnboarding,
       });
+
+      // Also save token separately for services
+      if (action.payload.token) {
+        AsyncStorage.setItem('auth_token', action.payload.token);
+      }
       
       console.log('🔄 [login] Data saved to AsyncStorage');
     },
@@ -78,6 +84,7 @@ const authSlice = createSlice({
 
       // Clear from AsyncStorage
       clearAuthState();
+      AsyncStorage.removeItem('auth_token');
     },
     // New action to restore state from AsyncStorage
     restoreAuthState: (state, action: PayloadAction<{ user: AuthUser; isLoggedIn: boolean; profileCompleted: boolean; hasSeenOnboarding: boolean }>) => {
@@ -89,6 +96,11 @@ const authSlice = createSlice({
       state.isLoggedIn = action.payload.isLoggedIn;
       state.profileCompleted = action.payload.profileCompleted;
       state.hasSeenOnboarding = action.payload.hasSeenOnboarding;
+      
+      // Also restore token separately for services
+      if (action.payload.user?.token) {
+        AsyncStorage.setItem('auth_token', action.payload.user.token);
+      }
       
       console.log('🔄 [restoreAuthState] State restored successfully');
       console.log('🔄 [restoreAuthState] Final state.user:', state.user);

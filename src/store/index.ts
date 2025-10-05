@@ -1,12 +1,13 @@
 import { configureStore } from "@reduxjs/toolkit";
 import authReducer from "./slices/authSlice";
 import chatReducer from "./slices/chatSlice";
-import sqliteMiddleware from "./middleware/sqliteMiddleware";
+import messageReducer from "./slices/messageSlice";
 
 export const store = configureStore({
   reducer: {
     auth: authReducer,
-    chat: chatReducer
+    chat: chatReducer,
+    message: messageReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
@@ -14,7 +15,7 @@ export const store = configureStore({
         // Ignore these action types
         ignoredActions: ['persist/PERSIST', 'persist/REHYDRATE'],
       },
-    }).concat(sqliteMiddleware),
+    }),
 });
 
 export type RootState = ReturnType<typeof store.getState>;

@@ -1,699 +1,463 @@
-import { useNavigation } from '@react-navigation/native';
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import {
-  Alert,
+  View,
   FlatList,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
-  RefreshControl,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useSelector, useDispatch } from 'react-redux';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '@/store';
-import {
-  setChats,
-  setLoading,
-  setError,
-  mergeChats,
-  removeChat,
-} from '@/store/slices/chatSlice';
-import { selectCurrentUser } from '@/store/slices/authSlice';
-import MessageTime from '@/components/atoms/chats/MessageTime';
-import CustomStatusBar from '@/components/atoms/ui/StatusBar';
-import AvatarWithInitials from '@/components/atoms/ui/AvatarWithInitials';
-import chatApiService from '@/services/chatApiService';
-import sqliteService from '@/services/sqliteService';
-import socketService from '@/services/socketService';
-import chatManagementService from '@/services/chatManagementService';
 import { useTheme } from '@/theme';
-import {
-  dimensions,
-  fontSize,
-  spacing,
-  borderRadius,
-  shadow,
-} from '@/theme/responsive';
-import ContactResolver from '@/utils/contactResolver';
-import { fetchContacts } from '@/services/contactService';
-import { useSocketLifecycle } from '@/hooks/useSocketLifecycle';
+import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
+import { RootState, AppDispatch } from '@/store';
+import { fetchUserChats, setCurrentChat, clearUnreadCount } from '@/store/slices/chatSlice';
+import { socketService } from '@/services/socketService';
+import { ChatData } from '@/services/chatService';
+import CustomHeader from '@/components/atoms/ui/CustomHeader';
 
-type ApiChat = any;
-
-const normalizeChat = (c: ApiChat, currentUserId?: string) => {
-  const id = c?.id || c?._id;
-  const type =
-    (c?.type || c?.chat_type) === 'direct' ? 'direct' : c?.type || 'group';
-  const participants = c?.participants || c?.members || [];
-  let name = c?.name;
-  if (!name && type === 'direct' && Array.isArray(participants)) {
-    const other = participants.find((p: any) => {
-      const participantId = p?.user_id || p?.uid || p?.id || p;
-      return participantId !== currentUserId;
-    });
-    if (other) {
-      name =
-        other?.user_mobile ||
-        other?.phone ||
-        other?.mobile ||
-        other?.userDetails?.fullName ||
-        other?.user_name ||
-        other?.fullName ||
-        other?.name ||
-        `+91${
-          other?.user_mobile || other?.phone || other?.mobile || ''
-        }`.replace(/^\+91$/, 'Unknown');
-    } else {
-      name = 'Unknown';
-    }
-  }
-  return {
-    id,
-    type,
-    name: name || 'Unknown',
-    participants,
-    avatar: c?.avatar || c?.icon || undefined,
-    lastMessage: c?.last_message_content || c?.lastMessage || '',
-    lastMessageTime:
-      c?.last_message_created_at ||
-      c?.updated_at ||
-      c?.created_at ||
-      c?.lastMessageTime ||
-      null,
-    unreadCount: c?.unread_count ?? c?.unreadCount ?? 0,
-  } as any;
-};
-
-const directKey = (chat: any, currentUserId?: string) => {
-  if (chat?.type !== 'direct' || !Array.isArray(chat?.participants)) return '';
-  const ids = chat.participants
-    .map((p: any) => p?.user_id || p?.uid || p?.id)
-    .filter(Boolean)
-    .sort();
-  return ids.join('|');
-};
-
-const dedupeChats = (chats: any[], currentUserId?: string) => {
-  const byId = new Map<string, any>();
-  const byPair = new Map<string, string>();
-  for (const c of chats) {
-    if (!c?.id) continue;
-    if (!byId.has(c.id)) byId.set(c.id, c);
-    else {
-      const prev = byId.get(c.id);
-      const newer =
-        new Date(c.lastMessageTime || 0).getTime() >=
-        new Date(prev?.lastMessageTime || 0).getTime()
-          ? c
-          : prev;
-      byId.set(c.id, newer);
-    }
-    if (c.type === 'direct') {
-      const key = directKey(c, currentUserId);
-      if (key) {
-        const existingId = byPair.get(key);
-        if (!existingId) byPair.set(key, c.id);
-        else {
-          const keep =
-            new Date(byId.get(c.id)?.lastMessageTime || 0).getTime() >=
-            new Date(byId.get(existingId)?.lastMessageTime || 0).getTime()
-              ? c.id
-              : existingId;
-          byPair.set(key, keep);
-        }
-      }
-    }
-  }
-  const keepIds = new Set<string>(byId.keys());
-  for (const [key, keepId] of byPair.entries()) {
-    for (const id of byId.keys()) {
-      if (id === keepId) continue;
-      const a = byId.get(id);
-      const b = byId.get(keepId);
-      if (!a || !b) continue;
-      if (a.type !== 'direct' || b.type !== 'direct') continue;
-      if (
-        directKey(a, currentUserId) === key &&
-        directKey(b, currentUserId) === key
-      ) {
-        keepIds.delete(id);
-      }
-    }
-  }
-  return Array.from(keepIds).map(id => byId.get(id));
-};
-
-export default function ChatScreen() {
-  const navigation = useNavigation();
-  const dispatch = useDispatch();
+const ChatScreen: React.FC = () => {
   const { colors } = useTheme();
-  const { chats, isLoading, error } = useSelector(
-    (state: RootState) => state.chat,
-  );
-  const currentUser = useSelector(selectCurrentUser);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [socketConnected, setSocketConnected] = useState(
-    socketService.getConnectionStatus(),
-  );
-  const [contactResolverReady, setContactResolverReady] = useState(false);
+  const navigation = useNavigation();
+  const dispatch = useDispatch<AppDispatch>();
+  
+  const { chats, loading } = useSelector((state: RootState) => state.chat);
+  const { user } = useSelector((state: RootState) => state.auth);
 
-  // Socket lifecycle management - disconnect when leaving chat context
-  const { cancelDisconnection } = useSocketLifecycle({
-    connectOnFocus: true,
-    disconnectOnBlur: true,
-    disconnectDelay: 30000, // 30 seconds delay before disconnecting
-  });
+  const loadChats = useCallback(async (forceRefresh: boolean = false) => {
+    try {
+      await dispatch(fetchUserChats(forceRefresh)).unwrap();
+    } catch (error) {
+      console.error('Error loading chats:', error);
+    }
+  }, [dispatch]);
 
-  const syncChatsFromServer = useCallback(
-    async (isInitialLoad = false) => {
-      if (!currentUser?.token) return;
-      console.log(
-        `🔄 Syncing chats from server... (Initial: ${isInitialLoad})`,
+  const setupSocketListeners = useCallback(() => {
+    socketService.addChatCreatedListener((chat: ChatData) => {
+      dispatch(setCurrentChat(chat));
+      // Force refresh chats when a new chat is created
+      loadChats(true);
+    });
+    
+    return () => {};
+  }, [dispatch, loadChats]);
+
+  useEffect(() => {
+    loadChats();
+    const cleanup = setupSocketListeners();
+    
+    return cleanup;
+  }, [loadChats, setupSocketListeners]);
+
+  useFocusEffect(
+    useCallback(() => {
+      console.log('🔄 ChatScreen focused, refreshing chats...');
+      loadChats(true); // Force refresh on focus
+    }, [loadChats])
+  );
+
+  const handleChatPress = (chat: ChatData) => {
+    console.log('💬 Opening chat:', chat.id, 'with unread count:', chat.unread_count);
+    
+    // Clear unread count immediately when chat is opened
+    if (chat.unread_count && chat.unread_count > 0) {
+      console.log('🔔 Clearing unread count immediately for chat:', chat.id);
+      dispatch(clearUnreadCount(chat.id));
+    }
+    
+    dispatch(setCurrentChat(chat));
+    (navigation as any).navigate('ConversationScreen', { chat });
+  };
+
+  const handleCreateChat = () => {
+    (navigation as any).navigate('FilteredContactsScreen');
+  };
+
+  const getChatTitle = (chat: ChatData) => {
+    if (chat.type === 'group') {
+      return chat.name || 'Group Chat';
+    } else {
+      const otherParticipant = chat.participants.find(
+        p => p.user_id !== user?.id && p.user_id !== user?.firebaseUid
       );
-      if (isInitialLoad) dispatch(setLoading(true));
+      return otherParticipant?.userDetails?.localName || otherParticipant?.userDetails?.fullName || 'Unknown User';
+    }
+  };
 
-      try {
-        chatApiService.setAuthToken(currentUser.token);
-
-        // Fetch ALL chats from server with pagination if needed
-        let allServerChats: any[] = [];
-        let hasMoreChats = true;
-        let offset = 0;
-        const limit = 50;
-
-        while (hasMoreChats) {
-          const apiChats = await chatApiService.getUserChats();
-
-          if (apiChats.length === 0) {
-            hasMoreChats = false;
-            break;
-          }
-
-          allServerChats.push(...apiChats);
-
-          // If we got fewer chats than requested, we've reached the end
-          if (apiChats.length < limit) {
-            hasMoreChats = false;
-          } else {
-            offset += limit;
-          }
-
-          // Safety check
-          if (offset > 200) {
-            console.warn('🔄 Reached safety limit for chat fetching');
-            break;
-          }
-        }
-
-        console.log(`🔄 Fetched ${allServerChats.length} chats from server`);
-
-        // Step 2: Clean up orphaned chats (chats that exist locally but not on server)
-        console.log(`🧹 [ChatScreen] Checking for orphaned chats...`);
-        const localChats = await sqliteService.getChats();
-        const serverChatIds = new Set(
-          allServerChats.map(chat => chat.id || chat._id),
-        );
-
-        let orphanedChatsRemoved = 0;
-        for (const localChat of localChats) {
-          const localChatId = localChat.id || localChat._id;
-          if (!serverChatIds.has(localChatId)) {
-            console.log(
-              `🗑️ [ChatScreen] Removing orphaned chat: ${localChatId}`,
-            );
-
-            // Remove from Redux state
-            dispatch(removeChat(localChatId));
-
-            // Remove from SQLite
-            await sqliteService.deleteChat(localChatId);
-
-            orphanedChatsRemoved++;
-          }
-        }
-
-        if (orphanedChatsRemoved > 0) {
-          console.log(
-            `✅ [ChatScreen] Removed ${orphanedChatsRemoved} orphaned chats`,
-          );
-        }
-
-        const normalizedApiChats = allServerChats.map(c =>
-          normalizeChat(c, currentUser.id),
-        );
-
-        // Merge with existing chats (deduplication handled in Redux)
-        dispatch(mergeChats(normalizedApiChats));
-
-        // Save all chats to SQLite with proper format
-        let chatsSaved = 0;
-        for (const chat of normalizedApiChats) {
-          try {
-            // Format chat for SQLite storage
-            const chatForSQLite = {
-              id: chat.id,
-              name: chat.name,
-              type: chat.type || 'direct',
-              avatar: chat.avatar,
-              lastMessage: chat.lastMessage || '',
-              lastMessageTime: chat.lastMessageTime,
-              unreadCount: chat.unreadCount || 0,
-              participants: JSON.stringify(chat.participants || []), // Store as JSON string
-              createdAt: chat.createdAt || new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            };
-
-            await sqliteService.saveChat(chatForSQLite);
-            chatsSaved++;
-          } catch (chatSaveError) {
-            console.error(`❌ Failed to save chat ${chat.id}:`, chatSaveError);
-          }
-        }
-
-        console.log(`💾 Saved ${chatsSaved} chats to SQLite`);
-      } catch (error) {
-        console.error('❌ Failed to sync chats from server:', error);
-        if (isInitialLoad) dispatch(setError('Failed to sync chats.'));
-      } finally {
-        if (isInitialLoad) dispatch(setLoading(false));
+  const getChatSubtitle = (chat: ChatData) => {
+    if (chat.last_message) {
+      console.log(`📱 [ChatScreen] Last message for chat ${chat.id}:`, {
+        content: chat.last_message.content,
+        sender_id: chat.last_message.sender_id,
+        created_at: chat.last_message.created_at,
+        currentUserId: user?.id,
+        firebaseUid: user?.firebaseUid
+      });
+      
+      const isFromCurrentUser = chat.last_message.sender_id === user?.id || chat.last_message.sender_id === user?.firebaseUid;
+      if (isFromCurrentUser) {
+        return `You: ${chat.last_message.content}`;
       }
-    },
-    [currentUser, dispatch],
+      return chat.last_message.content;
+    }
+    return chat.type === 'group' 
+      ? `${chat.participants.length} members`
+      : 'No messages yet';
+  };
+
+  const getChatAvatarInitials = (chat: ChatData) => {
+    if (chat.type === 'group') {
+      return chat.name?.charAt(0).toUpperCase() || 'G';
+    } else {
+      const otherParticipant = chat.participants.find(
+        p => p.user_id !== user?.id && p.user_id !== user?.firebaseUid
+      );
+      const name = otherParticipant?.userDetails?.localName || otherParticipant?.userDetails?.fullName;
+      return name?.charAt(0).toUpperCase() || 'U';
+    }
+  };
+
+  const getAvatarColor = (chat: ChatData) => {
+    const avatarColors = [
+      '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', 
+      '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2',
+      '#F8B500', '#52B788', '#E63946', '#457B9D'
+    ];
+    const title = getChatTitle(chat);
+    const index = title.charCodeAt(0) % avatarColors.length;
+    return avatarColors[index];
+  };
+
+  const formatLastMessageTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+
+    if (diffInHours < 24) {
+      return date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+    } else if (diffInHours < 168) {
+      return date.toLocaleDateString('en-US', { weekday: 'short' });
+    } else {
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      });
+    }
+  };
+
+  const renderChatItem = ({ item }: { item: ChatData }) => {
+    const avatarColor = getAvatarColor(item);
+    const hasUnread = item.unread_count && item.unread_count > 0;
+    
+    // Debug logging for unread count
+    if (item.unread_count && item.unread_count > 0) {
+      console.log('🔔 Chat item has unread count:', item.id, item.unread_count);
+    }
+
+    const chatItemStyle = [
+      styles.chatItem,
+      { 
+        backgroundColor: colors.surface,
+        borderLeftColor: hasUnread ? colors.accent : 'transparent'
+      }
+    ];
+
+    return (
+      <TouchableOpacity
+        style={chatItemStyle}
+        onPress={() => handleChatPress(item)}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
+          <Text style={styles.avatarText}>
+            {getChatAvatarInitials(item)}
+          </Text>
+          {item.type === 'group' && (
+            <View style={styles.groupBadge}>
+              <Icon name="people" size={moderateScale(10)} color="#FFFFFF" />
+            </View>
+          )}
+        </View>
+        
+        <View style={styles.chatContent}>
+          <View style={styles.chatHeader}>
+            <Text 
+              style={[
+                styles.chatTitle, 
+                { color: colors.text },
+                hasUnread ? styles.chatTitleUnread : null
+              ]} 
+              numberOfLines={1}
+            >
+              {getChatTitle(item)}
+            </Text>
+            {item.last_message && (
+              <Text style={[styles.chatTime, { color: colors.textSecondary }]}>
+                {formatLastMessageTime(item.last_message.created_at)}
+              </Text>
+            )}
+          </View>
+          
+          <View style={styles.chatSubtitle}>
+            <Text 
+              style={[
+                styles.chatSubtitleText, 
+                { color: colors.textSecondary },
+                hasUnread ? styles.chatSubtitleUnread : null
+              ]} 
+              numberOfLines={2}
+            >
+              {getChatSubtitle(item)}
+            </Text>
+            {hasUnread && (
+              <View style={[styles.unreadBadge, { backgroundColor: colors.accent }]}>
+                <Text style={styles.unreadText}>
+                  {(item.unread_count || 0) > 99 ? '99+' : item.unread_count}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderEmptyState = () => (
+    <View style={styles.emptyContainer}>
+      <View style={[styles.emptyIconContainer, { backgroundColor: colors.surface }]}>
+        <Icon name="chatbubbles-outline" size={moderateScale(56)} color={colors.textSecondary} />
+      </View>
+      <Text style={[styles.emptyTitle, { color: colors.text }]}>
+        No Chats Yet
+      </Text>
+      <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+        Start a conversation by creating a new chat
+      </Text>
+      <TouchableOpacity
+        style={[styles.emptyButton, { backgroundColor: colors.accent }]}
+        onPress={handleCreateChat}
+      >
+        <Icon name="add-circle-outline" size={moderateScale(20)} color="#FFFFFF" />
+        <Text style={styles.emptyButtonText}>Start Chatting</Text>
+      </TouchableOpacity>
+    </View>
   );
 
-  // On-demand socket connection when ChatScreen mounts
-  useEffect(() => {
-    if (!currentUser?.id) return;
 
-    const initializeSocket = async () => {
-      try {
-        console.log(
-          '🔌 [ChatScreen] Initializing on-demand socket connection...',
-        );
-
-        if (!socketService.getConnectionStatus()) {
-          await socketService.connect(currentUser.id, currentUser.token);
-          console.log('✅ [ChatScreen] Socket connected on-demand');
-        } else {
-          console.log('✅ [ChatScreen] Socket already connected');
-        }
-      } catch (error) {
-        console.error('❌ [ChatScreen] Socket connection failed:', error);
-        // Continue without socket - app will work in offline mode
-      }
-    };
-
-    initializeSocket();
-    const unsubConnect = socketService.on('connect', () => {
-      console.log('🔌 [ChatScreen] Socket connected');
-      setSocketConnected(true);
-      // Refresh chats when socket reconnects
-      syncChatsFromServer();
-    });
-    const unsubDisconnect = socketService.on('disconnect', () => {
-      console.log('🔌 [ChatScreen] Socket disconnected');
-      setSocketConnected(false);
-    });
-
-    // Handle real-time chat updates
-    const unsubNewChat = socketService.on('newChat', (chatData: any) => {
-      console.log('📨 [ChatScreen] New chat received:', chatData);
-      // The socket service already handles adding to Redux, just log
-    });
-
-    const unsubChatUpdated = socketService.on(
-      'chatUpdated',
-      (chatData: any) => {
-        console.log('📨 [ChatScreen] Chat updated:', chatData);
-        // The socket service already handles updating Redux, just log
-      },
-    );
-
-    const loadInitialChats = async () => {
-      if (!currentUser?.id) return;
-
-      dispatch(setLoading(true));
-      console.log('🚀 Performing initial chat load from local DB...');
-
-      try {
-        // Initialize chat management service
-        await chatManagementService.initialize();
-
-        // Always load from SQLite first to show cached data immediately
-        const localChats = await sqliteService.getChats();
-        console.log(`🚀 Found ${localChats.length} chats in SQLite`);
-
-        if (localChats.length > 0) {
-          const normalized = localChats.map(c =>
-            normalizeChat(c, currentUser.id),
-          );
-          // Sort by last message time (most recent first)
-          normalized.sort((a, b) => {
-            const timeA = new Date(a.lastMessageTime || 0).getTime();
-            const timeB = new Date(b.lastMessageTime || 0).getTime();
-            return timeB - timeA;
-          });
-          dispatch(setChats(normalized));
-          console.log(
-            `🚀 Loaded ${normalized.length} chats from SQLite to Redux`,
-          );
-        }
-
-        // Then sync with server to get any updates
-        await syncChatsFromServer(true);
-      } catch (error) {
-        console.error('🚀 Error loading initial chats:', error);
-        dispatch(setError('Failed to load chats'));
-      } finally {
-        dispatch(setLoading(false));
-      }
-    };
-
-    initializeContactResolver();
-    loadInitialChats();
-
-    return () => {
-      console.log('🧹 [ChatScreen] Cleaning up socket listeners...');
-      unsubConnect?.();
-      unsubDisconnect?.();
-      unsubNewChat?.();
-      unsubChatUpdated?.();
-
-      // Note: We don't disconnect socket here as user might navigate to ConversationScreen
-      // Socket will be disconnected when user leaves all chat-related screens
-    };
-  }, [currentUser?.id]);
-
-  const onRefresh = useCallback(async () => {
-    setIsRefreshing(true);
-    await syncChatsFromServer();
-    setIsRefreshing(false);
-  }, [syncChatsFromServer]);
-
-  // Auto-refresh chats periodically to catch any missed updates
-  useEffect(() => {
-    if (!currentUser?.id) return;
-
-    const refreshInterval = setInterval(() => {
-      console.log('🔄 [ChatScreen] Periodic chat refresh');
-      syncChatsFromServer();
-    }, 30000); // Refresh every 30 seconds
-
-    return () => clearInterval(refreshInterval);
-  }, [currentUser?.id, syncChatsFromServer]);
-
-  // Periodic cleanup of orphaned data
-  useEffect(() => {
-    if (!currentUser?.id) return;
-
-    const cleanupInterval = setInterval(async () => {
-      console.log('🧹 [ChatScreen] Periodic cleanup of orphaned data');
-      try {
-        // Get all local chats
-        const localChats = await sqliteService.getChats();
-
-        // Check each chat against server
-        for (const localChat of localChats) {
-          const chatId = localChat.id || localChat._id;
-          try {
-            // Try to fetch chat details from server
-            await chatApiService.getChatDetails(chatId);
-          } catch (error) {
-            if (
-              error instanceof Error &&
-              error.message &&
-              error.message.includes('Chat not found')
-            ) {
-              console.log(
-                `🗑️ [ChatScreen] Found orphaned chat during cleanup: ${chatId}`,
-              );
-
-              // Remove from Redux state
-              dispatch(removeChat(chatId));
-
-              // Remove from SQLite
-              await sqliteService.deleteChat(chatId);
-
-              console.log(
-                `✅ [ChatScreen] Cleaned up orphaned chat: ${chatId}`,
-              );
-            }
-          }
-        }
-      } catch (cleanupError) {
-        console.error(
-          '❌ [ChatScreen] Error during periodic cleanup:',
-          cleanupError,
-        );
-      }
-    }, 60000); // Cleanup every 60 seconds
-
-    return () => clearInterval(cleanupInterval);
-  }, [currentUser?.id, dispatch]);
-
-  const initializeContactResolver = async () => {
-    try {
-      console.log('📞 Initializing contact resolver...');
-      const localContacts = await fetchContacts();
-      await ContactResolver.initialize(localContacts);
-      setContactResolverReady(true);
-      console.log('✅ Contact resolver initialized');
-    } catch (error) {
-      console.error('❌ Failed to initialize contact resolver:', error);
-      // Still mark as ready to prevent infinite loading
-      setContactResolverReady(true);
-    }
-  };
-
-  // Enhanced name resolution that prevents flickering
-  const getDisplayName = (item: any): string => {
-    // Always use the enhanced resolver which has better fallbacks
-    return ContactResolver.resolveChatNameEnhanced(item, currentUser?.id || '');
-  };
-
-  const getDisplayAvatar = (item: any): string | null => {
-    if (item.type !== 'direct') {
-      return item.avatar || null;
-    }
-    return ContactResolver.resolveChatAvatar(item, currentUser?.id || '');
-  };
-
-  const handleAddPress = async () => {
-    try {
-      console.log('🔄 Navigating to contacts...');
-      navigation.navigate('FilteredContactsScreen' as never);
-    } catch (error) {
-      console.error('❌ Navigation error:', error);
-      Alert.alert('Navigation Error', 'Please try again.');
-    }
-  };
-
-  if ((isLoading && chats.length === 0) || !contactResolverReady) {
+  if (loading && chats.length === 0) {
     return (
-      <SafeAreaView
-        style={[styles.container, { backgroundColor: colors.background }]}
-      >
-        <CustomStatusBar />
+      <View style={[styles.container, styles.centerContainer, { backgroundColor: colors.background }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <ActivityIndicator size="large" color={colors.accent} />
           <Text style={[styles.loadingText, { color: colors.text }]}>
-            {!contactResolverReady ? 'Loading contacts...' : 'Loading chats...'}
+            Loading your chats...
           </Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: colors.background }]}
-    >
-      <CustomStatusBar />
-      {!socketConnected && (
-        <View
-          style={[styles.connectionBanner, { backgroundColor: colors.warning }]}
-        >
-          <Text
-            style={[styles.connectionText, { color: colors.textOnPrimary }]}
-          >
-            Reconnecting...
-          </Text>
-        </View>
-      )}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <CustomHeader title="Chats" />
+      
       <FlatList
         data={chats}
-        keyExtractor={item => item.id}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={onRefresh}
-            colors={[colors.primary]}
-            tintColor={colors.primary}
-          />
-        }
-        renderItem={({ item }) => {
-          const displayName = getDisplayName(item);
-          const displayAvatar = getDisplayAvatar(item);
-          return (
-            <TouchableOpacity
-              style={[styles.chatItem, { backgroundColor: colors.background }]}
-              onPress={() =>
-                (navigation as any).navigate('ConversationScreen', {
-                  id: item.id,
-                  name: displayName,
-                  avatar: displayAvatar,
-                })
-              }
-            >
-              <AvatarWithInitials
-                name={displayName}
-                profilePicture={displayAvatar}
-                size={50}
-                style={styles.avatar}
-              />
-              <View style={styles.chatInfo}>
-                <View style={styles.row}>
-                  <Text style={[styles.chatName, { color: colors.text }]}>
-                    {displayName}
-                  </Text>
-                  <View style={styles.rightSection}>
-                    {item.lastMessageTime && (
-                      <MessageTime
-                        timestamp={item.lastMessageTime}
-                        variant="list"
-                      />
-                    )}
-                    {item.unreadCount > 0 && (
-                      <View
-                        style={[
-                          styles.badge,
-                          { backgroundColor: colors.primary },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.badgeText,
-                            { color: colors.textOnPrimary },
-                          ]}
-                        >
-                          {item.unreadCount}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-                <Text
-                  style={[styles.lastMessage, { color: colors.subText }]}
-                  numberOfLines={1}
-                >
-                  {item.lastMessage || 'No messages yet'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          );
-        }}
-        ItemSeparatorComponent={() => (
-          <View
-            style={[styles.separator, { backgroundColor: colors.border }]}
-          />
-        )}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={[styles.emptyText, { color: colors.subText }]}>
-              No chats yet. Tap + to start
-            </Text>
-          </View>
-        }
+        keyExtractor={(item) => item.id}
+        renderItem={renderChatItem}
+        ListEmptyComponent={renderEmptyState}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={chats.length === 0 ? styles.emptyListContainer : styles.listContent}
       />
+      
       <TouchableOpacity
-        style={[
-          styles.fab,
-          { backgroundColor: colors.primary, shadowColor: colors.primary },
-          isRefreshing && { opacity: 0.7 },
-        ]}
-        onPress={handleAddPress}
-        activeOpacity={0.7}
-        disabled={isRefreshing}
+        style={[styles.fab, { backgroundColor: colors.accent }]}
+        onPress={handleCreateChat}
+        activeOpacity={0.85}
       >
-        <Icon
-          name={isRefreshing ? 'sync' : 'add'}
-          size={32}
-          color={colors.textOnPrimary}
-        />
+        <Icon name="create-outline" size={moderateScale(28)} color="#FFFFFF" />
       </TouchableOpacity>
-    </SafeAreaView>
+    </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { marginTop: spacing.md, fontSize: fontSize.md },
-  connectionBanner: { padding: spacing.xs, alignItems: 'center' },
-  connectionText: { fontSize: fontSize.sm, fontWeight: '600' },
+  container: {
+    flex: 1,
+  },
+  centerContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: responsiveFont(16),
+    fontWeight: '500',
+    marginTop: hp(2),
+    letterSpacing: 0.3,
+  },
+  listContent: {
+    paddingTop: hp(1),
+    paddingBottom: hp(8), // Reduced bottom padding to remove extra space
+  },
+  chatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: wp(5),
+    paddingVertical: hp(1.8),
+    marginHorizontal: wp(2),
+    marginVertical: hp(0.4),
+    borderRadius: moderateScale(16),
+    borderLeftWidth: 3,
+  },
+  avatar: {
+    width: moderateScale(56),
+    height: moderateScale(56),
+    borderRadius: moderateScale(28),
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: wp(3.5),
+    position: 'relative',
+  },
+  avatarText: {
+    fontSize: responsiveFont(22),
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  groupBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: '#10B981',
+    width: moderateScale(20),
+    height: moderateScale(20),
+    borderRadius: moderateScale(10),
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  chatContent: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  chatHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: hp(0.6),
+  },
+  chatTitle: {
+    fontSize: responsiveFont(17),
+    fontWeight: '600',
+    flex: 1,
+    letterSpacing: 0.2,
+    marginRight: wp(2),
+  },
+  chatTitleUnread: {
+    fontWeight: '700',
+  },
+  chatTime: {
+    fontSize: responsiveFont(13),
+    fontWeight: '500',
+  },
+  chatSubtitle: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  chatSubtitleText: {
+    fontSize: responsiveFont(15),
+    flex: 1,
+    lineHeight: responsiveFont(20),
+    fontWeight: '400',
+  },
+  chatSubtitleUnread: {
+    fontWeight: '600',
+  },
+  unreadBadge: {
+    minWidth: moderateScale(22),
+    height: moderateScale(22),
+    borderRadius: moderateScale(11),
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: moderateScale(6),
+    marginLeft: moderateScale(8),
+  },
+  unreadText: {
+    fontSize: responsiveFont(11),
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
+  emptyListContainer: {
+    flexGrow: 1,
+  },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.xxxl,
+    paddingHorizontal: wp(10),
+    paddingVertical: hp(10),
   },
-  emptyText: { fontSize: fontSize.md, textAlign: 'center' },
-  listContent: { paddingBottom: dimensions.fabHeight + spacing.lg },
-  chatItem: {
-    flexDirection: 'row',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-  },
-  avatar: { marginRight: spacing.sm },
-  chatInfo: { flex: 1, justifyContent: 'center' },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.xs,
-  },
-  chatName: {
-    fontSize: fontSize.md,
-    fontWeight: '600',
-    flex: 1,
-    marginRight: spacing.xs,
-  },
-  rightSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    minWidth: dimensions.iconXLarge + spacing.md,
-    flexShrink: 0,
-  },
-  lastMessage: { fontSize: fontSize.sm, flex: 1, flexShrink: 1 },
-  badge: {
-    minWidth: dimensions.iconSmall + spacing.xs,
-    height: dimensions.iconSmall + spacing.xs,
-    borderRadius: borderRadius.round,
-    alignItems: 'center',
+  emptyIconContainer: {
+    width: moderateScale(120),
+    height: moderateScale(120),
+    borderRadius: moderateScale(60),
     justifyContent: 'center',
-    paddingHorizontal: spacing.xs,
+    alignItems: 'center',
+    marginBottom: hp(3),
   },
-  badgeText: { fontSize: fontSize.xs, fontWeight: '600' },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: dimensions.avatarMedium + spacing.sm,
+  emptyTitle: {
+    fontSize: responsiveFont(24),
+    fontWeight: '700',
+    marginBottom: hp(1),
+    letterSpacing: 0.3,
+  },
+  emptySubtitle: {
+    fontSize: responsiveFont(15),
+    textAlign: 'center',
+    marginBottom: hp(4),
+    lineHeight: responsiveFont(22),
+  },
+  emptyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: moderateScale(24),
+    paddingVertical: moderateScale(14),
+    borderRadius: moderateScale(16),
+  },
+  emptyButtonText: {
+    fontSize: responsiveFont(16),
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginLeft: moderateScale(8),
+    letterSpacing: 0.3,
   },
   fab: {
     position: 'absolute',
-    right: spacing.lg,
-    bottom: spacing.lg,
-    borderRadius: borderRadius.round,
-    width: dimensions.iconXLarge + spacing.md,
-    height: dimensions.iconXLarge + spacing.md,
-    alignItems: 'center',
+    bottom: hp(5),
+    right: wp(6),
+    width: moderateScale(60),
+    height: moderateScale(60),
+    borderRadius: moderateScale(30),
     justifyContent: 'center',
-    ...shadow.lg,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
 });
+
+export default ChatScreen;

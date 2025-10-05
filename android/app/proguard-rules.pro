@@ -127,11 +127,6 @@
 -keep class com.rt2zz.reactnativecontacts.** { *; }
 -dontwarn com.rt2zz.reactnativecontacts.**
 
-# Keep SQLite classes
--keep class io.liteglue.** { *; }
--keep class org.pgsqlite.** { *; }
--dontwarn io.liteglue.**
--dontwarn org.pgsqlite.**
 
 # Keep all fetch and XMLHttpRequest related classes
 -keep class com.facebook.react.modules.network.** { *; }

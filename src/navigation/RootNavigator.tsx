@@ -16,14 +16,24 @@ import SplashScreen from '../screens/SplashScreen';
 const Stack = createStackNavigator<RootStackParamList>();
 
 export default function RootNavigator() {
-  return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="SplashScreen" component={SplashScreen} />
-        <Stack.Screen name="OnboardingStack" component={OnboardingStack} />
-        <Stack.Screen name="AuthStack" component={AuthStack} />
-        <Stack.Screen name="MainStack" component={MainStack} />
-      </Stack.Navigator>
-    </NavigationContainer>
-  );
+  console.log('🚀 RootNavigator rendered');
+  
+  try {
+    return (
+      <NavigationContainer>
+        <Stack.Navigator 
+          initialRouteName="SplashScreen"
+          screenOptions={{ headerShown: false }}
+        >
+          <Stack.Screen name="SplashScreen" component={SplashScreen} />
+          <Stack.Screen name="OnboardingStack" component={OnboardingStack} />
+          <Stack.Screen name="AuthStack" component={AuthStack} />
+          <Stack.Screen name="MainStack" component={MainStack} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    );
+  } catch (error) {
+    console.error('❌ Error in RootNavigator:', error);
+    return null;
+  }
 }

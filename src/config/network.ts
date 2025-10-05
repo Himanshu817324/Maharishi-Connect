@@ -1,7 +1,7 @@
 // Network configuration and debugging utilities
 
 export const NETWORK_CONFIG = {
-  BASE_URL: "https://api.maharishiconnect.com/api", // Actual backend server IP
+  BASE_URL: "https://api.maharishiconnect.com/api", // Production backend server
   TIMEOUT: 15000, // 15 seconds for better reliability
   RETRY_ATTEMPTS: 3,
 };

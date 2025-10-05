@@ -7,19 +7,18 @@ import {
     Keyboard,
     KeyboardAvoidingView,
     Platform,
-    ScrollView,
     StatusBar,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     TouchableWithoutFeedback,
-    View
+    View,
+    Animated
 } from 'react-native';
 import { RootStackParamList } from '../../types/navigation';
 import { LightColors } from '../../theme/colors';
 
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import Icon from 'react-native-vector-icons/Ionicons';
 import ModernDropdown from '../../components/atoms/ui/ModernDropdown';
@@ -28,7 +27,6 @@ import ModernDropdown from '../../components/atoms/ui/ModernDropdown';
 
 const LoginScreen = () => {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
-  const insets = useSafeAreaInsets();
 
   // --- States ---
   const [selectedCountry, setSelectedCountry] = useState<string>("India");
@@ -36,40 +34,52 @@ const LoginScreen = () => {
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
-  const scrollViewRef = useRef<ScrollView>(null);
   const phoneInputRef = useRef<TextInput>(null);
+  const screenOffsetAnim = useRef(new Animated.Value(0)).current;
 
-  // --- Auto-scroll functionality ---
+  // --- Keyboard handling ---
   useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
-      if (isFocused) {
-        // Scroll to a position that shows the input field clearly
-        setTimeout(() => {
-          scrollViewRef.current?.scrollTo({ y: 350, animated: true });
-        }, 200);
-      }
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+      // Move the entire screen up by a significant amount with smooth animation
+      const offset = -e.endCoordinates.height * 0.3;
+      
+      Animated.timing(screenOffsetAnim, {
+        toValue: offset,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
     });
 
     const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
-      // Reset focus state when keyboard hides
+      setKeyboardHeight(0);
       setIsFocused(false);
+      
+      Animated.timing(screenOffsetAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
     });
 
     return () => {
       keyboardDidShowListener?.remove();
       keyboardDidHideListener?.remove();
     };
-  }, [isFocused]);
+  }, [screenOffsetAnim]);
 
-  // Also trigger scroll on focus
+  // Auto-dismiss keyboard when phone number is complete
   useEffect(() => {
-    if (isFocused) {
-      setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 350, animated: true });
-      }, 100);
+    if (phoneNumber.length >= 10) {
+      // Small delay to allow user to see the complete number
+      const timer = setTimeout(() => {
+        Keyboard.dismiss();
+      }, 500);
+      return () => clearTimeout(timer);
     }
-  }, [isFocused]);
+  }, [phoneNumber]);
 
   // --- Helper ---
   const normalizePhone = (input: string) => {
@@ -153,20 +163,20 @@ const LoginScreen = () => {
     }
   };
 
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior="height"
-      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 50 : 0}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <ScrollView
-          ref={scrollViewRef}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          bounces={false}
-        >
+        <Animated.View style={[
+          styles.content,
+          {
+            transform: [{ translateY: screenOffsetAnim }]
+          }
+        ]}>
           <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
           {/* Header Section */}
@@ -216,8 +226,24 @@ const LoginScreen = () => {
                   maxLength={10}
                   value={phoneNumber}
                   onChangeText={setPhoneNumber}
-                  onFocus={() => setIsFocused(true)}
+                  onFocus={() => {
+                    setIsFocused(true);
+                    // Additional upward movement when focused
+                    if (keyboardHeight > 0) {
+                      Animated.timing(screenOffsetAnim, {
+                        toValue: -keyboardHeight * 0.4,
+                        duration: 200,
+                        useNativeDriver: true,
+                      }).start();
+                    }
+                  }}
                   onBlur={() => setIsFocused(false)}
+                  returnKeyType="done"
+                  onSubmitEditing={() => {
+                    if (phoneNumber.length >= 10) {
+                      Keyboard.dismiss();
+                    }
+                  }}
                 />
               </View>
             </View>
@@ -253,7 +279,7 @@ const LoginScreen = () => {
               By continuing, you agree to our Terms of Service
             </Text>
           </View>
-        </ScrollView>
+        </Animated.View>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
@@ -266,15 +292,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f8fafc",
   },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 100,
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
   },
   headerSection: {
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 24,
-    paddingTop: 60,
+    paddingTop: 20,
+    paddingBottom: 20,
   },
   logoContainer: {
     width: 120,
@@ -284,7 +311,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 32,
-    shadowColor: "#6366f1",
+    shadowColor: "#25D366",
     shadowOffset: {
       width: 0,
       height: 8,
@@ -311,7 +338,6 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   formSection: {
-    paddingHorizontal: 24,
     paddingTop: 20,
     paddingBottom: 20,
   },
@@ -332,8 +358,8 @@ const styles = StyleSheet.create({
     borderColor: "#f1f5f9",
   },
   inputCardFocused: {
-    borderColor: "#6366f1",
-    shadowColor: "#6366f1",
+    borderColor: "#25D366",
+    shadowColor: "#25D366",
     shadowOpacity: 0.1,
   },
   inputLabel: {
@@ -386,17 +412,17 @@ const styles = StyleSheet.create({
   bottomSection: {
     paddingHorizontal: 24,
     paddingBottom: Platform.OS === "ios" ? 40 : 24,
-    paddingTop: 20,
+    paddingTop: 10,
   },
   nextButton: {
-    backgroundColor: "#6366f1",
+    backgroundColor: "#25D366",
     borderRadius: 16,
     paddingVertical: 18,
     paddingHorizontal: 24,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#6366f1",
+    shadowColor: "#25D366",
     shadowOffset: {
       width: 0,
       height: 4,

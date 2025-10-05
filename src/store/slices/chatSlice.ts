@@ -1,630 +1,481 @@
-import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
-import chatApiService from '@/services/chatApiService';
-import sqliteService from '@/services/sqliteService';
-import socketService from '@/services/socketService';
-import { store } from '@/store';
+import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+import { chatService, ChatData } from '@/services/chatService';
 
-// Utility function to normalize chat data
-const normalizeChat = (c: any, currentUserId?: string) => {
-  const id = c?.id || c?._id;
-  const type = (c?.type || c?.chat_type) === 'direct' ? 'direct' : (c?.type || 'group');
-  const participants = c?.participants || c?.members || [];
-
-  let name = c?.name;
-  if (!name && type === 'direct' && Array.isArray(participants)) {
-    const other = participants.find((p: any) => {
-      const participantId = p?.user_id || p?.uid || p?.id || p;
-      return participantId !== currentUserId;
-    });
-    if (other) {
-      // Prioritize participant data over phone number formatting
-      name = other?.userDetails?.fullName ||
-        other?.fullName ||
-        other?.name ||
-        other?.user_name ||
-        other?.displayName ||
-        'Unknown User';
-
-      // Only format phone number if no name is available
-      if (name === 'Unknown User') {
-        const phoneNumber = other?.user_mobile || other?.phone;
-        if (phoneNumber) {
-          const normalizedNumber = phoneNumber.replace(/\D/g, '');
-          if (normalizedNumber.length === 10) {
-            name = `+91${normalizedNumber}`;
-          } else if (normalizedNumber.length > 10) {
-            name = `+91${normalizedNumber.slice(-10)}`;
-          } else {
-            name = phoneNumber;
-          }
-        }
-      }
-    } else {
-      name = 'Unknown';
-    }
-  }
-
-  if (!name || name === 'Unknown Chat') {
-    if (type === 'direct') {
-      name = 'Direct Message';
-    } else {
-      name = 'Group Chat';
-    }
-  }
-
-  return {
-    id,
-    type,
-    name: name || 'Unknown Chat',
-    participants,
-    avatar: c?.avatar || c?.icon || undefined,
-    lastMessage: c?.last_message_content || c?.lastMessage || '',
-    lastMessageTime: c?.last_message_created_at || c?.updated_at || c?.created_at || c?.lastMessageTime || null,
-    unreadCount: c?.unread_count ?? c?.unreadCount ?? 0,
-  } as any;
-};
-
-interface Message {
-  _id: string;
-  text: string;
-  chatId: string;
-  senderId: string;
-  createdAt: string;
-  status: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
-  user: {
-    _id: string;
-    name: string;
-    avatar?: string;
-  };
-  isEdited?: boolean;
-  reactions?: Record<string, number>;
-}
-
-interface ChatState {
-  chats: any[];
-  messages: Record<string, Message[]>;
-  currentChat: any | null;
-  isLoading: boolean;
+export interface ChatState {
+  chats: ChatData[];
+  currentChat: ChatData | null;
+  loading: boolean;
   error: string | null;
-  typingUsers: Record<string, string[]>;
-  onlineUsers: string[];
+  lastFetch: number | null;
 }
 
 const initialState: ChatState = {
   chats: [],
-  messages: {},
   currentChat: null,
-  isLoading: false,
+  loading: false,
   error: null,
-  typingUsers: {},
-  onlineUsers: [],
+  lastFetch: null,
 };
 
-const normalizeMessageId = (msg: any): string => {
-  return msg._id || msg.id || msg.clientId || '';
-};
-
-const deduplicateMessages = (messages: Message[]): Message[] => {
-  const messageMap = new Map<string, Message>();
-  for (const msg of messages) {
-    const id = normalizeMessageId(msg);
-    if (id) {
-      const existing = messageMap.get(id);
-      // Improved deduplication logic:
-      // 1. If no existing message, add it
-      // 2. If existing message is temporary and new one is server message, replace
-      // 3. If both are server messages, keep the newer one
-      // 4. If both are temporary, keep the newer one
-      if (!existing) {
-        messageMap.set(id, msg);
-      } else {
-        const existingIsTemp = existing._id.startsWith('temp_') || existing._id.startsWith('client_');
-        const newIsTemp = msg._id.startsWith('temp_') || msg._id.startsWith('client_');
-
-        if (existingIsTemp && !newIsTemp) {
-          // Replace temp with server message
-          messageMap.set(id, msg);
-        } else if (!existingIsTemp && !newIsTemp) {
-          // Both are server messages, keep the newer one
-          const existingTime = new Date(existing.createdAt).getTime();
-          const newTime = new Date(msg.createdAt).getTime();
-          if (newTime > existingTime) {
-            messageMap.set(id, msg);
-          }
-        } else if (existingIsTemp && newIsTemp) {
-          // Both are temp, keep the newer one
-          const existingTime = new Date(existing.createdAt).getTime();
-          const newTime = new Date(msg.createdAt).getTime();
-          if (newTime > existingTime) {
-            messageMap.set(id, msg);
-          }
-        }
-      }
-    }
-  }
-  return Array.from(messageMap.values()).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-};
-
-export const loadChatMessages = createAsyncThunk('chat/loadChatMessages', async (chatId: string, { rejectWithValue }) => {
-  try {
-    console.log(`📥 [loadChatMessages] Loading messages for chat: ${chatId}`);
-
-    // Step 1: Load from SQLite first (fastest, always available)
-    console.log(`📥 [loadChatMessages] Loading from SQLite...`);
-    const localMessages = await sqliteService.getMessages(chatId);
-    console.log(`📥 [loadChatMessages] Found ${localMessages.length} local messages`);
-
-    // Format local messages properly
-    const formattedLocalMessages: Message[] = localMessages.map(msg => ({
-      _id: msg.id || msg.clientId || msg._id,
-      text: msg.content || msg.text,
-      chatId,
-      senderId: msg.senderId,
-      createdAt: msg.createdAt || msg.timestamp,
-      status: msg.status || 'sent',
-      user: {
-        _id: msg.senderId,
-        name: msg.senderName || msg.senderId || 'User'
-      }
-    }));
-
-    // Step 2: Perform comprehensive server sync to get ALL messages
-    let apiMessages: Message[] = [];
-    let serverSyncSuccessful = false;
-
+// Async thunks
+export const fetchUserChats = createAsyncThunk(
+  'chat/fetchUserChats',
+  async (forceRefresh: boolean = false, { rejectWithValue, getState }) => {
     try {
-      console.log(`📥 [loadChatMessages] Performing comprehensive server sync...`);
-
-      // Enhanced server sync with better error handling and retry logic
-      let retryCount = 0;
-      const maxRetries = 3;
-
-      while (retryCount < maxRetries && !serverSyncSuccessful) {
-        try {
-          console.log(`📥 [loadChatMessages] Server sync attempt ${retryCount + 1}/${maxRetries}`);
-
-          // Always fetch ALL messages from server for complete sync
-          let allServerMessages: any[] = [];
-          let hasMoreMessages = true;
-          let offset = 0;
-          const limit = 100; // Fetch in larger batches
-
-          while (hasMoreMessages) {
-            const batchOptions: any = { limit, offset };
-
-            console.log(`📥 [loadChatMessages] Fetching batch ${offset / limit + 1} (offset: ${offset}, limit: ${limit})`);
-            const rawApiMessages = await chatApiService.getChatMessages(chatId, batchOptions);
-
-            if (rawApiMessages.length === 0) {
-              hasMoreMessages = false;
-              break;
-            }
-
-            allServerMessages.push(...rawApiMessages);
-            console.log(`📥 [loadChatMessages] Fetched ${rawApiMessages.length} messages in this batch`);
-
-            // If we got fewer messages than requested, we've reached the end
-            if (rawApiMessages.length < limit) {
-              hasMoreMessages = false;
-            } else {
-              offset += limit;
-            }
-
-            // Safety check to prevent infinite loops
-            if (offset > 1000) {
-              console.warn(`📥 [loadChatMessages] Reached safety limit for message fetching`);
-              break;
-            }
-          }
-
-          // Step 2.1: Get chat metadata and participants for better sync
-          try {
-            const chatDetails = await chatApiService.getChatDetails(chatId);
-            console.log(`📥 [loadChatMessages] Fetched chat details:`, chatDetails);
-
-            // Update chat in Redux with latest server data
-            if (chatDetails) {
-              const normalizedChat = normalizeChat(chatDetails);
-              store.dispatch(mergeChats([normalizedChat]));
-            }
-          } catch (chatDetailsError) {
-            console.warn('📥 [loadChatMessages] Failed to fetch chat details:', chatDetailsError);
-            // Continue with message sync even if chat details fail
-          }
-
-          // Process server messages
-          apiMessages = allServerMessages.map(msg => ({
-            _id: msg._id || msg.id,
-            text: msg.content || msg.text,
-            chatId,
-            senderId: msg.senderId || msg.sender_id,
-            createdAt: msg.createdAt || msg.created_at,
-            status: msg.status || 'sent',
-            user: {
-              _id: msg.senderId || msg.sender_id,
-              name: msg.senderName || msg.sender_name || 'User'
-            }
-          }));
-
-          console.log(`📥 [loadChatMessages] Found ${apiMessages.length} server messages (${allServerMessages.length} total fetched)`);
-
-          // Mark server sync as successful
-          serverSyncSuccessful = true;
-          console.log(`✅ [loadChatMessages] Server sync successful on attempt ${retryCount + 1}`);
-          break; // Exit retry loop on success
-
-        } catch (retryError) {
-          retryCount++;
-          console.error(`❌ [loadChatMessages] Server sync attempt ${retryCount} failed:`, retryError);
-
-          if (retryCount >= maxRetries) {
-            console.error(`❌ [loadChatMessages] All ${maxRetries} server sync attempts failed`);
-            throw retryError;
-          } else {
-            // Wait before retry (exponential backoff)
-            const delay = Math.pow(2, retryCount) * 1000; // 2s, 4s, 8s
-            console.log(`⏳ [loadChatMessages] Waiting ${delay}ms before retry...`);
-            await new Promise<void>(resolve => setTimeout(resolve, delay));
-          }
-        }
+      const state = getState() as { chat: { lastFetch: number; chats: any[] } };
+      const now = Date.now();
+      const timeSinceLastFetch = now - (state.chat.lastFetch || 0);
+      
+      // If not forced and we have recent data, return existing chats
+      if (!forceRefresh && timeSinceLastFetch < 5000 && state.chat.chats.length > 0) {
+        console.log('📱 [Redux] Skipping fetch - recent data available');
+        return state.chat.chats;
       }
-
-      // Save new messages from server to SQLite with better duplicate handling
-      let newMessagesSaved = 0;
-      let duplicateMessagesSkipped = 0;
-
-      for (const msg of apiMessages) {
-        try {
-          // Check if message exists by both server ID and content to avoid duplicates
-          const exists = await sqliteService.messageExistsEnhanced(msg._id, msg._id);
-          if (!exists) {
-            await sqliteService.saveMessage({
-              id: msg._id,
-              clientId: msg._id,
-              chatId,
-              content: msg.text,
-              text: msg.text,
-              senderId: msg.senderId,
-              timestamp: msg.createdAt,
-              createdAt: msg.createdAt,
-              status: msg.status,
-              senderName: msg.user.name
-            });
-            newMessagesSaved++;
-            console.log(`💾 [loadChatMessages] Saved new message: ${msg._id}`);
-          } else {
-            duplicateMessagesSkipped++;
-            console.log(`💾 [loadChatMessages] Skipped duplicate message: ${msg._id}`);
-          }
-        } catch (saveError) {
-          console.error(`❌ [loadChatMessages] Error saving message ${msg._id}:`, saveError);
-          // Continue with other messages even if one fails
-        }
+      
+      const response = await chatService.getUserChats();
+      if (response.status === 'SUCCESS') {
+        return response.chats || [];
+      } else {
+        throw new Error(response.message || 'Failed to fetch chats');
       }
-
-      console.log(`💾 [loadChatMessages] Saved ${newMessagesSaved} new messages to SQLite, skipped ${duplicateMessagesSkipped} duplicates`);
-      serverSyncSuccessful = true;
-
-    } catch (apiError) {
-      console.error('📥 [loadChatMessages] Server sync failed:', apiError);
-
-      // If chat not found on server, clean up local data
-      if (apiError instanceof Error && apiError.message && apiError.message.includes('Chat not found')) {
-        console.log('🗑️ [loadChatMessages] Chat not found on server, cleaning up local data...');
-
-        // Remove chat from Redux state
-        store.dispatch(removeChat(chatId));
-
-        // Remove chat and messages from SQLite
-        await sqliteService.deleteChat(chatId);
-
-        console.log('✅ [loadChatMessages] Cleaned up orphaned chat and messages');
-
-        // Return empty result
-        return {
-          messages: [],
-          source: 'cleaned-up',
-          chatId,
-        };
-      }
-
-      // Continue with local messages only for other errors
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to fetch chats');
     }
-
-    // Step 3: Combine and deduplicate messages
-    const allMessages = [...formattedLocalMessages, ...apiMessages];
-    const deduplicatedMessages = deduplicateMessages(allMessages);
-
-    // Sort by timestamp (oldest first for proper chronological order)
-    deduplicatedMessages.sort((a, b) =>
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
-
-    console.log(`📥 [loadChatMessages] Final result: ${deduplicatedMessages.length} messages`);
-    console.log(`📥 [loadChatMessages] Server sync: ${serverSyncSuccessful ? 'Success' : 'Failed'}`);
-
-    return {
-      chatId,
-      messages: deduplicatedMessages,
-      source: serverSyncSuccessful ? 'server-synced' : 'local-only'
-    };
-
-  } catch (error) {
-    console.error('📥 [loadChatMessages] Critical error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return rejectWithValue(`Failed to load messages: ${errorMessage}`);
   }
-});
+);
 
-export const deleteChat = createAsyncThunk('chat/deleteChat', async (chatId: string, { dispatch, rejectWithValue }) => {
-  try {
-    console.log(`🗑️ [deleteChat] Deleting chat: ${chatId}`);
-
-    // Step 1: Clean up socket state first to prevent new messages
-    socketService.cleanupChatState(chatId);
-
-    // Remove from Redux state
-    dispatch(removeChat(chatId));
-
-    // Step 3: Delete from SQLite
-    await sqliteService.deleteChat(chatId);
-
-    // Step 4: Delete from server (with retry logic)
-    let serverDeleteSuccess = false;
-    let retryCount = 0;
-    const maxRetries = 3;
-
-    while (!serverDeleteSuccess && retryCount < maxRetries) {
-      try {
-        await chatApiService.deleteChat(chatId);
-        serverDeleteSuccess = true;
-        console.log(`✅ [deleteChat] Server deletion successful: ${chatId}`);
-      } catch (serverError) {
-        retryCount++;
-        console.warn(`⚠️ [deleteChat] Server deletion attempt ${retryCount} failed:`, serverError);
-
-        if (retryCount < maxRetries) {
-          // Wait before retry with exponential backoff
-          await new Promise<void>(resolve => setTimeout(resolve, 1000 * retryCount));
-        }
+export const createChat = createAsyncThunk(
+  'chat/createChat',
+  async (chatData: {
+    type: 'direct' | 'group';
+    name?: string;
+    description?: string;
+    participants: string[];
+  }, { rejectWithValue }) => {
+    try {
+      const response = await chatService.createChat(chatData);
+      if (response.status === 'SUCCESS' && response.chat) {
+        return response.chat;
+      } else {
+        throw new Error(response.message || 'Failed to create chat');
       }
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to create chat');
     }
+  }
+);
 
-    if (!serverDeleteSuccess) {
-      console.error(`❌ [deleteChat] Failed to delete chat from server after ${maxRetries} attempts: ${chatId}`);
-      // Don't throw error - local deletion was successful
+export const getChatDetails = createAsyncThunk(
+  'chat/getChatDetails',
+  async (chatId: string, { rejectWithValue }) => {
+    try {
+      const response = await chatService.getChatDetails(chatId);
+      if (response.status === 'SUCCESS' && response.chat) {
+        return response.chat;
+      } else {
+        throw new Error(response.message || 'Failed to get chat details');
+      }
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to get chat details');
     }
-
-    console.log(`✅ [deleteChat] Chat deletion completed: ${chatId}`);
-    return { chatId, serverDeleted: serverDeleteSuccess };
-  } catch (error) {
-    console.error('❌ [deleteChat] Failed to delete chat:', error);
-    return rejectWithValue(`Failed to delete chat: ${error}`);
   }
-});
+);
 
-export const leaveChat = createAsyncThunk('chat/leaveChat', async (chatId: string, { dispatch, rejectWithValue }) => {
-  try {
-    console.log(`🚪 [leaveChat] Leaving chat: ${chatId}`);
-
-    // Leave chat on server
-    await chatApiService.leaveChat(chatId);
-
-    // Clean up socket state
-    socketService.cleanupChatState(chatId);
-
-    // Remove from Redux state
-    dispatch(removeChat(chatId));
-
-    // Delete from SQLite
-    await sqliteService.deleteChat(chatId);
-
-    console.log(`✅ [leaveChat] Left chat successfully: ${chatId}`);
-    return { chatId };
-  } catch (error) {
-    console.error('❌ [leaveChat] Failed to leave chat:', error);
-    return rejectWithValue(`Failed to leave chat: ${error}`);
+export const joinChat = createAsyncThunk(
+  'chat/joinChat',
+  async (chatId: string, { rejectWithValue }) => {
+    try {
+      const response = await chatService.joinChat(chatId);
+      if (response.status === 'SUCCESS') {
+        return chatId;
+      } else {
+        throw new Error(response.message || 'Failed to join chat');
+      }
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to join chat');
+    }
   }
-});
+);
 
-// Force clean state for new chat creation
-export const prepareForNewChat = createAsyncThunk('chat/prepareForNewChat', async (_, { dispatch }) => {
-  try {
-    console.log('🔄 [prepareForNewChat] Preparing for new chat creation...');
-
-    // Clear all chat state
-    dispatch(clearChatState());
-
-    // Force socket reconnection for clean state
-    socketService.forceReconnect();
-
-    console.log('✅ [prepareForNewChat] Clean state prepared');
-    return { success: true };
-  } catch (error) {
-    console.error('❌ [prepareForNewChat] Failed to prepare clean state:', error);
-    throw error;
+export const leaveChat = createAsyncThunk(
+  'chat/leaveChat',
+  async (chatId: string, { rejectWithValue }) => {
+    try {
+      const response = await chatService.leaveChat(chatId);
+      if (response.status === 'SUCCESS') {
+        return chatId;
+      } else {
+        throw new Error(response.message || 'Failed to leave chat');
+      }
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to leave chat');
+    }
   }
-});
+);
+
+export const deleteChat = createAsyncThunk(
+  'chat/deleteChat',
+  async (chatId: string, { rejectWithValue }) => {
+    try {
+      const response = await chatService.deleteChat(chatId);
+      if (response.status === 'SUCCESS') {
+        return chatId;
+      } else {
+        throw new Error(response.message || 'Failed to delete chat');
+      }
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to delete chat');
+    }
+  }
+);
+
+export const archiveChat = createAsyncThunk(
+  'chat/archiveChat',
+  async (chatId: string, { rejectWithValue }) => {
+    try {
+      const response = await chatService.archiveChat(chatId);
+      if (response.status === 'SUCCESS') {
+        return chatId;
+      } else {
+        throw new Error(response.message || 'Failed to archive chat');
+      }
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to archive chat');
+    }
+  }
+);
+
+export const unarchiveChat = createAsyncThunk(
+  'chat/unarchiveChat',
+  async (chatId: string, { rejectWithValue }) => {
+    try {
+      const response = await chatService.unarchiveChat(chatId);
+      if (response.status === 'SUCCESS') {
+        return chatId;
+      } else {
+        throw new Error(response.message || 'Failed to unarchive chat');
+      }
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to unarchive chat');
+    }
+  }
+);
 
 const chatSlice = createSlice({
   name: 'chat',
   initialState,
   reducers: {
-    setChats: (state, action: PayloadAction<any[]>) => {
-      state.chats = action.payload;
+    setCurrentChat: (state, action: PayloadAction<ChatData | null>) => {
+      state.currentChat = action.payload;
     },
-    mergeChats: (state, action: PayloadAction<any[]>) => {
-      const incomingChats = action.payload;
-      const existingChatMap = new Map(state.chats.map(c => [c.id, c]));
-
-      incomingChats.forEach(incomingChat => {
-        const existingChat = existingChatMap.get(incomingChat.id);
-        if (existingChat) {
-          const existingTime = new Date(existingChat.lastMessageTime || 0).getTime();
-          const incomingTime = new Date(incomingChat.lastMessageTime || 0).getTime();
-          if (incomingTime > existingTime) {
-            Object.assign(existingChat, incomingChat);
-          }
-        } else {
-          state.chats.push(incomingChat);
+    clearCurrentChat: (state) => {
+      state.currentChat = null;
+    },
+    addChat: (state, action: PayloadAction<ChatData>) => {
+      const existingIndex = state.chats.findIndex(chat => chat.id === action.payload.id);
+      if (existingIndex >= 0) {
+        // Update existing chat and move to top
+        state.chats[existingIndex] = action.payload;
+        if (existingIndex > 0) {
+          const [updatedChat] = state.chats.splice(existingIndex, 1);
+          state.chats.unshift(updatedChat);
         }
-      });
-
-      state.chats.sort((a, b) => new Date(b.lastMessageTime || 0).getTime() - new Date(a.lastMessageTime || 0).getTime());
-    },
-    addChat: (state, action: PayloadAction<any>) => {
-      const exists = state.chats.find(c => c.id === action.payload.id);
-      if (!exists) {
+      } else {
+        // Add new chat to the top
         state.chats.unshift(action.payload);
       }
     },
-    addMessage: (state, action: PayloadAction<Message>) => {
-      const message = action.payload;
-      const { chatId } = message;
-      const messageId = normalizeMessageId(message);
-
-      if (!state.messages[chatId]) {
-        state.messages[chatId] = [];
+    updateChat: (state, action: PayloadAction<ChatData>) => {
+      const index = state.chats.findIndex(chat => chat.id === action.payload.id);
+      if (index >= 0) {
+        state.chats[index] = action.payload;
       }
-      const messageExists = state.messages[chatId].some(m => normalizeMessageId(m) === messageId);
-      if (!messageExists) {
-        state.messages[chatId].push(message);
-      }
-
-      const chatIndex = state.chats.findIndex(c => c.id === chatId);
-      if (chatIndex !== -1) {
-        const chatToUpdate = state.chats[chatIndex];
-        chatToUpdate.lastMessage = message.text;
-        chatToUpdate.lastMessageTime = message.createdAt;
-        state.chats.splice(chatIndex, 1);
-        state.chats.unshift(chatToUpdate);
+      if (state.currentChat?.id === action.payload.id) {
+        state.currentChat = action.payload;
       }
     },
-    updateChat: (state, action: PayloadAction<any>) => { const index = state.chats.findIndex(c => c.id === action.payload.id); if (index !== -1) { state.chats[index] = { ...state.chats[index], ...action.payload }; } },
-    updateChatLastMessage: (state, action: PayloadAction<any>) => { const { id } = action.payload; const index = state.chats.findIndex(c => c.id === id); if (index !== -1) { state.chats[index] = { ...state.chats[index], ...action.payload }; const updatedChat = state.chats[index]; state.chats.splice(index, 1); state.chats.unshift(updatedChat); } },
-    setCurrentChat: (state, action: PayloadAction<any>) => { state.currentChat = action.payload; },
-    updateMessageStatus: (state, action: PayloadAction<{ messageId: string; status: string }>) => { const { messageId, status } = action.payload; Object.keys(state.messages).forEach(chatId => { const msgIndex = state.messages[chatId].findIndex(m => m._id === messageId); if (msgIndex !== -1) { state.messages[chatId][msgIndex].status = status as any; } }); },
-    replaceMessageId: (state, action: PayloadAction<{ tempId: string; serverId: string; chatId: string }>) => { const { tempId, serverId, chatId } = action.payload; if (state.messages[chatId]) { const msgIndex = state.messages[chatId].findIndex(m => m._id === tempId); if (msgIndex !== -1) { state.messages[chatId][msgIndex]._id = serverId; } state.messages[chatId] = deduplicateMessages(state.messages[chatId]); } },
-    setMessagesForChat: (state, action: PayloadAction<{ chatId: string; messages: Message[] }>) => { const { chatId, messages } = action.payload; state.messages[chatId] = deduplicateMessages(messages); },
-    updateMessage: (state, action: PayloadAction<{ messageId: string; content: string }>) => { const { messageId, content } = action.payload; Object.keys(state.messages).forEach(chatId => { const msgIndex = state.messages[chatId].findIndex(m => m._id === messageId); if (msgIndex !== -1) { state.messages[chatId][msgIndex].text = content; state.messages[chatId][msgIndex].isEdited = true; } }); },
-    removeMessage: (state, action: PayloadAction<string>) => { Object.keys(state.messages).forEach(chatId => { state.messages[chatId] = state.messages[chatId].filter(m => m._id !== action.payload); }); },
-    addReaction: (state, action: PayloadAction<{ messageId: string; emoji: string; userId: string }>) => { },
-    removeReaction: (state, action: PayloadAction<{ messageId: string; emoji: string; userId: string }>) => { },
-    markChatAsRead: (state, action: PayloadAction<string>) => { const chatId = action.payload; if (state.messages[chatId]) { state.messages[chatId].forEach(msg => { msg.status = 'read'; }); } },
-    setTyping: (state, action: PayloadAction<{ userId: string; chatId: string; isTyping: boolean }>) => { const { userId, chatId, isTyping } = action.payload; if (!state.typingUsers[chatId]) { state.typingUsers[chatId] = []; } if (isTyping) { if (!state.typingUsers[chatId].includes(userId)) { state.typingUsers[chatId].push(userId); } } else { state.typingUsers[chatId] = state.typingUsers[chatId].filter(id => id !== userId); } },
-    setOnlineStatus: (state, action: PayloadAction<{ userId: string; isOnline: boolean }>) => { const { userId, isOnline } = action.payload; if (isOnline) { if (!state.onlineUsers.includes(userId)) { state.onlineUsers.push(userId); } } else { state.onlineUsers = state.onlineUsers.filter(id => id !== userId); } },
-    setLoading: (state, action: PayloadAction<boolean>) => { state.isLoading = action.payload; },
-    setError: (state, action: PayloadAction<string | null>) => { state.error = action.payload; },
-    clearChats: (state) => { state.chats = []; state.messages = {}; state.currentChat = null; },
     removeChat: (state, action: PayloadAction<string>) => {
-      const chatId = action.payload;
-      console.log(`🗑️ [removeChat] Removing chat from state: ${chatId}`);
-
-      // Remove chat from chats array
-      state.chats = state.chats.filter(chat => chat.id !== chatId);
-
-      // Remove all messages for this chat
-      delete state.messages[chatId];
-
-      // Clear current chat if it's the one being deleted
-      if (state.currentChat?.id === chatId) {
+      state.chats = state.chats.filter(chat => chat.id !== action.payload);
+      if (state.currentChat?.id === action.payload) {
         state.currentChat = null;
       }
-
-      // Clear typing indicators for this chat
-      delete state.typingUsers[chatId];
-
-      // Clear any errors related to this chat
-      if (state.error && state.error.includes(chatId)) {
-        state.error = null;
-      }
-
-      console.log(`✅ [removeChat] Chat removed from state: ${chatId}`);
     },
-    clearChatState: (state) => {
-      state.chats = [];
-      state.messages = {};
-      state.currentChat = null;
-      state.isLoading = false;
+    updateChatLastMessage: (state, action: PayloadAction<{
+      chatId: string;
+      lastMessage: {
+        id: string;
+        content: string;
+        sender_id: string;
+        created_at: string;
+      };
+    }>) => {
+      console.log('📱 [Redux] Updating last message for chat:', action.payload.chatId, 'with message:', action.payload.lastMessage);
+      
+      const chat = state.chats.find(c => c.id === action.payload.chatId);
+      if (chat) {
+        chat.last_message = action.payload.lastMessage;
+        chat.updated_at = new Date().toISOString();
+        
+        // Move the chat to the top of the list (most recent)
+        const chatIndex = state.chats.findIndex(c => c.id === action.payload.chatId);
+        console.log('📱 [Redux] Chat index before move:', chatIndex);
+        
+        if (chatIndex > 0) {
+          const [updatedChat] = state.chats.splice(chatIndex, 1);
+          state.chats.unshift(updatedChat);
+          console.log('📱 [Redux] Moved chat to top of list');
+        }
+      }
+      if (state.currentChat?.id === action.payload.chatId) {
+        state.currentChat.last_message = action.payload.lastMessage;
+        state.currentChat.updated_at = new Date().toISOString();
+      }
+    },
+    incrementUnreadCount: (state, action: PayloadAction<string>) => {
+      const chat = state.chats.find(c => c.id === action.payload);
+      if (chat) {
+        chat.unread_count = (chat.unread_count || 0) + 1;
+      }
+      if (state.currentChat?.id === action.payload) {
+        state.currentChat.unread_count = (state.currentChat.unread_count || 0) + 1;
+      }
+    },
+    clearUnreadCount: (state, action: PayloadAction<string>) => {
+      const chat = state.chats.find(c => c.id === action.payload);
+      if (chat) {
+        console.log('🔔 Clearing unread count for chat:', action.payload, 'from', chat.unread_count, 'to 0');
+        chat.unread_count = 0;
+      }
+      if (state.currentChat?.id === action.payload) {
+        console.log('🔔 Clearing unread count for current chat:', action.payload);
+        state.currentChat.unread_count = 0;
+      }
+    },
+    clearError: (state) => {
       state.error = null;
     },
-    clearMessagesForChat: (state, action: PayloadAction<string>) => { const chatId = action.payload; if (state.messages[chatId]) { state.messages[chatId] = []; } },
-    reconcileMessages: (state, action: PayloadAction<{ chatId: string; serverMessages: Message[] }>) => {
-      const { chatId, serverMessages } = action.payload;
-      const localMessages = state.messages[chatId] || [];
-
-      // Create a map of server messages by ID
-      const serverMessageMap = new Map(serverMessages.map(msg => [msg._id, msg]));
-
-      // Update existing messages and add new ones
-      const reconciledMessages: Message[] = [];
-      const processedIds = new Set<string>();
-
-      // First, process all server messages (authoritative)
-      serverMessages.forEach(serverMsg => {
-        reconciledMessages.push(serverMsg);
-        processedIds.add(serverMsg._id);
-      });
-
-      // Then, add any local messages that aren't on server (temporary messages)
-      localMessages.forEach(localMsg => {
-        if (!processedIds.has(localMsg._id) && localMsg._id.startsWith('temp_')) {
-          reconciledMessages.push(localMsg);
-        }
-      });
-
-      // Sort by creation time
-      reconciledMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-      state.messages[chatId] = reconciledMessages;
+    clearChats: (state) => {
+      state.chats = [];
+      state.currentChat = null;
+      state.lastFetch = null;
     },
   },
   extraReducers: (builder) => {
     builder
-      .addCase(loadChatMessages.pending, (state) => {
-        state.isLoading = true;
+      // Fetch user chats
+      .addCase(fetchUserChats.pending, (state) => {
+        state.loading = true;
         state.error = null;
       })
-      .addCase(loadChatMessages.fulfilled, (state, action) => {
-        const { chatId, messages, source } = action.payload;
-        state.messages[chatId] = messages;
-        state.isLoading = false;
+      .addCase(fetchUserChats.fulfilled, (state, action) => {
+        state.loading = false;
+        
+        // Only update chats if we don't have recent data or if this is a forced refresh
+        const now = Date.now();
+        const timeSinceLastFetch = now - state.lastFetch;
+        const shouldUpdate = timeSinceLastFetch > 5000 || state.chats.length === 0; // 5 seconds or no chats
+        
+        if (!shouldUpdate) {
+          console.log('📱 [Redux] Skipping chat update - recent data available');
+          return;
+        }
+        
+        // Sort chats by updated_at (most recent first), then by last_message.created_at
+        console.log('📱 [Redux] Updating chats - sorting before:', action.payload.map(c => ({
+          id: c.id,
+          name: c.name || 'Direct Chat',
+          updated_at: c.updated_at,
+          created_at: c.created_at,
+          last_message: c.last_message?.created_at
+        })));
+        
+        const sortedChats = action.payload.sort((a, b) => {
+          // First, try to sort by updated_at
+          const aUpdated = new Date(a.updated_at || a.created_at || 0).getTime();
+          const bUpdated = new Date(b.updated_at || b.created_at || 0).getTime();
+          
+          if (aUpdated !== bUpdated) {
+            return bUpdated - aUpdated; // Most recent first
+          }
+          
+          // If updated_at is the same, sort by last_message.created_at
+          const aLastMessage = a.last_message?.created_at;
+          const bLastMessage = b.last_message?.created_at;
+          
+          if (aLastMessage && bLastMessage) {
+            return new Date(bLastMessage).getTime() - new Date(aLastMessage).getTime();
+          }
+          
+          // If no last message, keep original order
+          return 0;
+        });
+        
+        // Merge with existing chats to preserve real-time updates
+        const existingChatsMap = new Map(state.chats.map(chat => [chat.id, chat]));
+        const mergedChats = sortedChats.map(serverChat => {
+          const existingChat = existingChatsMap.get(serverChat.id);
+          if (existingChat) {
+            // Preserve real-time updates by keeping the more recent version
+            const existingUpdated = new Date(existingChat.updated_at || existingChat.created_at || 0).getTime();
+            const serverUpdated = new Date(serverChat.updated_at || serverChat.created_at || 0).getTime();
+            
+            if (existingUpdated >= serverUpdated) {
+              console.log('📱 [Redux] Keeping existing chat data for:', serverChat.id);
+              return existingChat;
+            }
+          }
+          return serverChat;
+        });
+        
+        state.chats = mergedChats;
+        
+        console.log('📱 [Redux] Final chats after merge:', state.chats.map(c => ({
+          id: c.id,
+          name: c.name || 'Direct Chat',
+          updated_at: c.updated_at,
+          created_at: c.created_at,
+          last_message: c.last_message?.created_at
+        })));
+        
+        state.lastFetch = now;
         state.error = null;
-        console.log(`🎉 Redux: Loaded ${messages.length} messages for chat ${chatId} (${source})`);
       })
-      .addCase(loadChatMessages.rejected, (state, action) => {
+      .addCase(fetchUserChats.rejected, (state, action) => {
+        state.loading = false;
         state.error = action.payload as string;
-        state.isLoading = false;
-        console.error('🚨 Redux: Failed to load messages:', action.payload);
+      })
+      
+      // Create chat
+      .addCase(createChat.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(createChat.fulfilled, (state, action) => {
+        state.loading = false;
+        state.chats.unshift(action.payload);
+        state.error = null;
+      })
+      .addCase(createChat.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      })
+      
+      // Get chat details
+      .addCase(getChatDetails.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(getChatDetails.fulfilled, (state, action) => {
+        state.loading = false;
+        state.currentChat = action.payload;
+        state.error = null;
+      })
+      .addCase(getChatDetails.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      })
+      
+      // Join chat
+      .addCase(joinChat.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(joinChat.fulfilled, (state, action) => {
+        state.loading = false;
+        state.error = null;
+      })
+      .addCase(joinChat.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      })
+      
+      // Leave chat
+      .addCase(leaveChat.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(leaveChat.fulfilled, (state, action) => {
+        state.loading = false;
+        state.chats = state.chats.filter(chat => chat.id !== action.payload);
+        if (state.currentChat?.id === action.payload) {
+          state.currentChat = null;
+        }
+        state.error = null;
+      })
+      .addCase(leaveChat.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      })
+      
+      // Delete chat
+      .addCase(deleteChat.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(deleteChat.fulfilled, (state, action) => {
+        state.loading = false;
+        state.chats = state.chats.filter(chat => chat.id !== action.payload);
+        if (state.currentChat?.id === action.payload) {
+          state.currentChat = null;
+        }
+        state.error = null;
+      })
+      .addCase(deleteChat.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      })
+      
+      // Archive chat
+      .addCase(archiveChat.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(archiveChat.fulfilled, (state, action) => {
+        state.loading = false;
+        const chat = state.chats.find(c => c.id === action.payload);
+        if (chat) {
+          chat.is_archived = true;
+          chat.archived_at = new Date().toISOString();
+        }
+        state.error = null;
+      })
+      .addCase(archiveChat.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      })
+      
+      // Unarchive chat
+      .addCase(unarchiveChat.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(unarchiveChat.fulfilled, (state, action) => {
+        state.loading = false;
+        const chat = state.chats.find(c => c.id === action.payload);
+        if (chat) {
+          chat.is_archived = false;
+          chat.archived_at = undefined;
+        }
+        state.error = null;
+      })
+      .addCase(unarchiveChat.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
       });
   },
 });
 
 export const {
-  setChats,
-  mergeChats,
+  setCurrentChat,
+  clearCurrentChat,
   addChat,
   updateChat,
-  updateChatLastMessage,
-  setCurrentChat,
-  addMessage,
-  updateMessageStatus,
-  replaceMessageId,
-  setMessagesForChat,
-  updateMessage,
-  removeMessage,
-  addReaction,
-  removeReaction,
-  markChatAsRead,
-  setTyping,
-  setOnlineStatus,
-  setLoading,
-  setError,
-  clearChats,
   removeChat,
-  clearChatState,
-  clearMessagesForChat,
-  reconcileMessages,
+  updateChatLastMessage,
+  incrementUnreadCount,
+  clearUnreadCount,
+  clearError,
+  clearChats,
 } = chatSlice.actions;
 
 export default chatSlice.reducer;

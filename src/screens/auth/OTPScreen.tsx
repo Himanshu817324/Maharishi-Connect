@@ -1,6 +1,6 @@
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import auth, { PhoneAuthProvider } from '@react-native-firebase/auth'; // ✅ ADDED PhoneAuthProvider import
+import auth, { PhoneAuthProvider } from '@react-native-firebase/auth'; 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
@@ -20,7 +20,7 @@ import { apiService } from '../../services/apiService';
 import { login } from '../../store/slices/authSlice';
 import { LightColors } from '../../theme/colors';
 import { RootStackParamList, AuthStackParamList } from '../../types/navigation';
-import { requestContactsPermissionWithAlert } from '../../utils/permissions';
+import { permissionManager } from '../../utils/permissions';
 
 // ✅ FIXED: Correct route type
 type OTPScreenRouteProp = RouteProp<AuthStackParamList, 'OTPScreen'>;
@@ -204,9 +204,7 @@ const OTPScreen = () => {
         // For existing users, request contacts permission before navigating to main app
         console.log('🔐 Requesting contacts permission for existing user...');
         try {
-          const permissionResult = await requestContactsPermissionWithAlert(
-            false,
-          );
+          const permissionResult = await permissionManager.requestContactsPermission();
           if (permissionResult.granted) {
             console.log('✅ Contacts permission granted for existing user');
           } else {
@@ -472,7 +470,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 32,
-    shadowColor: LightColors.primary,
+    shadowColor: LightColors.accent,
     shadowOffset: {
       width: 0,
       height: 6,
@@ -508,7 +506,7 @@ const styles = StyleSheet.create({
   phoneNumber: {
     fontSize: 18,
     fontWeight: '700',
-    color: LightColors.primary,
+    color: LightColors.accent,
     textAlign: 'center',
     marginTop: 8,
     backgroundColor: LightColors.card,
@@ -551,9 +549,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   otpInputFilled: {
-    borderColor: LightColors.primary,
+    borderColor: LightColors.accent,
     backgroundColor: LightColors.background,
-    shadowColor: LightColors.primary,
+    shadowColor: LightColors.accent,
     shadowOffset: {
       width: 0,
       height: 2,
@@ -576,7 +574,7 @@ const styles = StyleSheet.create({
   },
   resendText: {
     fontSize: 14,
-    color: LightColors.button,
+    color: LightColors.accent,
     fontWeight: '600',
   },
   bottomSection: {
@@ -584,11 +582,11 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
   },
   verifyButton: {
-    backgroundColor: LightColors.primary,
+    backgroundColor: LightColors.accent,
     borderRadius: 16,
     paddingVertical: 18,
     alignItems: 'center',
-    shadowColor: LightColors.primary,
+    shadowColor: LightColors.accent,
     shadowOffset: {
       width: 0,
       height: 4,
@@ -599,7 +597,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   verifyButtonDisabled: {
-    backgroundColor: LightColors.subText,
+    backgroundColor: LightColors.border,
     shadowOpacity: 0,
     elevation: 0,
   },
@@ -619,6 +617,6 @@ const styles = StyleSheet.create({
   brandText: {
     fontSize: 16,
     fontWeight: '700',
-    color: LightColors.primary,
+    color: LightColors.accent,
   },
 });

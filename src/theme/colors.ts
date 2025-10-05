@@ -9,9 +9,9 @@ const BaseColors = {
   primaryDark: "#004D40",
   
   // Accent colors
-  accent: "#D9FDD3",
-  accentLight: "#E8F5E8",
-  accentDark: "#25D366",
+  accent: "#25D366",
+  accentLight: "#D9FDD3",
+  accentDark: "#1A9B4A",
   
   // Status colors
   success: "#4CAF50",
@@ -36,8 +36,6 @@ const BaseColors = {
 
 // Platform-specific adjustments
 const getPlatformColors = () => {
-  const isIOS = Platform.OS === 'ios';
-  const isAndroid = Platform.OS === 'android';
   
   return {
     // iOS specific colors

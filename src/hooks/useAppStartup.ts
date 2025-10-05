@@ -2,15 +2,11 @@ import { useEffect, useCallback, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { AppState, AppStateStatus } from 'react-native';
 import { selectCurrentUser, updateUserProfile } from '../store/slices/authSlice';
-import { setLoading, setError, clearChatState } from '../store/slices/chatSlice';
-import messageSyncService from '../services/messageSyncService';
-import socketService from '../services/socketService';
 
 interface AppStartupStatus {
     isInitialized: boolean;
-    isSyncing: boolean;
-    lastSyncTime: number;
-    syncSource: 'server' | 'local' | 'hybrid' | null;
+    isLoading: boolean;
+    lastUpdateTime: number;
 }
 
 export const useAppStartup = () => {
@@ -18,9 +14,8 @@ export const useAppStartup = () => {
     const dispatch = useDispatch();
     const [startupStatus, setStartupStatus] = useState<AppStartupStatus>({
         isInitialized: false,
-        isSyncing: false,
-        lastSyncTime: 0,
-        syncSource: null,
+        isLoading: false,
+        lastUpdateTime: 0,
     });
 
     const initializeApp = useCallback(async () => {
@@ -81,63 +76,25 @@ export const useAppStartup = () => {
 
         try {
             console.log('🚀 [useAppStartup] Starting app initialization...');
-            setStartupStatus(prev => ({ ...prev, isSyncing: true }));
-            dispatch(setLoading(true));
+            setStartupStatus(prev => ({ ...prev, isLoading: true }));
 
-            // Step 1: Initialize message sync service
-            await messageSyncService.initialize();
-            console.log('✅ [useAppStartup] Message sync service initialized');
-
-            // Step 2: Skip global socket connection - will be connected on-demand when user opens chat screens
-            console.log('✅ [useAppStartup] Socket connection deferred to chat screens for better resource management');
-
-            // Step 3: Perform full data synchronization (server first, then local fallback)
-            console.log('🔄 [useAppStartup] Starting full data synchronization...');
-            const syncResult = await messageSyncService.syncAllData({
-                forceServerSync: true,
-                backgroundSync: false
+            // App initialization completed
+            setStartupStatus({
+                isInitialized: true,
+                isLoading: false,
+                lastUpdateTime: Date.now(),
             });
 
-            if (syncResult.success) {
-                console.log(`✅ [useAppStartup] Sync completed successfully:`);
-                console.log(`   📊 Chats: ${syncResult.chatsCount}`);
-                console.log(`   📊 Messages: ${syncResult.messagesCount}`);
-                console.log(`   📊 Source: ${syncResult.source}`);
-
-                setStartupStatus({
-                    isInitialized: true,
-                    isSyncing: false,
-                    lastSyncTime: Date.now(),
-                    syncSource: syncResult.source,
-                });
-            } else {
-                console.error('❌ [useAppStartup] Sync failed:', syncResult.errors);
-                dispatch(setError('Failed to sync data. Using offline mode.'));
-
-                setStartupStatus({
-                    isInitialized: true,
-                    isSyncing: false,
-                    lastSyncTime: 0,
-                    syncSource: 'local',
-                });
-            }
-
-            // Step 4: Start background sync
-            messageSyncService.startBackgroundSync(120000); // Sync every 2 minutes
-            console.log('🔄 [useAppStartup] Background sync started');
+            console.log('✅ [useAppStartup] App initialization completed successfully');
 
         } catch (error) {
             console.error('❌ [useAppStartup] App initialization failed:', error);
-            dispatch(setError('Failed to initialize app. Please restart.'));
 
             setStartupStatus({
                 isInitialized: false,
-                isSyncing: false,
-                lastSyncTime: 0,
-                syncSource: null,
+                isLoading: false,
+                lastUpdateTime: 0,
             });
-        } finally {
-            dispatch(setLoading(false));
         }
     }, [currentUser?.id, currentUser?.token, dispatch]);
 
@@ -145,25 +102,11 @@ export const useAppStartup = () => {
     useEffect(() => {
         const handleAppStateChange = async (nextAppState: AppStateStatus) => {
             if (nextAppState === 'active' && currentUser?.id) {
-                console.log('🔄 [useAppStartup] App became active, performing sync...');
-
-                try {
-                    const syncResult = await messageSyncService.syncAllData({
-                        forceServerSync: true,
-                        backgroundSync: true
-                    });
-
-                    if (syncResult.success) {
-                        setStartupStatus(prev => ({
-                            ...prev,
-                            lastSyncTime: Date.now(),
-                            syncSource: syncResult.source,
-                        }));
-                        console.log(`✅ [useAppStartup] Background sync completed: ${syncResult.source}`);
-                    }
-                } catch (error) {
-                    console.error('❌ [useAppStartup] Background sync failed:', error);
-                }
+                console.log('🔄 [useAppStartup] App became active');
+                setStartupStatus(prev => ({
+                    ...prev,
+                    lastUpdateTime: Date.now(),
+                }));
             }
         };
 
@@ -176,57 +119,31 @@ export const useAppStartup = () => {
         initializeApp();
     }, [initializeApp]);
 
-    // Cleanup on unmount
-    useEffect(() => {
-        return () => {
-            console.log('🧹 [useAppStartup] Cleaning up...');
-            messageSyncService.stopBackgroundSync();
-        };
-    }, []);
-
-    // Force sync function
-    const forceSync = useCallback(async () => {
+    // Force refresh function
+    const forceRefresh = useCallback(async () => {
         if (!currentUser?.id) return;
 
         try {
-            setStartupStatus(prev => ({ ...prev, isSyncing: true }));
-            console.log('🔄 [useAppStartup] Force sync triggered...');
+            setStartupStatus(prev => ({ ...prev, isLoading: true }));
+            console.log('🔄 [useAppStartup] Force refresh triggered...');
 
-            const syncResult = await messageSyncService.syncAllData({
-                forceServerSync: true,
-                backgroundSync: false
-            });
+            // Perform any necessary refresh operations here
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate refresh
 
-            if (syncResult.success) {
-                setStartupStatus(prev => ({
-                    ...prev,
-                    lastSyncTime: Date.now(),
-                    syncSource: syncResult.source,
-                }));
-                console.log(`✅ [useAppStartup] Force sync completed: ${syncResult.source}`);
-            }
+            setStartupStatus(prev => ({
+                ...prev,
+                lastUpdateTime: Date.now(),
+            }));
+            console.log('✅ [useAppStartup] Force refresh completed');
         } catch (error) {
-            console.error('❌ [useAppStartup] Force sync failed:', error);
+            console.error('❌ [useAppStartup] Force refresh failed:', error);
         } finally {
-            setStartupStatus(prev => ({ ...prev, isSyncing: false }));
-        }
-    }, [currentUser?.id]);
-
-    // Sync specific chat
-    const syncChat = useCallback(async (chatId: string) => {
-        if (!currentUser?.id) return;
-
-        try {
-            console.log(`🔄 [useAppStartup] Syncing chat: ${chatId}`);
-            await messageSyncService.forceSyncChat(chatId);
-        } catch (error) {
-            console.error(`❌ [useAppStartup] Failed to sync chat ${chatId}:`, error);
+            setStartupStatus(prev => ({ ...prev, isLoading: false }));
         }
     }, [currentUser?.id]);
 
     return {
         ...startupStatus,
-        forceSync,
-        syncChat,
+        forceRefresh,
     };
 };

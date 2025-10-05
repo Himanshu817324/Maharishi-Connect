@@ -139,4 +139,16 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+    
+    // Permissions handling
+    implementation 'com.karumi:dexter:6.2.3'
+    
+    // Contacts and phone number handling
+    implementation 'com.google.android.gms:play-services-auth:20.7.0'
+    implementation 'com.google.android.gms:play-services-identity:18.0.1'
+    
+    // Media handling
+    implementation 'androidx.exifinterface:exifinterface:1.3.6'
+    implementation 'androidx.media3:media3-exoplayer:1.1.1'
+    implementation 'androidx.media3:media3-ui:1.1.1'
 }
