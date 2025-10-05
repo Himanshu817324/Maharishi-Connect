@@ -8,6 +8,7 @@ import {
   Alert,
   Text,
   Keyboard,
+  LayoutAnimation,
 } from 'react-native';
 import {
   useRoute,
@@ -70,7 +71,6 @@ const ConversationScreen: React.FC = () => {
 
   const chat = routeChat || currentChat;
 
-
   console.log('🔍 ConversationScreen chat state:', {
     routeChat: routeChat?.id,
     currentChat: currentChat?.id,
@@ -110,45 +110,51 @@ const ConversationScreen: React.FC = () => {
           message.id,
         );
         dispatch(addMessage(message));
-        
+
         // Update the chat's last message in the chat list
-        dispatch(updateChatLastMessage({
-          chatId: message.chat_id,
-          lastMessage: {
-            id: message.id,
-            content: message.content,
-            sender_id: message.sender_id,
-            created_at: message.created_at,
-          }
-        }));
-        
+        dispatch(
+          updateChatLastMessage({
+            chatId: message.chat_id,
+            lastMessage: {
+              id: message.id,
+              content: message.content,
+              sender_id: message.sender_id,
+              created_at: message.created_at,
+            },
+          }),
+        );
+
         scrollToBottom();
       }
     });
 
     // Listener for incoming messages from other users
-    const removeMessageListener = socketService.addMessageListener((message: MessageData) => {
-      if (message.chat_id === chat?.id) {
-        console.log(
-          '📨 [ConversationScreen] Incoming message received:',
-          message.id,
-        );
-        dispatch(addMessage(message));
-        
-        // Update the chat's last message in the chat list
-        dispatch(updateChatLastMessage({
-          chatId: message.chat_id,
-          lastMessage: {
-            id: message.id,
-            content: message.content,
-            sender_id: message.sender_id,
-            created_at: message.created_at,
-          }
-        }));
-        
-        scrollToBottom();
-      }
-    });
+    const removeMessageListener = socketService.addMessageListener(
+      (message: MessageData) => {
+        if (message.chat_id === chat?.id) {
+          console.log(
+            '📨 [ConversationScreen] Incoming message received:',
+            message.id,
+          );
+          dispatch(addMessage(message));
+
+          // Update the chat's last message in the chat list
+          dispatch(
+            updateChatLastMessage({
+              chatId: message.chat_id,
+              lastMessage: {
+                id: message.id,
+                content: message.content,
+                sender_id: message.sender_id,
+                created_at: message.created_at,
+              },
+            }),
+          );
+
+          scrollToBottom();
+        }
+      },
+    );
 
     socketService.addConnectionListener((connected: boolean) => {
       console.log('🔌 Socket connection status changed:', connected);
@@ -234,13 +240,15 @@ const ConversationScreen: React.FC = () => {
     }, [chat?.id, dispatch]),
   );
 
-  // Keyboard event listeners
+  // Keyboard event listeners with smooth animations
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener(
       'keyboardDidShow',
       e => {
         setKeyboardHeight(e.endCoordinates.height);
         setIsKeyboardVisible(true);
+        // Smooth animation for keyboard appearance
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         // Scroll to bottom when keyboard appears
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
@@ -253,6 +261,8 @@ const ConversationScreen: React.FC = () => {
       () => {
         setKeyboardHeight(0);
         setIsKeyboardVisible(false);
+        // Smooth animation for keyboard disappearance
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       },
     );
 
@@ -299,18 +309,20 @@ const ConversationScreen: React.FC = () => {
           if (response && response.data) {
             console.log('🔄 Adding message to Redux store:', response.data);
             dispatch(addMessage(response.data));
-            
+
             // Update the chat's last message in the chat list
-            dispatch(updateChatLastMessage({
-              chatId: response.data.chat_id,
-              lastMessage: {
-                id: response.data.id,
-                content: response.data.content,
-                sender_id: response.data.sender_id,
-                created_at: response.data.created_at,
-              }
-            }));
-            
+            dispatch(
+              updateChatLastMessage({
+                chatId: response.data.chat_id,
+                lastMessage: {
+                  id: response.data.id,
+                  content: response.data.content,
+                  sender_id: response.data.sender_id,
+                  created_at: response.data.created_at,
+                },
+              }),
+            );
+
             scrollToBottom();
           } else {
             console.log('⚠️ No message data in response');
@@ -455,7 +467,7 @@ const ConversationScreen: React.FC = () => {
       item.sender_id === user?.id ||
       item.sender_id === user?.firebaseUid;
     const previousMessage = index > 0 ? currentChatMessages[index - 1] : null;
-    
+
     // Only show avatar for group chats, not for direct contacts
     const showAvatar =
       chat?.type === 'group' &&
@@ -568,19 +580,22 @@ const ConversationScreen: React.FC = () => {
     );
   }
 
+  // Platform-specific container component
+  const Container = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
+
   return (
     <CustomSafeAreaView
       style={styles.container}
       topColor={colors.primary}
       bottomColor={colors.background}
     >
-
-        <KeyboardAvoidingView
-          style={styles.keyboardContainer}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-          enabled={true}
-        >
+      <Container
+        style={styles.keyboardContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : undefined}
+        enabled={Platform.OS === 'ios'}
+      >
+        <View style={styles.screen}>
           <ChatHeader
             chat={chat}
             currentUserId={user?.id || user?.firebaseUid}
@@ -593,16 +608,7 @@ const ConversationScreen: React.FC = () => {
             isOnline={isConnected}
           />
 
-          <View
-            style={[
-              styles.messagesWrapper,
-              { backgroundColor: colors.background },
-              isKeyboardVisible &&
-                Platform.OS === 'android' && {
-                  marginBottom: keyboardHeight * 0.1, // Slight adjustment for Android
-                },
-            ]}
-          >
+          <View style={styles.messageListContainer}>
             <FlatList
               ref={flatListRef}
               data={currentChatMessages}
@@ -610,7 +616,7 @@ const ConversationScreen: React.FC = () => {
               renderItem={renderMessage}
               ListEmptyComponent={renderEmptyState}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.messagesContainer}
+              contentContainerStyle={styles.flatListContent}
               onContentSizeChange={scrollToBottom}
               onLayout={scrollToBottom}
               maintainVisibleContentPosition={{
@@ -622,19 +628,27 @@ const ConversationScreen: React.FC = () => {
 
           {renderTypingIndicator()}
 
-          <ChatInput
-            onSendMessage={handleSendMessage}
-            onSendImage={handleSendImage}
-            onSendVideo={handleSendVideo}
-            onSendAudio={handleSendAudio}
-            onSendFile={handleSendFile}
-            replyToMessage={replyToMessage || undefined}
-            onCancelReply={() => setReplyToMessage(null)}
-            disabled={false}
-            keyboardHeight={keyboardHeight}
-            isKeyboardVisible={isKeyboardVisible}
-          />
-        </KeyboardAvoidingView>
+          <View
+            style={[
+              styles.inputContainer,
+              Platform.OS === 'android' && { marginBottom: keyboardHeight },
+            ]}
+          >
+            <ChatInput
+              onSendMessage={handleSendMessage}
+              onSendImage={handleSendImage}
+              onSendVideo={handleSendVideo}
+              onSendAudio={handleSendAudio}
+              onSendFile={handleSendFile}
+              replyToMessage={replyToMessage || undefined}
+              onCancelReply={() => setReplyToMessage(null)}
+              disabled={false}
+              keyboardHeight={keyboardHeight}
+              isKeyboardVisible={isKeyboardVisible}
+            />
+          </View>
+        </View>
+      </Container>
     </CustomSafeAreaView>
   );
 };
@@ -645,7 +659,22 @@ const styles = StyleSheet.create({
   },
   keyboardContainer: {
     flex: 1,
-    justifyContent: 'flex-end', // Ensure content pushes to bottom
+  },
+  screen: {
+    flex: 1,
+  },
+  messageListContainer: {
+    flex: 1,
+  },
+  flatListContent: {
+    flexGrow: 1,
+    justifyContent: 'flex-end',
+    paddingVertical: hp(1),
+    paddingHorizontal: wp(1),
+    paddingBottom: hp(2),
+  },
+  inputContainer: {
+    // Additional styling as needed (padding, border, etc.)
   },
   centerContainer: {
     justifyContent: 'center',
@@ -674,17 +703,6 @@ const styles = StyleSheet.create({
     fontSize: responsiveFont(14),
     textAlign: 'center',
     lineHeight: responsiveFont(20),
-  },
-  messagesWrapper: {
-    flex: 1,
-    minHeight: 0, // Critical for proper scrolling
-    maxHeight: '100%', // Ensure it doesn't exceed screen height
-  },
-  messagesContainer: {
-    flexGrow: 1,
-    paddingVertical: hp(1),
-    paddingHorizontal: wp(1), // Reduced horizontal padding for more space
-    paddingBottom: hp(2), // Extra bottom padding to prevent cutting
   },
   emptyContainer: {
     flex: 1,

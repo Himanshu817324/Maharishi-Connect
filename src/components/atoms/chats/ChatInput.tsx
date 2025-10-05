@@ -13,7 +13,10 @@ import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 
 interface ChatInputProps {
-  onSendMessage: (content: string, messageType?: 'text' | 'image' | 'video' | 'audio' | 'file') => void;
+  onSendMessage: (
+    content: string,
+    messageType?: 'text' | 'image' | 'video' | 'audio' | 'file',
+  ) => void;
   onSendImage?: () => void;
   onSendVideo?: () => void;
   onSendAudio?: () => void;
@@ -55,7 +58,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
-  const handleMediaPress = (type: 'camera' | 'gallery' | 'video' | 'audio' | 'file') => {
+  const handleMediaPress = (
+    type: 'camera' | 'gallery' | 'video' | 'audio' | 'file',
+  ) => {
     setShowMediaMenu(false); // Close menu after selection
     switch (type) {
       case 'camera':
@@ -81,26 +86,30 @@ const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   return (
-    <View style={[
-      styles.container,
-      { 
-        backgroundColor: colors.surface, 
-        borderTopColor: colors.border,
-        paddingBottom: isKeyboardVisible 
-          ? (Platform.OS === 'ios' ? hp(1) : hp(0.5)) 
-          : hp(2), // Platform-specific keyboard padding
-      }
-    ]}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+        },
+      ]}
+    >
       {replyToMessage && (
-        <View style={[
-          styles.replyContainer,
-          { backgroundColor: colors.background, borderColor: colors.border }
-        ]}>
+        <View
+          style={[
+            styles.replyContainer,
+            { backgroundColor: colors.background, borderColor: colors.border },
+          ]}
+        >
           <View style={styles.replyContent}>
             <Text style={[styles.replyLabel, { color: colors.textSecondary }]}>
               Replying to {replyToMessage.sender}
             </Text>
-            <Text style={[styles.replyText, { color: colors.text }]} numberOfLines={1}>
+            <Text
+              style={[styles.replyText, { color: colors.text }]}
+              numberOfLines={1}
+            >
               {replyToMessage.content}
             </Text>
           </View>
@@ -108,41 +117,44 @@ const ChatInput: React.FC<ChatInputProps> = ({
             onPress={onCancelReply}
             style={styles.cancelReplyButton}
           >
-            <Icon name="close" size={moderateScale(20)} color={colors.textSecondary} />
+            <Icon
+              name="close"
+              size={moderateScale(20)}
+              color={colors.textSecondary}
+            />
           </TouchableOpacity>
         </View>
       )}
-      
+
       <View style={styles.inputContainer}>
         <TouchableOpacity
           style={[
             styles.mediaButton,
-            { 
+            {
               backgroundColor: showMediaMenu ? colors.accent : colors.surface,
               borderColor: colors.border,
             },
-            styles.mediaButtonBorder
+            styles.mediaButtonBorder,
           ]}
           onPress={toggleMediaMenu}
           disabled={disabled}
         >
-          <Icon 
-            name={showMediaMenu ? "close" : "add"} 
-            size={moderateScale(24)} 
-            color={showMediaMenu ? colors.textOnPrimary : colors.accent} 
+          <Icon
+            name={showMediaMenu ? 'close' : 'add'}
+            size={moderateScale(24)}
+            color={showMediaMenu ? colors.textOnPrimary : colors.accent}
           />
         </TouchableOpacity>
-        
-        <View style={[
-          styles.textInputContainer,
-          { backgroundColor: colors.background, borderColor: colors.border }
-        ]}>
+
+        <View
+          style={[
+            styles.textInputContainer,
+            { backgroundColor: colors.background, borderColor: colors.border },
+          ]}
+        >
           <TextInput
             ref={inputRef}
-            style={[
-              styles.textInput,
-              { color: colors.text }
-            ]}
+            style={[styles.textInput, { color: colors.text }]}
             value={message}
             onChangeText={setMessage}
             placeholder={placeholder}
@@ -155,13 +167,13 @@ const ChatInput: React.FC<ChatInputProps> = ({
             }}
           />
         </View>
-        
+
         <TouchableOpacity
           style={[
             styles.sendButton,
             {
               backgroundColor: message.trim() ? colors.accent : colors.border,
-            }
+            },
           ]}
           onPress={handleSend}
           disabled={disabled || !message.trim()}
@@ -173,68 +185,128 @@ const ChatInput: React.FC<ChatInputProps> = ({
           />
         </TouchableOpacity>
       </View>
-      
+
       {showMediaMenu && (
         <TouchableWithoutFeedback onPress={() => setShowMediaMenu(false)}>
-          <View style={[styles.mediaMenu, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View
+            style={[
+              styles.mediaMenu,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
             <View style={styles.mediaMenuRow}>
               <TouchableOpacity
                 style={styles.mediaOption}
                 onPress={() => handleMediaPress('camera')}
                 disabled={disabled}
               >
-                <View style={[styles.mediaOptionIcon, { backgroundColor: colors.accent + '15' }]}>
-                  <Icon name="camera" size={moderateScale(24)} color={colors.accent} />
+                <View
+                  style={[
+                    styles.mediaOptionIcon,
+                    { backgroundColor: colors.accent + '15' },
+                  ]}
+                >
+                  <Icon
+                    name="camera"
+                    size={moderateScale(24)}
+                    color={colors.accent}
+                  />
                 </View>
-                <Text style={[styles.mediaOptionText, { color: colors.text }]}>Camera</Text>
+                <Text style={[styles.mediaOptionText, { color: colors.text }]}>
+                  Camera
+                </Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={styles.mediaOption}
                 onPress={() => handleMediaPress('gallery')}
                 disabled={disabled}
               >
-                <View style={[styles.mediaOptionIcon, { backgroundColor: colors.accent + '15' }]}>
-                  <Icon name="image" size={moderateScale(24)} color={colors.accent} />
+                <View
+                  style={[
+                    styles.mediaOptionIcon,
+                    { backgroundColor: colors.accent + '15' },
+                  ]}
+                >
+                  <Icon
+                    name="image"
+                    size={moderateScale(24)}
+                    color={colors.accent}
+                  />
                 </View>
-                <Text style={[styles.mediaOptionText, { color: colors.text }]}>Gallery</Text>
+                <Text style={[styles.mediaOptionText, { color: colors.text }]}>
+                  Gallery
+                </Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={styles.mediaOption}
                 onPress={() => handleMediaPress('video')}
                 disabled={disabled}
               >
-                <View style={[styles.mediaOptionIcon, { backgroundColor: colors.accent + '15' }]}>
-                  <Icon name="videocam" size={moderateScale(24)} color={colors.accent} />
+                <View
+                  style={[
+                    styles.mediaOptionIcon,
+                    { backgroundColor: colors.accent + '15' },
+                  ]}
+                >
+                  <Icon
+                    name="videocam"
+                    size={moderateScale(24)}
+                    color={colors.accent}
+                  />
                 </View>
-                <Text style={[styles.mediaOptionText, { color: colors.text }]}>Video</Text>
+                <Text style={[styles.mediaOptionText, { color: colors.text }]}>
+                  Video
+                </Text>
               </TouchableOpacity>
             </View>
-            
+
             <View style={styles.mediaMenuRow}>
               <TouchableOpacity
                 style={styles.mediaOption}
                 onPress={() => handleMediaPress('audio')}
                 disabled={disabled}
               >
-                <View style={[styles.mediaOptionIcon, { backgroundColor: colors.accent + '15' }]}>
-                  <Icon name="mic" size={moderateScale(24)} color={colors.accent} />
+                <View
+                  style={[
+                    styles.mediaOptionIcon,
+                    { backgroundColor: colors.accent + '15' },
+                  ]}
+                >
+                  <Icon
+                    name="mic"
+                    size={moderateScale(24)}
+                    color={colors.accent}
+                  />
                 </View>
-                <Text style={[styles.mediaOptionText, { color: colors.text }]}>Audio</Text>
+                <Text style={[styles.mediaOptionText, { color: colors.text }]}>
+                  Audio
+                </Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={styles.mediaOption}
                 onPress={() => handleMediaPress('file')}
                 disabled={disabled}
               >
-                <View style={[styles.mediaOptionIcon, { backgroundColor: colors.accent + '15' }]}>
-                  <Icon name="document" size={moderateScale(24)} color={colors.accent} />
+                <View
+                  style={[
+                    styles.mediaOptionIcon,
+                    { backgroundColor: colors.accent + '15' },
+                  ]}
+                >
+                  <Icon
+                    name="document"
+                    size={moderateScale(24)}
+                    color={colors.accent}
+                  />
                 </View>
-                <Text style={[styles.mediaOptionText, { color: colors.text }]}>File</Text>
+                <Text style={[styles.mediaOptionText, { color: colors.text }]}>
+                  File
+                </Text>
               </TouchableOpacity>
-              
+
               <View style={styles.mediaOption} />
             </View>
           </View>
@@ -249,6 +321,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     minHeight: hp(8), // Ensure minimum height
     backgroundColor: 'transparent', // Ensure background is transparent
+    paddingBottom: hp(2), // Consistent bottom padding
   },
   replyContainer: {
     flexDirection: 'row',
