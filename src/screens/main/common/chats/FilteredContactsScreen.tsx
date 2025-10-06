@@ -45,6 +45,8 @@ const FilteredContactsScreen: React.FC = () => {
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
   const [isMultiSelect, _setIsMultiSelect] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [isCreatingChat, setIsCreatingChat] = useState(false);
+  const [hasData, setHasData] = useState(false);
 
   // Filter out current user from contacts
   const filterCurrentUser = useCallback((contacts: Contact[]) => {
@@ -80,6 +82,7 @@ const FilteredContactsScreen: React.FC = () => {
     try {
       setLoading(true);
       setInitialLoadComplete(false);
+      setHasData(false);
       setLoadingPhase('Checking permissions...');
       
       if (!hasPermission && !permissionRequested) {
@@ -121,6 +124,9 @@ const FilteredContactsScreen: React.FC = () => {
       setNonUsers(nonUsersList);
       setFilteredExistingUsers(filteredUsers);
       setFilteredNonUsers(nonUsersList);
+      
+      // Mark that we have data to prevent blinking
+      setHasData(true);
       
       setLoadingPhase('Finalizing...');
       
@@ -168,6 +174,7 @@ const FilteredContactsScreen: React.FC = () => {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    setHasData(false);
     try {
       // Force refresh contacts (bypass cache)
       const { existingUsers: users, nonUsers: nonUsersList } = await contactService.refreshContacts();
@@ -179,6 +186,7 @@ const FilteredContactsScreen: React.FC = () => {
       setNonUsers(nonUsersList);
       setFilteredExistingUsers(filteredUsers);
       setFilteredNonUsers(nonUsersList);
+      setHasData(true);
     } catch (error) {
       console.error('Error refreshing contacts:', error);
     } finally {
@@ -257,6 +265,7 @@ const FilteredContactsScreen: React.FC = () => {
 
   const createDirectChatByPhone = async (phoneNumber: string) => {
     try {
+      setIsCreatingChat(true);
       console.log(`🔍 Creating chat for phone number: ${phoneNumber}`);
       
       const response = await chatService.createDirectChatByPhone(phoneNumber);
@@ -281,6 +290,8 @@ const FilteredContactsScreen: React.FC = () => {
     } catch (error) {
       console.error('Error creating chat by phone:', error);
       Alert.alert('Error', 'Failed to create chat. Please try again.');
+    } finally {
+      setIsCreatingChat(false);
     }
   };
 
@@ -490,8 +501,8 @@ const FilteredContactsScreen: React.FC = () => {
     );
   };
 
-  // Only show loading screen if we don't have any contacts yet
-  if (isLoading && existingUsers.length === 0 && nonUsers.length === 0) {
+  // Only show loading screen if we're still loading and don't have any data yet
+  if (isLoading && !hasData) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <CustomHeader 
@@ -704,6 +715,18 @@ const FilteredContactsScreen: React.FC = () => {
             <Icon name="people" size={moderateScale(18)} color="#FFFFFF" />
             <Text style={styles.createButtonText}>Create Group</Text>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Chat Creation Loader Overlay */}
+      {isCreatingChat && (
+        <View style={styles.loaderOverlay}>
+          <View style={[styles.loaderContainer, { backgroundColor: colors.surface }]}>
+            <ActivityIndicator size="large" color={colors.accent} />
+            <Text style={[styles.loaderText, { color: colors.text }]}>
+              Creating chat...
+            </Text>
+          </View>
         </View>
       )}
     </View>
@@ -1030,6 +1053,38 @@ const styles = StyleSheet.create({
     fontSize: responsiveFont(14),
     marginLeft: wp(2),
     fontWeight: '500',
+  },
+  loaderOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loaderContainer: {
+    paddingHorizontal: moderateScale(24),
+    paddingVertical: moderateScale(20),
+    borderRadius: moderateScale(12),
+    alignItems: 'center',
+    minWidth: moderateScale(120),
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  loaderText: {
+    fontSize: responsiveFont(16),
+    fontWeight: '500',
+    marginTop: moderateScale(12),
+    textAlign: 'center',
   },
 });
 
