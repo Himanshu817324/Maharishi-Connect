@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { messageService, MessageData, MessageQueueItem } from '@/services/messageService';
+import { messageService, MessageQueueItem } from '@/services/messageService';
+import { MessageData } from '@/services/chatService';
 
 export interface MessageState {
   messages: { [chatId: string]: MessageData[] };
@@ -232,11 +233,11 @@ const messageSlice = createSlice({
     addMessage: (state, action: PayloadAction<MessageData>) => {
       const message = action.payload;
       const chatId = message.chat_id;
-      
+
       if (!state.messages[chatId]) {
         state.messages[chatId] = [];
       }
-      
+
       // Check if message already exists
       const existingIndex = state.messages[chatId].findIndex(m => m.id === message.id);
       if (existingIndex >= 0) {
@@ -244,11 +245,11 @@ const messageSlice = createSlice({
       } else {
         state.messages[chatId].push(message);
         // Sort messages by created_at
-        state.messages[chatId].sort((a, b) => 
+        state.messages[chatId].sort((a, b) =>
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         );
       }
-      
+
       // Update current chat messages if this is the current chat
       if (state.currentChatId === chatId) {
         state.currentChatMessages = state.messages[chatId];
@@ -258,22 +259,22 @@ const messageSlice = createSlice({
     addMessageAndCreateChat: (state, action: PayloadAction<{ message: MessageData; chat: any }>) => {
       const { message, chat } = action.payload;
       const chatId = message.chat_id;
-      
+
       // Add message
       if (!state.messages[chatId]) {
         state.messages[chatId] = [];
       }
-      
+
       const existingIndex = state.messages[chatId].findIndex(m => m.id === message.id);
       if (existingIndex >= 0) {
         state.messages[chatId][existingIndex] = message;
       } else {
         state.messages[chatId].push(message);
-        state.messages[chatId].sort((a, b) => 
+        state.messages[chatId].sort((a, b) =>
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         );
       }
-      
+
       // Update current chat messages if this is the current chat
       if (state.currentChatId === chatId) {
         state.currentChatMessages = state.messages[chatId];
@@ -283,14 +284,14 @@ const messageSlice = createSlice({
     updateMessage: (state, action: PayloadAction<MessageData>) => {
       const message = action.payload;
       const chatId = message.chat_id;
-      
+
       if (state.messages[chatId]) {
         const index = state.messages[chatId].findIndex(m => m.id === message.id);
         if (index >= 0) {
           state.messages[chatId][index] = message;
         }
       }
-      
+
       // Update current chat messages if this is the current chat
       if (state.currentChatId === chatId) {
         const index = state.currentChatMessages.findIndex(m => m.id === message.id);
@@ -302,11 +303,11 @@ const messageSlice = createSlice({
     },
     removeMessage: (state, action: PayloadAction<{ messageId: string; chatId: string }>) => {
       const { messageId, chatId } = action.payload;
-      
+
       if (state.messages[chatId]) {
         state.messages[chatId] = state.messages[chatId].filter(m => m.id !== messageId);
       }
-      
+
       // Update current chat messages if this is the current chat
       if (state.currentChatId === chatId) {
         state.currentChatMessages = state.currentChatMessages.filter(m => m.id !== messageId);
@@ -372,6 +373,105 @@ const messageSlice = createSlice({
       state.typingUsers = {};
       state.lastFetch = {};
     },
+    updateMessageStatus: (state, action: PayloadAction<{
+      messageId: string;
+      chatId: string;
+      status: 'sent' | 'delivered' | 'read';
+      userId?: string;
+      timestamp?: string;
+    }>) => {
+      const { messageId, chatId, status, userId, timestamp } = action.payload;
+
+      // Update message in the messages object
+      if (state.messages[chatId]) {
+        const messageIndex = state.messages[chatId].findIndex(m => m.id === messageId);
+        if (messageIndex >= 0) {
+          const message = state.messages[chatId][messageIndex];
+
+          // Update status
+          message.status = status;
+
+          // Update read_by or delivered_to arrays
+          if (status === 'read' && userId && timestamp) {
+            if (!message.read_by) {
+              message.read_by = [];
+            }
+            // Check if user already marked as read
+            const existingRead = message.read_by.find(r => r.user_id === userId);
+            if (!existingRead) {
+              message.read_by.push({
+                user_id: userId,
+                read_at: timestamp
+              });
+            }
+          } else if (status === 'delivered' && userId && timestamp) {
+            if (!message.delivered_to) {
+              message.delivered_to = [];
+            }
+            // Check if user already marked as delivered
+            const existingDelivered = message.delivered_to.find(d => d.user_id === userId);
+            if (!existingDelivered) {
+              message.delivered_to.push({
+                user_id: userId,
+                delivered_at: timestamp
+              });
+            }
+          }
+
+          console.log('📊 [Redux] Updated message status:', {
+            messageId,
+            chatId,
+            status,
+            userId,
+            timestamp
+          });
+        }
+      }
+
+      // Update current chat messages if this is the current chat
+      if (state.currentChatId === chatId) {
+        const messageIndex = state.currentChatMessages.findIndex(m => m.id === messageId);
+        if (messageIndex >= 0) {
+          const message = state.currentChatMessages[messageIndex];
+
+          // Update status
+          message.status = status;
+
+          // Update read_by or delivered_to arrays
+          if (status === 'read' && userId && timestamp) {
+            if (!message.read_by) {
+              message.read_by = [];
+            }
+            const existingRead = message.read_by.find(r => r.user_id === userId);
+            if (!existingRead) {
+              message.read_by.push({
+                user_id: userId,
+                read_at: timestamp
+              });
+            }
+          } else if (status === 'delivered' && userId && timestamp) {
+            if (!message.delivered_to) {
+              message.delivered_to = [];
+            }
+            const existingDelivered = message.delivered_to.find(d => d.user_id === userId);
+            if (!existingDelivered) {
+              message.delivered_to.push({
+                user_id: userId,
+                delivered_at: timestamp
+              });
+            }
+          }
+
+          console.log('📊 [Redux] Updated current chat message status:', {
+            messageId,
+            chatId,
+            status,
+            userId,
+            timestamp
+          });
+        }
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -391,7 +491,7 @@ const messageSlice = createSlice({
         state.loading = false;
         state.error = action.payload as string;
       })
-      
+
       // Send message
       .addCase(sendMessage.pending, (state) => {
         state.loading = true;
@@ -405,7 +505,7 @@ const messageSlice = createSlice({
         state.loading = false;
         state.error = action.payload as string;
       })
-      
+
       // Edit message
       .addCase(editMessage.pending, (state) => {
         state.loading = true;
@@ -415,21 +515,21 @@ const messageSlice = createSlice({
         state.loading = false;
         const message = action.payload;
         const chatId = message.chat_id;
-        
+
         if (state.messages[chatId]) {
           const index = state.messages[chatId].findIndex(m => m.id === message.id);
           if (index >= 0) {
             state.messages[chatId][index] = message;
           }
         }
-        
+
         state.error = null;
       })
       .addCase(editMessage.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
       })
-      
+
       // Delete message
       .addCase(deleteMessage.pending, (state) => {
         state.loading = true;
@@ -438,19 +538,19 @@ const messageSlice = createSlice({
       .addCase(deleteMessage.fulfilled, (state, action) => {
         state.loading = false;
         const messageId = action.payload;
-        
+
         // Find and remove message from all chats
         Object.keys(state.messages).forEach(chatId => {
           state.messages[chatId] = state.messages[chatId].filter(m => m.id !== messageId);
         });
-        
+
         state.error = null;
       })
       .addCase(deleteMessage.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
       })
-      
+
       // Mark message as read
       .addCase(markMessageAsRead.pending, (state) => {
         state.loading = true;
@@ -464,7 +564,7 @@ const messageSlice = createSlice({
         state.loading = false;
         state.error = action.payload as string;
       })
-      
+
       // Search messages
       .addCase(searchMessages.pending, (state) => {
         state.loading = true;
@@ -478,7 +578,7 @@ const messageSlice = createSlice({
         state.loading = false;
         state.error = action.payload as string;
       })
-      
+
       // Add reaction
       .addCase(addReaction.pending, (state) => {
         state.loading = true;
@@ -492,7 +592,7 @@ const messageSlice = createSlice({
         state.loading = false;
         state.error = action.payload as string;
       })
-      
+
       // Remove reaction
       .addCase(removeReaction.pending, (state) => {
         state.loading = true;
@@ -506,7 +606,7 @@ const messageSlice = createSlice({
         state.loading = false;
         state.error = action.payload as string;
       })
-      
+
       // Pin message
       .addCase(pinMessage.pending, (state) => {
         state.loading = true;
@@ -520,7 +620,7 @@ const messageSlice = createSlice({
         state.loading = false;
         state.error = action.payload as string;
       })
-      
+
       // Unpin message
       .addCase(unpinMessage.pending, (state) => {
         state.loading = true;
@@ -534,7 +634,7 @@ const messageSlice = createSlice({
         state.loading = false;
         state.error = action.payload as string;
       })
-      
+
       // Get pinned messages
       .addCase(getPinnedMessages.pending, (state) => {
         state.loading = true;
@@ -568,6 +668,7 @@ export const {
   clearTypingUsers,
   clearError,
   clearAllMessages,
+  updateMessageStatus,
 } = messageSlice.actions;
 
 export default messageSlice.reducer;

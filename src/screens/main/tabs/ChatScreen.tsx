@@ -97,14 +97,53 @@ const ChatScreen: React.FC = () => {
       });
       
       const isFromCurrentUser = chat.last_message.sender_id === user?.id || chat.last_message.sender_id === user?.firebaseUid;
-      if (isFromCurrentUser) {
-        return `You: ${chat.last_message.content}`;
+      
+      // Get message type indicator
+      const getMessageTypeIndicator = (message: any) => {
+        if (!message.message_type) return '';
+        
+        switch (message.message_type) {
+          case 'image':
+            return '📷 ';
+          case 'video':
+            return '🎥 ';
+          case 'audio':
+            return '🎵 ';
+          case 'file':
+            return '📄 ';
+          default:
+            return '';
+        }
+      };
+      
+      const typeIndicator = getMessageTypeIndicator(chat.last_message);
+      const prefix = isFromCurrentUser ? 'You: ' : '';
+      
+      // If it's a media message, show the type indicator
+      if (chat.last_message.message_type && chat.last_message.message_type !== 'text') {
+        return `${prefix}${typeIndicator}${chat.last_message.content || getMediaTypeText(chat.last_message.message_type)}`;
       }
-      return chat.last_message.content;
+      
+      return `${prefix}${chat.last_message.content}`;
     }
     return chat.type === 'group' 
       ? `${chat.participants.length} members`
       : 'No messages yet';
+  };
+
+  const getMediaTypeText = (messageType: string) => {
+    switch (messageType) {
+      case 'image':
+        return 'Photo';
+      case 'video':
+        return 'Video';
+      case 'audio':
+        return 'Audio';
+      case 'file':
+        return 'File';
+      default:
+        return 'Media';
+    }
   };
 
   const getChatAvatarInitials = (chat: ChatData) => {

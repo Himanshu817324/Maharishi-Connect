@@ -3,18 +3,18 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { auth } from '../../config/firebase';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    Image,
-    Keyboard,
-    KeyboardAvoidingView,
-    Platform,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View,
-    Animated
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
+  Animated,
 } from 'react-native';
 import { RootStackParamList } from '../../types/navigation';
 import { LightColors } from '../../theme/colors';
@@ -29,9 +29,9 @@ const LoginScreen = () => {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
 
   // --- States ---
-  const [selectedCountry, setSelectedCountry] = useState<string>("India");
-  const [phoneNumber, setPhoneNumber] = useState<string>("");
-  const [error, setError] = useState<string>("");
+  const [selectedCountry, setSelectedCountry] = useState<string>('India');
+  const [phoneNumber, setPhoneNumber] = useState<string>('');
+  const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -41,28 +41,34 @@ const LoginScreen = () => {
 
   // --- Keyboard handling ---
   useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
-      setKeyboardHeight(e.endCoordinates.height);
-      // Move the entire screen up by a significant amount with smooth animation
-      const offset = -e.endCoordinates.height * 0.3;
-      
-      Animated.timing(screenOffsetAnim, {
-        toValue: offset,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-    });
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      e => {
+        setKeyboardHeight(e.endCoordinates.height);
+        // Move the entire screen up by a significant amount with smooth animation
+        const offset = -e.endCoordinates.height * 0.3;
 
-    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
-      setKeyboardHeight(0);
-      setIsFocused(false);
-      
-      Animated.timing(screenOffsetAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-    });
+        Animated.timing(screenOffsetAnim, {
+          toValue: offset,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      },
+    );
+
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+        setIsFocused(false);
+
+        Animated.timing(screenOffsetAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      },
+    );
 
     return () => {
       keyboardDidShowListener?.remove();
@@ -83,106 +89,116 @@ const LoginScreen = () => {
 
   // --- Helper ---
   const normalizePhone = (input: string) => {
-    let number = input.replace(/\s+/g, ""); // remove spaces
-    if (!number.startsWith("+")) {
-      number = "+91" + number; // default India code
+    let number = input.replace(/\s+/g, ''); // remove spaces
+    if (!number.startsWith('+')) {
+      number = '+91' + number; // default India code
     }
     return number;
   };
 
   const getCountryCode = () => {
     switch (selectedCountry) {
-      case "USA":
-        return "+1";
-      case "UK":
-        return "+44";
+      case 'USA':
+        return '+1';
+      case 'UK':
+        return '+44';
       default:
-        return "+91";
+        return '+91';
     }
   };
 
   // --- Send OTP Logic ---
   const handleSendOtp = async () => {
     if (!phoneNumber) {
-      setError("Please enter your phone number");
-      Toast.show({ type: "error", text1: "Please enter your phone number" });
+      setError('Please enter your phone number');
+      Toast.show({ type: 'error', text1: 'Please enter your phone number' });
       return;
     }
     try {
       setLoading(true);
-      setError("");
+      setError('');
 
       const normalized = normalizePhone(phoneNumber);
-      console.log("=== OTP SENDING DEBUG ===");
-      console.log("Original phone:", phoneNumber);
-      console.log("Normalized phone:", normalized);
-      console.log("Firebase auth instance:", auth());
-      console.log("Current user:", auth().currentUser);
-      console.log("Starting Firebase phone auth...");
+      console.log('=== OTP SENDING DEBUG ===');
+      console.log('Original phone:', phoneNumber);
+      console.log('Normalized phone:', normalized);
+      console.log('Firebase auth instance:', auth());
+      console.log('Current user:', auth().currentUser);
+      console.log('Starting Firebase phone auth...');
 
       // Test Firebase connection first
       try {
         const app = auth().app;
-        console.log("Firebase app name:", app.name);
-        console.log("Firebase options:", app.options);
+        console.log('Firebase app name:', app.name);
+        console.log('Firebase options:', app.options);
       } catch (firebaseError) {
-        console.error("Firebase connection test failed:", firebaseError);
-        throw new Error("Firebase not properly initialized");
+        console.error('Firebase connection test failed:', firebaseError);
+        throw new Error('Firebase not properly initialized');
       }
 
       // Send OTP using Firebase
-      console.log("Calling signInWithPhoneNumber with:", normalized);
+      console.log('Calling signInWithPhoneNumber with:', normalized);
       const confirmation = await auth().signInWithPhoneNumber(normalized);
-      
-      console.log("=== OTP SENT SUCCESSFULLY ===");
-      console.log("Confirmation object:", confirmation);
-      console.log("Verification ID:", confirmation.verificationId);
-      Toast.show({ type: "success", text1: `OTP sent to ${normalized}` });
-      navigation.navigate('AuthStack', { screen: 'OTPScreen', params: { verificationId: confirmation.verificationId || '', phoneNumber: normalized } });
+
+      console.log('=== OTP SENT SUCCESSFULLY ===');
+      console.log('Confirmation object:', confirmation);
+      console.log('Verification ID:', confirmation.verificationId);
+      Toast.show({ type: 'success', text1: `OTP sent to ${normalized}` });
+      navigation.navigate('AuthStack', {
+        screen: 'OTPScreen',
+        params: {
+          verificationId: confirmation.verificationId || '',
+          phoneNumber: normalized,
+        },
+      });
     } catch (err: any) {
-      console.error("Send OTP error:", err);
-      console.error("Error code:", err.code);
-      console.error("Error message:", err.message);
-      console.error("Full error:", JSON.stringify(err, null, 2));
-      
-      let errorMessage = "Failed to send OTP";
+      console.error('Send OTP error:', err);
+      console.error('Error code:', err.code);
+      console.error('Error message:', err.message);
+      console.error('Full error:', JSON.stringify(err, null, 2));
+
+      let errorMessage = 'Failed to send OTP';
       if (err.code === 'auth/too-many-requests') {
-        errorMessage = "Too many requests. Please try again later.";
+        errorMessage = 'Too many requests. Please try again later.';
       } else if (err.code === 'auth/invalid-phone-number') {
-        errorMessage = "Invalid phone number format.";
+        errorMessage = 'Invalid phone number format.';
       } else if (err.code === 'auth/network-request-failed') {
-        errorMessage = "Network error. Please check your connection.";
+        errorMessage = 'Network error. Please check your connection.';
       } else if (err.message) {
         errorMessage = err.message;
       }
-      
+
       setError(errorMessage);
-      Toast.show({ type: "error", text1: errorMessage });
+      Toast.show({ type: 'error', text1: errorMessage });
     } finally {
       setLoading(false);
     }
   };
 
-
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <Animated.View style={[
-          styles.content,
-          {
-            transform: [{ translateY: screenOffsetAnim }]
-          }
-        ]}>
+        <Animated.View
+          style={[
+            styles.content,
+            {
+              transform: [{ translateY: screenOffsetAnim }],
+            },
+          ]}
+        >
           <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
           {/* Header Section */}
           <View style={styles.headerSection}>
             <View style={styles.logoContainer}>
-              <Image style={styles.logo} source={require("../../assets/logo.png")} />
+              <Image
+                style={styles.logo}
+                source={require('../../assets/logo.png')}
+              />
             </View>
 
             <Text style={styles.heading}>Welcome to Maharishi Connect</Text>
@@ -198,9 +214,9 @@ const LoginScreen = () => {
               <ModernDropdown
                 label="Country"
                 options={[
-                  { label: "India", value: "India", emoji: "🇮🇳" },
-                  { label: "United States", value: "USA", emoji: "🇺🇸" },
-                  { label: "United Kingdom", value: "UK", emoji: "🇬🇧" },
+                  { label: 'India', value: 'India', emoji: '🇮🇳' },
+                  { label: 'United States', value: 'USA', emoji: '🇺🇸' },
+                  { label: 'United Kingdom', value: 'UK', emoji: '🇬🇧' },
                 ]}
                 selectedValue={selectedCountry}
                 onValueChange={(value: string) => setSelectedCountry(value)}
@@ -270,7 +286,7 @@ const LoginScreen = () => {
               activeOpacity={0.8}
             >
               <Text style={styles.nextButtonText}>
-                {loading ? "Sending OTP..." : "Continue"}
+                {loading ? 'Sending OTP...' : 'Continue'}
               </Text>
               {!loading && <Icon name="arrow-forward" size={22} color="#fff" />}
             </TouchableOpacity>
@@ -290,7 +306,7 @@ export default LoginScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: '#f8fafc',
   },
   content: {
     flex: 1,
@@ -298,8 +314,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   headerSection: {
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
     paddingTop: 20,
     paddingBottom: 20,
   },
@@ -307,11 +323,11 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 30,
-    backgroundColor: "#ffffff",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 32,
-    shadowColor: "#25D366",
+    shadowColor: '#25D366',
     shadowOffset: {
       width: 0,
       height: 8,
@@ -326,15 +342,15 @@ const styles = StyleSheet.create({
   },
   heading: {
     fontSize: 28,
-    fontWeight: "700",
-    color: "#1e293b",
+    fontWeight: '700',
+    color: '#1e293b',
     marginBottom: 8,
-    textAlign: "center",
+    textAlign: 'center',
   },
   subText: {
     fontSize: 16,
-    color: "#64748b",
-    textAlign: "center",
+    color: '#64748b',
+    textAlign: 'center',
     lineHeight: 24,
   },
   formSection: {
@@ -342,11 +358,11 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   inputCard: {
-    backgroundColor: "#ffffff",
+    backgroundColor: '#ffffff',
     borderRadius: 16,
     padding: 20,
     marginBottom: 16,
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOffset: {
       width: 0,
       height: 2,
@@ -355,25 +371,25 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
     borderWidth: 1,
-    borderColor: "#f1f5f9",
+    borderColor: '#f1f5f9',
   },
   inputCardFocused: {
-    borderColor: "#25D366",
-    shadowColor: "#25D366",
+    borderColor: '#25D366',
+    shadowColor: '#25D366',
     shadowOpacity: 0.1,
   },
   inputLabel: {
     fontSize: 14,
-    fontWeight: "600",
-    color: "#475569",
+    fontWeight: '600',
+    color: '#475569',
     marginBottom: 12,
   },
   phoneContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   countryCodeContainer: {
-    backgroundColor: "#f1f5f9",
+    backgroundColor: '#f1f5f9',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 8,
@@ -381,48 +397,48 @@ const styles = StyleSheet.create({
   },
   countryCode: {
     fontSize: 16,
-    fontWeight: "600",
-    color: "#475569",
+    fontWeight: '600',
+    color: '#475569',
   },
   input: {
     flex: 1,
     fontSize: 16,
-    color: "#1e293b",
+    color: '#1e293b',
     paddingVertical: 12,
   },
   errorContainer: {
-    backgroundColor: "#fef2f2",
+    backgroundColor: '#fef2f2',
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
     borderLeftWidth: 4,
-    borderLeftColor: "#ef4444",
+    borderLeftColor: '#ef4444',
   },
   errorText: {
-    color: "#dc2626",
+    color: '#dc2626',
     fontSize: 14,
-    fontWeight: "500",
+    fontWeight: '500',
   },
   infoText: {
     fontSize: 14,
-    color: "#64748b",
-    textAlign: "center",
+    color: '#64748b',
+    textAlign: 'center',
     lineHeight: 20,
   },
   bottomSection: {
     paddingHorizontal: 24,
-    paddingBottom: Platform.OS === "ios" ? 40 : 24,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
     paddingTop: 10,
   },
   nextButton: {
-    backgroundColor: "#25D366",
+    backgroundColor: '#25D366',
     borderRadius: 16,
     paddingVertical: 18,
     paddingHorizontal: 24,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#25D366",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#25D366',
     shadowOffset: {
       width: 0,
       height: 4,
@@ -433,20 +449,20 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   nextButtonDisabled: {
-    backgroundColor: "#94a3b8",
+    backgroundColor: '#94a3b8',
     shadowOpacity: 0,
     elevation: 0,
   },
   nextButtonText: {
-    color: "#ffffff",
+    color: '#ffffff',
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: '600',
     marginRight: 8,
   },
   disclaimerText: {
     fontSize: 12,
-    color: "#94a3b8",
-    textAlign: "center",
+    color: '#94a3b8',
+    textAlign: 'center',
     lineHeight: 18,
   },
 });

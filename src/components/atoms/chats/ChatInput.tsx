@@ -31,6 +31,8 @@ interface ChatInputProps {
   onCancelReply?: () => void;
   keyboardHeight?: number;
   isKeyboardVisible?: boolean;
+  onStartTyping?: () => void;
+  onStopTyping?: () => void;
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
@@ -45,16 +47,50 @@ const ChatInput: React.FC<ChatInputProps> = ({
   onCancelReply,
   keyboardHeight: _keyboardHeight = 0,
   isKeyboardVisible = false,
+  onStartTyping,
+  onStopTyping,
 }) => {
   const { colors } = useTheme();
   const [message, setMessage] = useState('');
   const [showMediaMenu, setShowMediaMenu] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSend = () => {
     if (message.trim()) {
       onSendMessage(message.trim());
       setMessage('');
+      // Stop typing when message is sent
+      onStopTyping?.();
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+    }
+  };
+
+  const handleTextChange = (text: string) => {
+    setMessage(text);
+
+    // Handle typing indicators
+    if (text.trim().length > 0) {
+      onStartTyping?.();
+
+      // Clear existing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      // Set new timeout to stop typing after 3 seconds of inactivity
+      typingTimeoutRef.current = setTimeout(() => {
+        onStopTyping?.();
+      }, 3000);
+    } else {
+      onStopTyping?.();
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
     }
   };
 
@@ -156,7 +192,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
             ref={inputRef}
             style={[styles.textInput, { color: colors.text }]}
             value={message}
-            onChangeText={setMessage}
+            onChangeText={handleTextChange}
             placeholder={placeholder}
             placeholderTextColor={colors.textSecondary}
             multiline

@@ -41,6 +41,7 @@ export interface ChatData {
     content: string;
     sender_id: string;
     created_at: string;
+    message_type?: 'text' | 'image' | 'video' | 'audio' | 'file';
   };
   unread_count?: number;
   is_archived?: boolean;
@@ -79,6 +80,16 @@ export interface MessageData {
     fullName: string;
     profilePicture?: string;
   };
+  // Message status tracking
+  status?: 'sent' | 'delivered' | 'read';
+  read_by?: Array<{
+    user_id: string;
+    read_at: string;
+  }>;
+  delivered_to?: Array<{
+    user_id: string;
+    delivered_at: string;
+  }>;
 }
 
 export interface SearchResponse {
@@ -145,10 +156,10 @@ class ChatService {
   ): Promise<T> {
     const headers = await this.getAuthHeaders();
     const url = `${this.baseURL}${endpoint}`;
-    
+
     console.log(`🌐 [makeRequest] Making request to: ${url}`);
     console.log(`🌐 [makeRequest] Headers:`, headers);
-    
+
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -183,7 +194,6 @@ class ChatService {
       return {
         status: 'ERROR',
         message: 'Failed to create chat',
-        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
@@ -192,19 +202,19 @@ class ChatService {
   async createDirectChatByPhone(phoneNumber: string): Promise<ChatResponse> {
     try {
       console.log(`🔍 Creating direct chat with phone: ${phoneNumber}`);
-      
+
       // First, get the user ID for this phone number
       const contactResponse = await this.checkContacts([phoneNumber]);
-      
+
       if (contactResponse.users.length === 0) {
         throw new Error('User not found with this phone number');
       }
-      
+
       const user = contactResponse.users[0];
-      
+
       // Use firebaseUid if available, otherwise extract from profile picture
       let correctUserId = user._id;
-      
+
       if (user.firebaseUid) {
         // Use firebaseUid directly if available
         correctUserId = user.firebaseUid;
@@ -226,13 +236,13 @@ class ChatService {
         console.warn(`⚠️ No firebaseUid or profilePicture available for user: ${user._id}`);
         console.warn(`   Using MongoDB _id as fallback: ${user._id}`);
       }
-      
+
       // Get local contact data
       const { contactService } = await import('./contactService');
       const localContact = await contactService.getUserByPhoneNumber(phoneNumber);
-      
+
       console.log(`🔍 Creating chat with user ID: ${correctUserId}`);
-      
+
       // Create chat using the existing /chat/create endpoint
       const response = await this.makeRequest<ChatResponse>('/chat/create', {
         method: 'POST',
@@ -241,7 +251,7 @@ class ChatService {
           participants: [correctUserId],
         }),
       });
-      
+
       // Add local contact data to the response
       if (response.status === 'SUCCESS' && response.chat) {
         response.chat.participants = response.chat.participants.map(participant => {
@@ -259,14 +269,13 @@ class ChatService {
           return participant;
         });
       }
-      
+
       return response;
     } catch (error) {
       console.error('❌ [createDirectChatByPhone] API Error:', error);
       return {
         status: 'ERROR',
         message: 'Failed to create direct chat',
-        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
@@ -278,12 +287,12 @@ class ChatService {
       console.log('📱 [getUserChats] API response:', JSON.stringify(response, null, 2));
       console.log('📱 [getUserChats] Response status:', response.status);
       console.log('📱 [getUserChats] Chats count:', response.chats?.length || 0);
-      
-      
+
+
       // Map local contact data to chat participants and fetch last messages
       if (response.status === 'SUCCESS' && response.chats) {
         const { contactService } = await import('./contactService');
-        
+
         // Get all device contacts for mapping
         const deviceContacts = await contactService.getContactsWithStatus();
         const allContacts = [...deviceContacts.existingUsers, ...deviceContacts.nonUsers.map(nonUser => ({
@@ -294,108 +303,142 @@ class ChatService {
           localProfilePicture: undefined,
           localEmail: undefined,
         }))];
-        
-        // Update each chat with local contact data and fetch last message
-        response.chats = await Promise.all(response.chats.map(async (chat) => {
-          // Fetch last message for this chat
-          let lastMessage = chat.last_message;
-          if (!lastMessage) {
-            try {
-              console.log(`📱 [getUserChats] Fetching last message for chat: ${chat.id}`);
-              // Try to fetch the most recent message by ordering by created_at_desc
-              // If that doesn't work, fall back to fetching a few messages and getting the last one
-              let messagesResponse;
+
+        // Batch fetch last messages for all chats that don't have them
+        const chatsWithoutLastMessage = response.chats.filter(chat => !chat.last_message);
+        console.log(`📱 [getUserChats] Found ${chatsWithoutLastMessage.length} chats without last messages`);
+
+        // Batch fetch last messages for all chats at once
+        if (chatsWithoutLastMessage.length > 0) {
+          try {
+            console.log(`📱 [getUserChats] Batch fetching last messages for ${chatsWithoutLastMessage.length} chats`);
+            const lastMessagesPromises = chatsWithoutLastMessage.map(async (chat) => {
               try {
-                messagesResponse = await this.getChatMessages(chat.id, { 
-                  limit: 1, 
-                  orderBy: 'created_at_desc' 
+                const messagesResponse = await this.getChatMessages(chat.id, {
+                  limit: 1,
+                  orderBy: 'created_at_desc'
                 });
-              } catch (error) {
-                // Fallback: fetch a few messages and get the last one
-                console.log(`📱 [getUserChats] OrderBy not supported, fetching multiple messages for chat: ${chat.id}`);
-                messagesResponse = await this.getChatMessages(chat.id, { limit: 5 });
-              }
-              
-              if (messagesResponse.messages && messagesResponse.messages.length > 0) {
-                console.log(`📱 [getUserChats] Raw messages for chat ${chat.id}:`, messagesResponse.messages.map(m => ({
-                  id: m.id,
-                  content: m.content,
-                  created_at: m.created_at,
-                  sender_id: m.sender_id
-                })));
-                
-                // Sort messages by created_at to ensure we get the most recent one
-                const sortedMessages = messagesResponse.messages.sort((a, b) => 
-                  new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                );
-                const latestMessage = sortedMessages[0]; // Most recent message
-                
-                console.log(`📱 [getUserChats] Sorted messages for chat ${chat.id}:`, sortedMessages.map(m => ({
-                  id: m.id,
-                  content: m.content,
-                  created_at: m.created_at,
-                  sender_id: m.sender_id
-                })));
-                
-                lastMessage = {
-                  id: latestMessage.id,
-                  content: latestMessage.content,
-                  sender_id: latestMessage.sender_id,
-                  created_at: latestMessage.created_at,
-                };
-                console.log(`📱 [getUserChats] Selected last message for chat ${chat.id}:`, lastMessage);
-              }
-            } catch (error) {
-              console.log(`⚠️ [getUserChats] Failed to fetch last message for chat ${chat.id}:`, error);
-            }
-          }
-          
-          return {
-            ...chat,
-            last_message: lastMessage,
-            participants: chat.participants.map(participant => {
-              // Find local contact data for this participant
-              const localContact = allContacts.find(contact => {
-                if (!contact.phoneNumber) return false;
-                // Try to match by phone number
-                let cleaned = contact.phoneNumber.replace(/[^\d+]/g, '');
-                if (cleaned.startsWith('+91')) {
-                  cleaned = cleaned.substring(3);
-                } else if (cleaned.startsWith('91') && cleaned.length === 12) {
-                  cleaned = cleaned.substring(2);
+
+                if (messagesResponse.messages && messagesResponse.messages.length > 0) {
+                  const latestMessage = messagesResponse.messages[0];
+                  return {
+                    chatId: chat.id,
+                    lastMessage: {
+                      id: latestMessage.id,
+                      content: latestMessage.content,
+                      sender_id: latestMessage.sender_id,
+                      created_at: latestMessage.created_at,
+                      message_type: latestMessage.message_type,
+                    }
+                  };
                 }
-                
-                // Check if this participant has a phone number we can match
-                // For now, we'll match by user_id or try to find by name
-                return contact.user_id === participant.user_id || 
-                       contact.fullName === participant.userDetails.fullName;
-              });
-              
-              if (localContact) {
-                return {
-                  ...participant,
-                  userDetails: {
-                    ...participant.userDetails,
-                    localName: localContact.localName || localContact.fullName,
-                    localProfilePicture: localContact.localProfilePicture,
-                    phoneNumber: localContact.phoneNumber,
-                  }
-                };
+                return { chatId: chat.id, lastMessage: null };
+              } catch (error) {
+                console.log(`⚠️ [getUserChats] Failed to fetch last message for chat ${chat.id}:`, error);
+                return { chatId: chat.id, lastMessage: null };
               }
-              
-              return participant;
-            })
-          };
-        }));
+            });
+
+            const lastMessagesResults = await Promise.all(lastMessagesPromises);
+            const lastMessagesMap = new Map(
+              lastMessagesResults.map(result => [result.chatId, result.lastMessage])
+            );
+
+            console.log(`📱 [getUserChats] Successfully fetched last messages for ${lastMessagesResults.length} chats`);
+
+            // Update each chat with local contact data and last message
+            response.chats = response.chats.map((chat) => {
+              const lastMessage = chat.last_message || lastMessagesMap.get(chat.id);
+
+              return {
+                ...chat,
+                last_message: lastMessage || undefined,
+                participants: chat.participants.map(participant => {
+                  // Find local contact data for this participant
+                  const localContact = allContacts.find(contact => {
+                    if (!contact.phoneNumber) return false;
+                    // Try to match by phone number
+                    let cleaned = contact.phoneNumber.replace(/[^\d+]/g, '');
+                    if (cleaned.startsWith('+91')) {
+                      cleaned = cleaned.substring(3);
+                    } else if (cleaned.startsWith('91') && cleaned.length === 12) {
+                      cleaned = cleaned.substring(2);
+                    }
+
+                    // Check if this participant has a phone number we can match
+                    // For now, we'll match by user_id or try to find by name
+                    return contact.user_id === participant.user_id ||
+                      contact.fullName === participant.userDetails.fullName;
+                  });
+
+                  if (localContact) {
+                    return {
+                      ...participant,
+                      userDetails: {
+                        ...participant.userDetails,
+                        localName: localContact.localName || localContact.fullName,
+                        localProfilePicture: localContact.localProfilePicture,
+                        phoneNumber: localContact.phoneNumber,
+                      }
+                    };
+                  }
+
+                  return participant;
+                })
+              };
+            });
+          } catch (error) {
+            console.log(`⚠️ [getUserChats] Failed to batch fetch last messages:`, error);
+            // Continue with original chats if batch fetch fails
+          }
+        } else {
+          // Update each chat with local contact data (no last message fetching needed)
+          response.chats = response.chats.map((chat) => {
+            return {
+              ...chat,
+              participants: chat.participants.map(participant => {
+                // Find local contact data for this participant
+                const localContact = allContacts.find(contact => {
+                  if (!contact.phoneNumber) return false;
+                  // Try to match by phone number
+                  let cleaned = contact.phoneNumber.replace(/[^\d+]/g, '');
+                  if (cleaned.startsWith('+91')) {
+                    cleaned = cleaned.substring(3);
+                  } else if (cleaned.startsWith('91') && cleaned.length === 12) {
+                    cleaned = cleaned.substring(2);
+                  }
+
+                  // Check if this participant has a phone number we can match
+                  // For now, we'll match by user_id or try to find by name
+                  return contact.user_id === participant.user_id ||
+                    contact.fullName === participant.userDetails.fullName;
+                });
+
+                if (localContact) {
+                  return {
+                    ...participant,
+                    userDetails: {
+                      ...participant.userDetails,
+                      localName: localContact.localName || localContact.fullName,
+                      localProfilePicture: localContact.localProfilePicture,
+                      phoneNumber: localContact.phoneNumber,
+                    }
+                  };
+                }
+
+                return participant;
+              })
+            };
+          });
+        }
       }
-      
+
       return response;
     } catch (error) {
       console.error('❌ [getUserChats] API call failed:', error);
       return {
         status: 'ERROR',
         message: 'Failed to load chats',
-        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
@@ -497,11 +540,11 @@ class ChatService {
       if (!chatId) {
         throw new Error('Chat ID is required');
       }
-      
+
       // No test chats - all chats should come from the server
 
       const params = new URLSearchParams();
-      
+
       if (options.limit) params.append('limit', options.limit.toString());
       if (options.offset) params.append('offset', options.offset.toString());
       if (options.beforeMessageId) params.append('beforeMessageId', options.beforeMessageId);
@@ -509,10 +552,10 @@ class ChatService {
 
       const queryString = params.toString();
       const endpoint = `/chat/${chatId}/messages${queryString ? `?${queryString}` : ''}`;
-      
+
       console.log(`📱 [getChatMessages] Fetching messages for chat ${chatId} with options:`, options);
       console.log(`📱 [getChatMessages] Endpoint: ${endpoint}`);
-      
+
       const response = await this.makeRequest<MessageResponse>(endpoint);
       console.log(`📱 [getChatMessages] API response for chat ${chatId}:`, {
         status: response.status,
@@ -524,14 +567,13 @@ class ChatService {
           sender_id: m.sender_id
         }))
       });
-      
+
       return response;
     } catch (error) {
       console.error('❌ [getChatMessages] API Error:', error);
       return {
         status: 'ERROR',
         message: 'Failed to load messages',
-        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
@@ -569,7 +611,7 @@ class ChatService {
     offset?: number;
   }): Promise<SearchResponse> {
     const params = new URLSearchParams();
-    
+
     params.append('q', options.q);
     if (options.chatId) params.append('chatId', options.chatId);
     if (options.messageType) params.append('messageType', options.messageType);
@@ -667,20 +709,20 @@ class ChatService {
       console.log('📱 Phone numbers count:', phoneNumbers.length);
       console.log('📱 First 10 phone numbers:', phoneNumbers.slice(0, 10));
       console.log('📱 All phone numbers being sent:', phoneNumbers);
-      
+
       // Clean and validate phone numbers - send ALL contacts to backend
       const cleanedPhoneNumbers = phoneNumbers
         .map(phone => phone?.toString().trim())
         .filter(phone => phone && phone.length > 0);
-        // Backend will handle all contacts at once
-      
+      // Backend will handle all contacts at once
+
       console.log('🧹 Cleaned phone numbers count:', cleanedPhoneNumbers.length);
       console.log('📤 Final payload being sent to API:', {
         contacts: cleanedPhoneNumbers.slice(0, 10) // Show first 10 for debugging
       });
       console.log('📤 Full payload size:', cleanedPhoneNumbers.length);
       console.log('📤 Sample phone numbers being sent:', cleanedPhoneNumbers.slice(0, 20));
-      
+
       // Check if known users are in the sent list
       const knownUsers = ['9450869601', '9450869602', '9137538943', '9087654321'];
       console.log('🔍 Checking if known users are in sent list:');
@@ -689,7 +731,7 @@ class ChatService {
         const index = cleanedPhoneNumbers.indexOf(phone);
         console.log(`📞 Known user ${phone} - In sent list: ${isInSentList} (index: ${index})`);
       });
-      
+
       const response = await this.makeRequest<{
         message: string;
         users: Array<{
@@ -701,7 +743,7 @@ class ChatService {
         }>;
       }>('/user/check-contacts', {
         method: 'POST',
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           contacts: cleanedPhoneNumbers
         }),
       });
@@ -715,7 +757,7 @@ class ChatService {
           status: user.status
         }))
       });
-      
+
       // Debug: Check if any of our sent phone numbers match the API response
       if (response.users.length > 0) {
         console.log('🎯 Found matching users!');
@@ -734,13 +776,13 @@ class ChatService {
       return response;
     } catch (error) {
       console.error('❌ API checkContacts failed:', error);
-      
+
       // If it's a 502 error (Bad Gateway), it might be temporary
       if (error instanceof Error && error.message?.includes('502')) {
         console.log('🔄 Server temporarily unavailable (502), you can retry in a moment');
         throw new Error('Server temporarily unavailable. Please try again in a moment.');
       }
-      
+
       // Re-throw other errors
       throw error;
     }

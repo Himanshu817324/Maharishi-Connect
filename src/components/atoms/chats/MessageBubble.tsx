@@ -10,6 +10,7 @@ import {
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 import { MessageData } from '@/services/chatService';
+import MessageStatusIndicator from './MessageStatusIndicator';
 
 interface MessageBubbleProps {
   message: MessageData;
@@ -39,39 +40,64 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const { colors } = useTheme();
 
   const formatTime = (timestamp: string) => {
+    if (!timestamp) return '';
     const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return '';
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   const handleLongPress = () => {
-    Alert.alert(
-      'Message Options',
-      'What would you like to do?',
-      [
-        { text: 'Reply', onPress: onReply },
-        { text: 'Copy', onPress: () => {/* Copy to clipboard */} },
-        ...(isOwn ? [
-          { text: 'Edit', onPress: onEdit },
-          { text: 'Delete', onPress: onDelete, style: 'destructive' as const },
-        ] : []),
-        { text: 'Cancel', style: 'cancel' as const },
-      ]
-    );
+    Alert.alert('Message Options', 'What would you like to do?', [
+      { text: 'Reply', onPress: onReply },
+      {
+        text: 'Copy',
+        onPress: () => {
+          /* Copy to clipboard */
+        },
+      },
+      ...(isOwn
+        ? [
+            { text: 'Edit', onPress: onEdit },
+            {
+              text: 'Delete',
+              onPress: onDelete,
+              style: 'destructive' as const,
+            },
+          ]
+        : []),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
   };
 
   const renderMessageContent = () => {
     const renderContent = () => {
+      // Ensure message has required properties
+      if (!message || !message.message_type) {
+        return (
+          <Text
+            style={[
+              styles.messageText,
+              { color: isOwn ? colors.textOnPrimary : colors.text },
+            ]}
+          >
+            Invalid message
+          </Text>
+        );
+      }
+
       switch (message.message_type) {
         case 'text':
           return (
-            <Text style={[
-              styles.messageText,
-              { color: isOwn ? colors.textOnPrimary : colors.text }
-            ]}>
-              {message.content || ''}
+            <Text
+              style={[
+                styles.messageText,
+                { color: isOwn ? colors.textOnPrimary : colors.text },
+              ]}
+            >
+              {String(message.content || 'No content')}
             </Text>
           );
-        
+
         case 'image':
           return (
             <View>
@@ -81,89 +107,105 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 resizeMode="cover"
               />
               {message.content && (
-                <Text style={[
-                  styles.messageText,
-                  { color: isOwn ? colors.textOnPrimary : colors.text }
-                ]}>
-                  {message.content || ''}
+                <Text
+                  style={[
+                    styles.messageText,
+                    { color: isOwn ? colors.textOnPrimary : colors.text },
+                  ]}
+                >
+                  {String(message.content)}
                 </Text>
               )}
             </View>
           );
-        
+
         case 'video':
           return (
             <View>
               <View style={styles.mediaPlaceholder}>
-                <Text style={[
-                  styles.mediaText,
-                  { color: isOwn ? colors.textOnPrimary : colors.text }
-                ]}>
+                <Text
+                  style={[
+                    styles.mediaText,
+                    { color: isOwn ? colors.textOnPrimary : colors.text },
+                  ]}
+                >
                   📹 Video
                 </Text>
               </View>
               {message.content && (
-                <Text style={[
-                  styles.messageText,
-                  { color: isOwn ? colors.textOnPrimary : colors.text }
-                ]}>
-                  {message.content || ''}
+                <Text
+                  style={[
+                    styles.messageText,
+                    { color: isOwn ? colors.textOnPrimary : colors.text },
+                  ]}
+                >
+                  {String(message.content)}
                 </Text>
               )}
             </View>
           );
-        
+
         case 'audio':
           return (
             <View>
               <View style={styles.mediaPlaceholder}>
-                <Text style={[
-                  styles.mediaText,
-                  { color: isOwn ? colors.textOnPrimary : colors.text }
-                ]}>
+                <Text
+                  style={[
+                    styles.mediaText,
+                    { color: isOwn ? colors.textOnPrimary : colors.text },
+                  ]}
+                >
                   🎵 Audio
                 </Text>
               </View>
               {message.content && (
-                <Text style={[
-                  styles.messageText,
-                  { color: isOwn ? colors.textOnPrimary : colors.text }
-                ]}>
-                  {message.content || ''}
+                <Text
+                  style={[
+                    styles.messageText,
+                    { color: isOwn ? colors.textOnPrimary : colors.text },
+                  ]}
+                >
+                  {String(message.content)}
                 </Text>
               )}
             </View>
           );
-        
+
         case 'file':
           return (
             <View>
               <View style={styles.mediaPlaceholder}>
-                <Text style={[
-                  styles.mediaText,
-                  { color: isOwn ? colors.textOnPrimary : colors.text }
-                ]}>
+                <Text
+                  style={[
+                    styles.mediaText,
+                    { color: isOwn ? colors.textOnPrimary : colors.text },
+                  ]}
+                >
                   📄 {message.media_metadata?.filename || 'File'}
                 </Text>
               </View>
               {message.content && (
-                <Text style={[
-                  styles.messageText,
-                  { color: isOwn ? colors.textOnPrimary : colors.text }
-                ]}>
-                  {message.content || ''}
+                <Text
+                  style={[
+                    styles.messageText,
+                    { color: isOwn ? colors.textOnPrimary : colors.text },
+                  ]}
+                >
+                  {String(message.content)}
                 </Text>
               )}
             </View>
           );
-        
+
         default:
           return (
-            <Text style={[
-              styles.messageText,
-              { color: isOwn ? colors.textOnPrimary : colors.text }
-            ]}>
-              {message.content || ''}
+            <Text
+              style={[
+                styles.messageText,
+                { color: isOwn ? colors.textOnPrimary : colors.text },
+              ]}
+            >
+              {String(message.content || 'Unknown message type')}
             </Text>
           );
       }
@@ -172,11 +214,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     return (
       <View>
         {/* Show sender name inside message bubble for group chats only */}
-        {isGroupChat && !isOwn && (
-          <Text style={[
-            styles.senderNameInside,
-            { color: isOwn ? colors.textOnPrimary : colors.textSecondary }
-          ]}>
+        {isGroupChat && !isOwn && message.sender?.fullName && (
+          <Text
+            style={[
+              styles.senderNameInside,
+              { color: isOwn ? colors.textOnPrimary : colors.textSecondary },
+            ]}
+          >
             {message.sender.fullName}
           </Text>
         )}
@@ -186,56 +230,68 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   };
 
   return (
-    <View style={[
-      styles.container,
-      isOwn ? styles.ownContainer : styles.otherContainer
-    ]}>
+    <View
+      style={[
+        styles.container,
+        isOwn ? styles.ownContainer : styles.otherContainer,
+      ]}
+    >
       {showAvatar && !isOwn && (
         <View style={styles.avatarContainer}>
-          <View style={[
-            styles.avatar,
-            { backgroundColor: colors.accent }
-          ]}>
-            <Text style={[
-              styles.avatarText,
-              { color: colors.textOnPrimary }
-            ]}>
-              {message.sender.fullName.charAt(0).toUpperCase()}
+          <View style={[styles.avatar, { backgroundColor: colors.accent }]}>
+            <Text style={[styles.avatarText, { color: colors.textOnPrimary }]}>
+              {message.sender?.fullName?.charAt(0).toUpperCase() || 'U'}
             </Text>
           </View>
         </View>
       )}
-      
-      <View style={[
-        styles.messageContainer,
-        isOwn ? styles.ownMessageContainer : styles.otherMessageContainer
-      ]}>
-        
+
+      <View
+        style={[
+          styles.messageContainer,
+          isOwn ? styles.ownMessageContainer : styles.otherMessageContainer,
+        ]}
+      >
         <TouchableOpacity
           style={[
             styles.bubble,
             {
               backgroundColor: isOwn ? colors.accent : colors.surface,
               borderColor: isOwn ? colors.accent : colors.border,
-            }
+            },
           ]}
           onPress={onPress}
           onLongPress={handleLongPress}
           activeOpacity={0.7}
         >
           {renderMessageContent()}
-          
+
           {showTime && (
             <View style={styles.timeContainer}>
-              <Text style={[
-                styles.timeText,
-                { color: isOwn ? colors.textOnPrimary : colors.textSecondary }
-              ]}>
+              <Text
+                style={[
+                  styles.timeText,
+                  {
+                    color: isOwn ? colors.textOnPrimary : colors.textSecondary,
+                  },
+                ]}
+              >
                 {formatTime(message.created_at)}
-                {message.edited_at && <Text style={styles.editedText}> (edited)</Text>}
+                {message.edited_at && (
+                  <Text style={styles.editedText}> (edited)</Text>
+                )}
               </Text>
             </View>
           )}
+
+          {/* Message Status Indicator */}
+          <MessageStatusIndicator
+            status={message.status || 'sent'}
+            readBy={message.read_by}
+            deliveredTo={message.delivered_to}
+            isOwn={isOwn}
+            showTimestamp={false}
+          />
         </TouchableOpacity>
       </View>
     </View>

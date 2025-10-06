@@ -19,6 +19,7 @@ import {
   dimensions,
 } from '@/theme/responsive';
 import CustomStatusBar from '@/components/atoms/ui/StatusBar';
+import OnlineStatusIndicator from './OnlineStatusIndicator';
 import { ChatData } from '@/services/chatService';
 
 interface ChatHeaderProps {
@@ -176,12 +177,22 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
             >
               {getChatTitle()}
             </Text>
-            <Text
-              style={[styles.subtitle, { color: colors.textOnPrimary }]}
-              numberOfLines={1}
-            >
-              {getChatSubtitle()}
-            </Text>
+            <View style={styles.subtitleContainer}>
+              <Text
+                style={[styles.subtitle, { color: colors.textOnPrimary }]}
+                numberOfLines={1}
+              >
+                {getChatSubtitle()}
+              </Text>
+              {chat.type === 'direct' && (
+                <OnlineStatusIndicator
+                  isOnline={isOnline}
+                  lastSeen={lastSeen}
+                  showText={true}
+                  size="small"
+                />
+              )}
+            </View>
           </View>
         </View>
 
@@ -349,10 +360,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'left',
   },
+  subtitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: hp(0.25),
+  },
   subtitle: {
     fontSize: responsiveFont(14),
     opacity: 0.9,
-    marginTop: hp(0.25),
+    flex: 1,
   },
   rightSection: {
     flexDirection: 'row',

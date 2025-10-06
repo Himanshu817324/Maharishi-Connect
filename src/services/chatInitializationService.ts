@@ -28,24 +28,24 @@ class ChatInitializationService {
   private async performInitialization(): Promise<void> {
     try {
       console.log('🚀 Initializing chat services...');
-      
+
       // Check if user is authenticated
       const authStateData = await AsyncStorage.getItem('@maharishi_connect_auth_state');
       if (!authStateData) {
         throw new Error('No auth state found');
       }
-      
+
       const authState = JSON.parse(authStateData);
       const user = authState.user;
       if (!user) {
         throw new Error('No user data found in auth state');
       }
-      
+
       const token = user.token;
       if (!token) {
         throw new Error('No authentication token found in user data');
       }
-      
+
       console.log('🔑 Found auth token:', token.substring(0, 20) + '...');
       console.log('👤 User ID:', user.id);
       console.log('👤 User phone:', user.phone);
@@ -54,25 +54,25 @@ class ChatInitializationService {
       // Initialize Socket.IO connection
       console.log('🔌 Connecting to Socket.IO...');
       await socketService.connect();
-      
+
       // Initialize services
       console.log('📱 Initializing services...');
       await this.initializeServices();
-      
+
       // Setup event listeners
       console.log('👂 Setting up event listeners...');
       this.setupEventListeners();
-      
+
       // Load user chats after initialization
       console.log('📱 Loading user chats...');
       await this.loadUserChats();
-      
+
       // Create a test chat if no chats exist
       await this.createTestChatIfNeeded();
-      
+
       this.isInitialized = true;
       console.log('✅ Chat services initialized successfully');
-      
+
     } catch (error) {
       console.error('❌ Failed to initialize chat services:', error);
       this.initializationPromise = null;
@@ -130,7 +130,7 @@ class ChatInitializationService {
     // Socket connection listeners
     socketService.addConnectionListener((connected: boolean) => {
       console.log(`🔌 Socket connection status: ${connected ? 'Connected' : 'Disconnected'}`);
-      
+
       if (connected) {
         // Rejoin any active chats when reconnected
         this.rejoinActiveChats();
@@ -188,16 +188,16 @@ class ChatInitializationService {
       const response = await chatService.getUserChats();
       if (response.status === 'SUCCESS' && response.chats) {
         console.log(`📱 Loaded ${response.chats.length} chats from server`);
-        
+
         // Import Redux actions dynamically to avoid circular dependencies
         const { addChat } = await import('@/store/slices/chatSlice');
         const { store } = await import('@/store');
-        
+
         // Add all chats to Redux store
         response.chats.forEach(chat => {
           store.dispatch(addChat(chat));
         });
-        
+
         console.log('✅ User chats loaded and added to Redux store');
       } else {
         console.log('📱 No chats found for user');
@@ -230,20 +230,20 @@ class ChatInitializationService {
   private async handleNewMessage(message: any): Promise<void> {
     try {
       console.log('📨 Handling new message:', message.id, 'for chat:', message.chat_id);
-      
+
       // Check if this is a message from another user (not our own message)
       const currentUser = await this.getCurrentUser();
       if (!currentUser) {
         console.log('📨 No current user found, ignoring message');
         return;
       }
-      
+
       // Check both possible user ID formats
       const currentUserId = currentUser.id || currentUser.firebaseUid;
-      const isOwnMessage = message.sender_id === currentUserId || 
-                          message.sender_id === currentUser.id || 
-                          message.sender_id === currentUser.firebaseUid;
-      
+      const isOwnMessage = message.sender_id === currentUserId ||
+        message.sender_id === currentUser.id ||
+        message.sender_id === currentUser.firebaseUid;
+
       if (isOwnMessage) {
         console.log('📨 Ignoring own message. Current user ID:', currentUserId, 'Message sender:', message.sender_id);
         return;
@@ -253,17 +253,17 @@ class ChatInitializationService {
       const { store } = await import('@/store');
       const state = store.getState();
       const existingChat = state.chat.chats.find(chat => chat.id === message.chat_id);
-      
+
       if (existingChat) {
         console.log('💬 Chat already exists in store, adding message and updating chat');
         const { addMessage } = await import('@/store/slices/messageSlice');
         const { updateChatLastMessage, incrementUnreadCount } = await import('@/store/slices/chatSlice');
-        
+
         // Add message to store
         console.log('🔄 Dispatching addMessage for chat:', message.chat_id);
         store.dispatch(addMessage(message));
-        
-        // Update chat's last message and increment unread count
+
+        // Update chat's last message and increment unread count atomically
         console.log('🔄 Dispatching updateChatLastMessage for chat:', message.chat_id);
         store.dispatch(updateChatLastMessage({
           chatId: message.chat_id,
@@ -272,13 +272,17 @@ class ChatInitializationService {
             content: message.content,
             sender_id: message.sender_id,
             created_at: message.created_at,
+            message_type: message.message_type,
           }
         }));
-        
-        // Increment unread count for this chat
-        console.log('🔄 Dispatching incrementUnreadCount for chat:', message.chat_id);
-        store.dispatch(incrementUnreadCount(message.chat_id));
-        
+
+        // Only increment unread count if the message is not from the current user
+        const currentUserId = store.getState().auth.user?.id || store.getState().auth.user?.firebaseUid;
+        if (message.sender_id !== currentUserId) {
+          console.log('🔄 Dispatching incrementUnreadCount for chat:', message.chat_id);
+          store.dispatch(incrementUnreadCount(message.chat_id));
+        }
+
         console.log('✅ Message added and chat updated in real-time');
         return;
       }
@@ -286,7 +290,7 @@ class ChatInitializationService {
       // Try to get chat details from server
       try {
         const chatResponse = await chatService.getChatDetails(message.chat_id);
-        
+
         if (chatResponse.chat) {
           console.log('💬 Chat details found from server:', chatResponse.chat.id);
 
@@ -310,6 +314,7 @@ class ChatInitializationService {
               content: message.content,
               sender_id: message.sender_id,
               created_at: message.created_at,
+              message_type: message.message_type,
             }
           }));
           store.dispatch(incrementUnreadCount(message.chat_id));
@@ -323,7 +328,7 @@ class ChatInitializationService {
 
       // If server doesn't have the chat or we can't access it, create a local chat
       console.log('🔧 Creating local chat for message:', message.chat_id);
-      
+
       // Get local contact data for the sender
       let senderLocalData = null;
       try {
@@ -337,15 +342,15 @@ class ChatInitializationService {
           localProfilePicture: undefined,
           localEmail: undefined,
         }))];
-        
-        senderLocalData = allContacts.find(contact => 
-          contact.user_id === message.sender_id || 
+
+        senderLocalData = allContacts.find(contact =>
+          contact.user_id === message.sender_id ||
           contact.fullName === message.sender?.fullName
         );
       } catch (error) {
         console.log('⚠️ Could not load local contact data:', error);
       }
-      
+
       const localChat = {
         id: message.chat_id,
         type: 'direct' as const,
@@ -428,7 +433,7 @@ class ChatInitializationService {
         console.log('👤 No auth state found');
         return null;
       }
-      
+
       const authState = JSON.parse(authStateData);
       const user = authState.user;
       console.log('👤 Current user from storage:', user?.id || 'No user found');

@@ -29,10 +29,59 @@ class ContactService {
     data: { existingUsers: Contact[]; nonUsers: Array<{ phoneNumber: string; name?: string }> };
     timestamp: number;
   } | null = null;
-  private readonly CACHE_DURATION = 5 * 60 * 1000; 
+  private readonly CACHE_DURATION = 10 * 60 * 1000; // ✅ Extended cache duration
+  private readonly BATCH_SIZE = 100; // ✅ Batch size for processing
+  private groupingCache = new Map<string, ContactGroup[]>(); // ✅ Memoization cache
 
   constructor() {
     this.baseURL = 'https://api.maharishiconnect.com/api';
+  }
+
+  // ✅ OPTIMIZED: Async batch processing for contact cleaning
+  private async processContactsAsync(deviceContacts: any[]): Promise<string[]> {
+    const batches = [];
+    for (let i = 0; i < deviceContacts.length; i += this.BATCH_SIZE) {
+      batches.push(deviceContacts.slice(i, i + this.BATCH_SIZE));
+    }
+
+    const results = await Promise.all(
+      batches.map(batch => this.processBatch(batch))
+    );
+
+    return results.flat();
+  }
+
+  // ✅ OPTIMIZED: Process batch with yield to prevent UI blocking
+  private async processBatch(batch: any[]): Promise<string[]> {
+    return new Promise((resolve) => {
+      // Use setTimeout to yield control back to UI thread
+      setTimeout(() => {
+        const phoneNumbers = batch
+          .map((contact) => {
+            if (!contact.phoneNumber) return null;
+
+            const original = contact.phoneNumber;
+            // Clean phone number - remove all non-digit characters except +
+            let cleaned = contact.phoneNumber.replace(/[^\d+]/g, '');
+
+            // Remove + if present and ensure it's a valid Indian mobile number
+            if (cleaned.startsWith('+91')) {
+              cleaned = cleaned.substring(3);
+            } else if (cleaned.startsWith('91') && cleaned.length === 12) {
+              cleaned = cleaned.substring(2);
+            }
+
+            // Ensure it's a 10-digit number
+            if (cleaned.length === 10 && /^\d{10}$/.test(cleaned)) {
+              return cleaned;
+            }
+            return null;
+          })
+          .filter((phone): phone is string => !!phone);
+
+        resolve(phoneNumbers);
+      }, 0);
+    });
   }
 
   private async getAuthHeaders(): Promise<Record<string, string>> {
@@ -52,7 +101,7 @@ class ContactService {
     options: RequestInit = {}
   ): Promise<T> {
     const headers = await this.getAuthHeaders();
-    
+
     const response = await fetch(`${this.baseURL}${endpoint}`, {
       ...options,
       headers: {
@@ -80,7 +129,7 @@ class ContactService {
       // Use the new getContactsWithStatus method
       const { existingUsers } = await this.getContactsWithStatus();
       return existingUsers;
-      
+
     } catch (error) {
       console.error('Error fetching contacts:', error);
       // Return cached data if available, even if expired
@@ -122,8 +171,17 @@ class ContactService {
     }
   }
 
-  // Group contacts alphabetically
+  // ✅ OPTIMIZED: Memoized alphabetical grouping
   groupContactsAlphabetically(contacts: Contact[]): ContactGroup[] {
+    // Create cache key from contact IDs
+    const cacheKey = contacts.map(c => c.user_id).sort().join(',');
+
+    // Check cache first
+    if (this.groupingCache.has(cacheKey)) {
+      return this.groupingCache.get(cacheKey)!;
+    }
+
+    // Use requestAnimationFrame to prevent UI blocking
     const grouped = contacts.reduce((groups, contact) => {
       const firstLetter = contact.fullName.charAt(0).toUpperCase();
       if (!groups[firstLetter]) {
@@ -133,12 +191,25 @@ class ContactService {
       return groups;
     }, {} as Record<string, Contact[]>);
 
-    return Object.keys(grouped)
+    const result = Object.keys(grouped)
       .sort()
       .map(letter => ({
         title: letter,
         data: grouped[letter].sort((a, b) => a.fullName.localeCompare(b.fullName)),
       }));
+
+    // Cache the result
+    this.groupingCache.set(cacheKey, result);
+
+    // Limit cache size to prevent memory issues
+    if (this.groupingCache.size > 50) {
+      const firstKey = this.groupingCache.keys().next().value;
+      if (firstKey) {
+        this.groupingCache.delete(firstKey);
+      }
+    }
+
+    return result;
   }
 
   // Filter contacts by online status
@@ -239,19 +310,19 @@ class ContactService {
   // Merge device contacts with backend contacts
   private mergeContacts(deviceContacts: Contact[], backendContacts: Contact[]): Contact[] {
     const mergedMap = new Map<string, Contact>();
-    
+
     // Add backend contacts first (they have more complete data)
     backendContacts.forEach(contact => {
       mergedMap.set(contact.user_id, contact);
     });
-    
+
     // Add device contacts, but don't override existing ones
     deviceContacts.forEach(contact => {
       if (!mergedMap.has(contact.user_id)) {
         mergedMap.set(contact.user_id, contact);
       }
     });
-    
+
     return Array.from(mergedMap.values());
   }
 
@@ -287,17 +358,17 @@ class ContactService {
     try {
       console.log(`🔍 Looking up user by phone number: ${phoneNumber}`);
       const response = await chatService.checkContacts([phoneNumber]);
-      
+
       if (response.users.length === 0) {
         console.log(`❌ No user found for phone: ${phoneNumber}`);
         return null;
       }
-      
+
       console.log(`📞 Found ${response.users.length} users for phone ${phoneNumber}:`);
       response.users.forEach((u, index) => {
         console.log(`  ${index + 1}. ID=${u._id}, Name=${u.fullName}, Phone=${u.mobileNo}`);
       });
-      
+
       // Find exact phone match
       const user = response.users.find(u => {
         let cleanedPhone = phoneNumber.replace(/[^\d+]/g, '');
@@ -306,26 +377,26 @@ class ContactService {
         } else if (cleanedPhone.startsWith('91') && cleanedPhone.length === 12) {
           cleanedPhone = cleanedPhone.substring(2);
         }
-        
+
         let cleanedUserPhone = u.mobileNo.replace(/[^\d+]/g, '');
         if (cleanedUserPhone.startsWith('+91')) {
           cleanedUserPhone = cleanedUserPhone.substring(3);
         } else if (cleanedUserPhone.startsWith('91') && cleanedUserPhone.length === 12) {
           cleanedUserPhone = cleanedUserPhone.substring(2);
         }
-        
+
         const matches = cleanedPhone === cleanedUserPhone;
         console.log(`📞 Phone comparison: ${cleanedPhone} === ${cleanedUserPhone} = ${matches}`);
         return matches;
       });
-      
+
       if (!user) {
         console.log(`❌ No exact phone match found for: ${phoneNumber}`);
         return null;
       }
-      
+
       console.log(`✅ Selected user: ID=${user._id}, Name=${user.fullName}, Phone=${user.mobileNo}`);
-      
+
       // WORKAROUND: Extract correct user ID from profile picture URL if available
       let correctUserId = user._id;
       if (user.profilePicture) {
@@ -341,13 +412,13 @@ class ContactService {
           }
         }
       }
-      
+
       // Debug: Check if this is the current user
       const currentUserId = await this.getCurrentUserId();
       if (currentUserId === correctUserId) {
         console.warn(`⚠️ WARNING: Selected user is the current user! This might cause issues.`);
       }
-      
+
       // Get local contact data for this phone number
       const deviceContacts = await permissionManager.syncContactsWithBackend();
       const localContact = deviceContacts.find(contact => {
@@ -392,19 +463,19 @@ class ContactService {
         usersCount: response.users.length,
         message: response.message,
       });
-      
+
       // Check for duplicate phone numbers
       const phoneCounts = response.users.reduce((acc, user) => {
         acc[user.mobileNo] = (acc[user.mobileNo] || 0) + 1;
         return acc;
       }, {} as Record<string, number>);
-      
+
       const duplicatePhones = Object.entries(phoneCounts).filter(([_phone, count]) => count > 1);
       if (duplicatePhones.length > 0) {
         console.warn('⚠️ DUPLICATE PHONE NUMBERS FOUND:', duplicatePhones);
         console.warn('This can cause chat creation issues. Please clean up your database.');
       }
-      
+
 
       // Convert API response to Contact format, using local contact names
       const existingUsers: Contact[] = response.users.map(user => {
@@ -421,10 +492,10 @@ class ContactService {
         });
 
         const displayName = localContact?.fullName || user.fullName;
-        
+
         // Use firebaseUid if available, otherwise extract from profile picture
         let correctUserId = user._id;
-        
+
         if (user.firebaseUid) {
           // Use firebaseUid directly if available
           correctUserId = user.firebaseUid;
@@ -446,10 +517,10 @@ class ContactService {
           console.warn(`⚠️ No firebaseUid or profilePicture available for user: ${user._id}`);
           console.warn(`   Using MongoDB _id as fallback: ${user._id}`);
         }
-        
+
         // Debug: Show user details for duplicate phone numbers
         console.log(`📞 User details: ID=${user._id}, CorrectID=${correctUserId}, Name=${user.fullName}, Phone=${user.mobileNo}, DisplayName=${displayName}`);
-        
+
         // Debug: Show name mapping
         if (localContact) {
           console.log(`📞 Name mapping: ${user.fullName} (registered) → ${localContact.fullName} (local contact)`);
@@ -482,18 +553,18 @@ class ContactService {
 
         return contact;
       });
-      
+
       // Find non-users by comparing phone numbers
       const existingPhoneNumbers = new Set(response.users.map(user => user.mobileNo));
       const nonUsers = phoneNumbers.filter(phone => !existingPhoneNumbers.has(phone));
-      
+
       console.log('✅ Processed contacts:', {
         existingUsers: existingUsers.length,
         nonUsers: nonUsers.length,
         apiUsers: response.users.length,
         devicePhones: phoneNumbers.length,
       });
-      
+
       return {
         existingUsers,
         nonUsers,
@@ -522,7 +593,7 @@ class ContactService {
       }
       // First get all device contacts
       const deviceContacts = await permissionManager.syncContactsWithBackend();
-      
+
       // Check if deviceContacts is null or undefined
       if (!deviceContacts || !Array.isArray(deviceContacts)) {
         console.warn('⚠️ Device contacts is null or not an array, returning empty result');
@@ -531,7 +602,7 @@ class ContactService {
           nonUsers: [],
         };
       }
-      
+
       // Debug: Show first few device contacts before cleaning
       console.log('📱 First 5 device contacts (before cleaning):');
       deviceContacts.slice(0, 5).forEach((contact, index) => {
@@ -541,40 +612,9 @@ class ContactService {
           email: contact.email
         });
       });
-      
-      // Extract and clean phone numbers only
-      const phoneNumbers = deviceContacts
-        .map((contact, index) => {
-          if (!contact.phoneNumber) return null;
-          
-          const original = contact.phoneNumber;
-          // Clean phone number - remove all non-digit characters except +
-          let cleaned = contact.phoneNumber.replace(/[^\d+]/g, '');
-          
-          // Remove + if present and ensure it's a valid Indian mobile number
-          if (cleaned.startsWith('+91')) {
-            cleaned = cleaned.substring(3);
-          } else if (cleaned.startsWith('91') && cleaned.length === 12) {
-            cleaned = cleaned.substring(2);
-          }
-          
-          // Log first few phone number cleaning processes
-          if (index < 5) {
-            console.log(`📞 Phone cleaning ${index + 1}:`, {
-              original: original,
-              cleaned: cleaned,
-              name: contact.fullName,
-              isValid: cleaned.length === 10 && /^\d{10}$/.test(cleaned)
-            });
-          }
-          
-          // Ensure it's a 10-digit number
-          if (cleaned.length === 10 && /^\d{10}$/.test(cleaned)) {
-            return cleaned;
-          }
-          return null;
-        })
-        .filter((phone): phone is string => !!phone);
+
+      // ✅ OPTIMIZED: Async batch processing for large contact lists
+      const phoneNumbers = await this.processContactsAsync(deviceContacts);
 
       // Remove duplicates
       const uniquePhoneNumbers = [...new Set(phoneNumbers)];
@@ -591,7 +631,7 @@ class ContactService {
       console.log('📱 Found device contacts with phone numbers:', uniquePhoneNumbers.length);
       console.log('📱 First 5 phone numbers:', uniquePhoneNumbers.slice(0, 5));
       console.log('📱 All phone numbers extracted:', uniquePhoneNumbers);
-      
+
       // Check if known users are in the extracted phone numbers
       const knownUsers = ['9450869601', '9450869602', '9137538943', '9087654321'];
       console.log('🔍 Checking if known users are in extracted phone numbers:');
@@ -599,7 +639,7 @@ class ContactService {
         const isInExtracted = uniquePhoneNumbers.includes(phone);
         console.log(`📞 Known user ${phone} - In extracted list: ${isInExtracted}`);
       });
-      
+
       // Debug: Check if any device contacts contain the known phone numbers
       console.log('🔍 Checking device contacts for known phone numbers:');
       knownUsers.forEach(knownPhone => {
@@ -608,7 +648,7 @@ class ContactService {
           return contact.phoneNumber.includes(knownPhone) || knownPhone.includes(contact.phoneNumber.replace(/[^\d]/g, ''));
         });
         if (matchingContacts.length > 0) {
-          console.log(`📞 Found ${matchingContacts.length} contacts for ${knownPhone}:`, 
+          console.log(`📞 Found ${matchingContacts.length} contacts for ${knownPhone}:`,
             matchingContacts.map(c => ({ name: c.fullName, phone: c.phoneNumber })));
         } else {
           console.log(`📞 No contacts found for ${knownPhone}`);

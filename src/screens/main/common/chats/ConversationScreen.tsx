@@ -30,6 +30,7 @@ import {
   addMessage,
   setCurrentChatMessages,
   clearCurrentChatMessages,
+  updateMessageStatus,
 } from '@/store/slices/messageSlice';
 import { socketService, MessageData } from '@/services/socketService';
 import { messageService } from '@/services/messageService';
@@ -38,6 +39,7 @@ import { ChatData } from '@/services/chatService';
 import ChatHeader from '@/components/atoms/chats/ChatHeader';
 import MessageBubble from '@/components/atoms/chats/MessageBubble';
 import ChatInput from '@/components/atoms/chats/ChatInput';
+import TypingIndicator from '@/components/atoms/chats/TypingIndicator';
 import CustomSafeAreaView from '@/components/atoms/ui/CustomSafeAreaView';
 
 interface RouteParams {
@@ -65,6 +67,22 @@ const ConversationScreen: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  // Typing indicators
+  const [localTypingUsers, setLocalTypingUsers] = useState<
+    Array<{
+      userId: string;
+      userName: string;
+    }>
+  >([]);
+  const [isTyping, setIsTyping] = useState(false);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Online status
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+  const [userLastSeen, setUserLastSeen] = useState<Map<string, string>>(
+    new Map(),
+  );
 
   const flatListRef = useRef<FlatList>(null);
   const currentChatMessagesRef = useRef<MessageData[]>([]);
@@ -109,7 +127,12 @@ const ConversationScreen: React.FC = () => {
           '📨 [ConversationScreen] Message sent confirmation received:',
           message.id,
         );
-        dispatch(addMessage(message));
+        // Ensure message has 'sent' status
+        const messageWithStatus = {
+          ...message,
+          status: 'sent' as const,
+        };
+        dispatch(addMessage(messageWithStatus));
 
         // Update the chat's last message in the chat list
         dispatch(
@@ -136,7 +159,12 @@ const ConversationScreen: React.FC = () => {
             '📨 [ConversationScreen] Incoming message received:',
             message.id,
           );
-          dispatch(addMessage(message));
+          // Ensure incoming messages have 'sent' status
+          const messageWithStatus = {
+            ...message,
+            status: 'sent' as const,
+          };
+          dispatch(addMessage(messageWithStatus));
 
           // Update the chat's last message in the chat list
           dispatch(
@@ -156,6 +184,116 @@ const ConversationScreen: React.FC = () => {
       },
     );
 
+    // Typing indicator listeners
+    const removeTypingListener = socketService.addTypingListener(data => {
+      if (data.chatId === chat?.id) {
+        console.log('⌨️ [ConversationScreen] Typing indicator:', data);
+
+        if (data.isTyping) {
+          setLocalTypingUsers(prev => {
+            const existing = prev.find(u => u.userId === data.userId);
+            if (!existing) {
+              return [
+                ...prev,
+                { userId: data.userId, userName: data.userName },
+              ];
+            }
+            return prev;
+          });
+        } else {
+          setLocalTypingUsers(prev =>
+            prev.filter(u => u.userId !== data.userId),
+          );
+        }
+      }
+    });
+
+    // Read receipt listeners
+    const removeReadReceiptListener = socketService.addReadReceiptListener(
+      data => {
+        if (data.chatId === chat?.id) {
+          console.log('📖 [ConversationScreen] Read receipt:', data);
+          // Update message status to 'read' in Redux store
+          dispatch(
+            updateMessageStatus({
+              messageId: data.messageId,
+              chatId: data.chatId,
+              status: 'read',
+              userId: data.userId,
+              timestamp: data.readAt,
+            }),
+          );
+        }
+      },
+    );
+
+    // Message status listeners
+    const removeMessageStatusListener = socketService.addMessageStatusListener(
+      data => {
+        if (data.chatId === chat?.id) {
+          console.log('📊 [ConversationScreen] Message status update:', data);
+          // Update message status in Redux store
+          dispatch(
+            updateMessageStatus({
+              messageId: data.messageId,
+              chatId: data.chatId,
+              status: data.status,
+              userId: data.userId,
+              timestamp: data.timestamp,
+            }),
+          );
+        }
+      },
+    );
+
+    // Message delivered listeners
+    const removeMessageDeliveredListener =
+      socketService.addMessageDeliveredListener(data => {
+        if (data.chatId === chat?.id) {
+          console.log('📬 [ConversationScreen] Message delivered:', data);
+          // Update message status to 'delivered' for each recipient
+          data.deliveredTo.forEach(userId => {
+            dispatch(
+              updateMessageStatus({
+                messageId: data.messageId,
+                chatId: data.chatId,
+                status: 'delivered',
+                userId: userId,
+                timestamp: data.deliveredAt,
+              }),
+            );
+          });
+        }
+      });
+
+    // Online status listeners
+    const removeUserOnlineListener = socketService.addUserOnlineListener(
+      userData => {
+        console.log('🟢 [ConversationScreen] User came online:', userData);
+        setOnlineUsers(prev => new Set([...prev, userData.user_id]));
+      },
+    );
+
+    const removeUserOfflineListener = socketService.addUserOfflineListener(
+      userData => {
+        console.log('🔴 [ConversationScreen] User went offline:', userData);
+        setOnlineUsers(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(userData.user_id);
+          return newSet;
+        });
+        setUserLastSeen(
+          prev =>
+            new Map(
+              prev.set(
+                userData.user_id,
+                userData.lastSeen || new Date().toISOString(),
+              ),
+            ),
+        );
+      },
+    );
+
     socketService.addConnectionListener((connected: boolean) => {
       console.log('🔌 Socket connection status changed:', connected);
       setIsConnected(connected);
@@ -170,6 +308,8 @@ const ConversationScreen: React.FC = () => {
 
     return () => {
       removeMessageListener();
+      // Note: Some socket listeners don't return cleanup functions
+      // They will be cleaned up when the component unmounts
     };
   }, [chat?.id, dispatch]);
 
@@ -226,19 +366,6 @@ const ConversationScreen: React.FC = () => {
     loadMessages,
     setupSocketListeners,
   ]);
-
-  // Clear unread count when screen is focused
-  useFocusEffect(
-    useCallback(() => {
-      if (chat?.id) {
-        console.log(
-          '📱 ConversationScreen focused, clearing unread count for chat:',
-          chat.id,
-        );
-        dispatch(clearUnreadCount(chat.id));
-      }
-    }, [chat?.id, dispatch]),
-  );
 
   // Keyboard event listeners with smooth animations
   useEffect(() => {
@@ -308,7 +435,12 @@ const ConversationScreen: React.FC = () => {
 
           if (response && response.data) {
             console.log('🔄 Adding message to Redux store:', response.data);
-            dispatch(addMessage(response.data));
+            // Ensure message has 'sent' status
+            const messageWithStatus = {
+              ...response.data,
+              status: 'sent' as const,
+            };
+            dispatch(addMessage(messageWithStatus));
 
             // Update the chat's last message in the chat list
             dispatch(
@@ -333,11 +465,63 @@ const ConversationScreen: React.FC = () => {
       }
 
       setReplyToMessage(null);
+
+      // Stop typing when message is sent
+      handleStopTyping();
     } catch (error) {
       console.error('Error sending message:', error);
       Alert.alert('Error', 'Failed to send message. Please try again.');
     }
   };
+
+  // Typing handlers
+  const handleStartTyping = useCallback(() => {
+    if (!chat || isTyping) return;
+
+    setIsTyping(true);
+    socketService.startTyping(chat.id);
+
+    // Auto-stop typing after 3 seconds
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    typingTimeoutRef.current = setTimeout(() => {
+      handleStopTyping();
+    }, 3000);
+  }, [chat, isTyping]);
+
+  const handleStopTyping = useCallback(() => {
+    if (!chat || !isTyping) return;
+
+    setIsTyping(false);
+    socketService.stopTyping(chat.id);
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+  }, [chat, isTyping]);
+
+  // Mark messages as read when screen is focused
+  const markMessagesAsRead = useCallback(() => {
+    if (chat && socketService.isSocketConnected()) {
+      socketService.markChatAsRead(chat.id);
+      dispatch(clearUnreadCount(chat.id));
+    }
+  }, [chat, dispatch]);
+
+  // Clear unread count when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      if (chat?.id) {
+        console.log(
+          '📱 ConversationScreen focused, clearing unread count for chat:',
+          chat.id,
+        );
+        markMessagesAsRead();
+      }
+    }, [chat?.id, markMessagesAsRead]),
+  );
 
   const handleMessagePress = (_message: MessageData) => {};
 
@@ -500,44 +684,16 @@ const ConversationScreen: React.FC = () => {
   };
 
   const renderTypingIndicator = () => {
-    const typingUsersInChat = typingUsers[chat?.id || ''] || [];
+    if (localTypingUsers.length === 0) return null;
 
-    if (typingUsersInChat.length === 0) return null;
-
-    return (
-      <View style={styles.typingContainer}>
-        <View style={styles.typingBubble}>
-          <View style={styles.typingDotsContainer}>
-            <View
-              style={[
-                styles.typingDot,
-                styles.typingDot1,
-                { backgroundColor: colors.textSecondary },
-              ]}
-            />
-            <View
-              style={[
-                styles.typingDot,
-                styles.typingDot2,
-                { backgroundColor: colors.textSecondary },
-              ]}
-            />
-            <View
-              style={[
-                styles.typingDot,
-                styles.typingDot3,
-                { backgroundColor: colors.textSecondary },
-              ]}
-            />
-          </View>
-        </View>
-        <Text style={[styles.typingText, { color: colors.textSecondary }]}>
-          {typingUsersInChat.length === 1
-            ? `${typingUsersInChat[0]} is typing`
-            : `${typingUsersInChat.length} people are typing`}
-        </Text>
-      </View>
-    );
+    return localTypingUsers.map((user, index) => (
+      <TypingIndicator
+        key={`${user.userId}-${index}`}
+        isVisible={true}
+        userName={user.userName}
+        isOwn={false}
+      />
+    ));
   };
 
   const renderEmptyState = () => (
@@ -605,7 +761,28 @@ const ConversationScreen: React.FC = () => {
             onSearch={handleSearch}
             onInfo={handleInfo}
             onMore={handleMore}
-            isOnline={isConnected}
+            isOnline={
+              chat?.type === 'direct'
+                ? chat.participants?.some(
+                    p =>
+                      p.user_id !== (user?.id || user?.firebaseUid) &&
+                      onlineUsers.has(p.user_id),
+                  )
+                : false
+            }
+            lastSeen={
+              chat?.type === 'direct'
+                ? chat.participants?.find(
+                    p => p.user_id !== (user?.id || user?.firebaseUid),
+                  )?.user_id
+                  ? userLastSeen.get(
+                      chat.participants.find(
+                        p => p.user_id !== (user?.id || user?.firebaseUid),
+                      )?.user_id || '',
+                    )
+                  : undefined
+                : undefined
+            }
           />
 
           <View style={styles.messageListContainer}>
@@ -645,6 +822,8 @@ const ConversationScreen: React.FC = () => {
               disabled={false}
               keyboardHeight={keyboardHeight}
               isKeyboardVisible={isKeyboardVisible}
+              onStartTyping={handleStartTyping}
+              onStopTyping={handleStopTyping}
             />
           </View>
         </View>

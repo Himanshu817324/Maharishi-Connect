@@ -86,6 +86,29 @@ export interface DeliveryData {
   deliveredAt: string;
 }
 
+export interface TypingData {
+  chatId: string;
+  userId: string;
+  userName: string;
+  isTyping: boolean;
+}
+
+export interface ReadReceiptData {
+  messageId: string;
+  userId: string;
+  userName: string;
+  chatId: string;
+  readAt: string;
+}
+
+export interface MessageStatusData {
+  messageId: string;
+  chatId: string;
+  status: 'sent' | 'delivered' | 'read';
+  timestamp: string;
+  userId?: string;
+}
+
 export interface DebugData {
   roomId: string;
   participants: string[];
@@ -119,6 +142,11 @@ class SocketService {
   private messageDebugListeners: ((debugData: any) => void)[] = [];
   private systemStatusListeners: ((status: SystemStatus) => void)[] = [];
   private connectionListeners: ((connected: boolean) => void)[] = [];
+  
+  // New event listeners for typing, read receipts, and message status
+  private typingListeners: ((data: TypingData) => void)[] = [];
+  private readReceiptListeners: ((data: ReadReceiptData) => void)[] = [];
+  private messageStatusListeners: ((data: MessageStatusData) => void)[] = [];
 
   async connect(): Promise<void> {
     try {
@@ -273,6 +301,29 @@ class SocketService {
       console.log('System status:', status);
       this.systemStatusListeners.forEach(listener => listener(status));
     });
+
+    // Typing indicators
+    this.socket.on('user_typing', (data: TypingData) => {
+      console.log('User typing:', data);
+      this.typingListeners.forEach(listener => listener(data));
+    });
+
+    // Read receipts
+    this.socket.on('messageRead', (data: ReadReceiptData) => {
+      console.log('Message read:', data);
+      this.readReceiptListeners.forEach(listener => listener(data));
+    });
+
+    this.socket.on('chatMarkedAsRead', (data: ReadReceiptData) => {
+      console.log('Chat marked as read:', data);
+      this.readReceiptListeners.forEach(listener => listener(data));
+    });
+
+    // Message status updates
+    this.socket.on('messageStatusUpdate', (data: MessageStatusData) => {
+      console.log('Message status update:', data);
+      this.messageStatusListeners.forEach(listener => listener(data));
+    });
   }
 
   private setupConnectionHandlers(): void {
@@ -339,6 +390,44 @@ class SocketService {
       throw new Error('Socket not connected');
     }
     this.socket.emit('join_chat', chatId);
+  }
+
+  // Typing indicators
+  startTyping(chatId: string): void {
+    if (!this.socket || !this.isConnected) {
+      throw new Error('Socket not connected');
+    }
+    this.socket.emit('typing_start', { chatId });
+  }
+
+  stopTyping(chatId: string): void {
+    if (!this.socket || !this.isConnected) {
+      throw new Error('Socket not connected');
+    }
+    this.socket.emit('typing_stop', { chatId });
+  }
+
+  // Read receipts
+  markMessageAsRead(messageId: string): void {
+    if (!this.socket || !this.isConnected) {
+      throw new Error('Socket not connected');
+    }
+    this.socket.emit('mark_as_read', { messageId });
+  }
+
+  markChatAsRead(chatId: string): void {
+    if (!this.socket || !this.isConnected) {
+      throw new Error('Socket not connected');
+    }
+    this.socket.emit('mark_chat_as_read', { chatId });
+  }
+
+  // Delivery status
+  markMessageAsDelivered(messageId: string): void {
+    if (!this.socket || !this.isConnected) {
+      throw new Error('Socket not connected');
+    }
+    this.socket.emit('mark_as_delivered', { messageId });
   }
 
   // Debug operations
@@ -435,6 +524,31 @@ class SocketService {
     this.connectionListeners = this.connectionListeners.filter(l => l !== listener);
   }
 
+  // New listener management methods
+  addTypingListener(listener: (data: TypingData) => void): void {
+    this.typingListeners.push(listener);
+  }
+
+  removeTypingListener(listener: (data: TypingData) => void): void {
+    this.typingListeners = this.typingListeners.filter(l => l !== listener);
+  }
+
+  addReadReceiptListener(listener: (data: ReadReceiptData) => void): void {
+    this.readReceiptListeners.push(listener);
+  }
+
+  removeReadReceiptListener(listener: (data: ReadReceiptData) => void): void {
+    this.readReceiptListeners = this.readReceiptListeners.filter(l => l !== listener);
+  }
+
+  addMessageStatusListener(listener: (data: MessageStatusData) => void): void {
+    this.messageStatusListeners.push(listener);
+  }
+
+  removeMessageStatusListener(listener: (data: MessageStatusData) => void): void {
+    this.messageStatusListeners = this.messageStatusListeners.filter(l => l !== listener);
+  }
+
   // Utility methods
   isSocketConnected(): boolean {
     return this.isConnected && this.socket?.connected === true;
@@ -465,6 +579,9 @@ class SocketService {
     this.messageDebugListeners = [];
     this.systemStatusListeners = [];
     this.connectionListeners = [];
+    this.typingListeners = [];
+    this.readReceiptListeners = [];
+    this.messageStatusListeners = [];
   }
 }
 
