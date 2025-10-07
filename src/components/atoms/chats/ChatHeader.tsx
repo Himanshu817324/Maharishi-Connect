@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,8 +19,10 @@ import {
   dimensions,
 } from '@/theme/responsive';
 import CustomStatusBar from '@/components/atoms/ui/StatusBar';
-import OnlineStatusIndicator from './OnlineStatusIndicator';
+import OnlineStatusIndicator from '@/components/OnlineStatusIndicator';
 import { ChatData } from '@/services/chatService';
+import { useUserStatus } from '@/hooks/useUserStatus';
+import { UserStatus } from '@/services/userStatusService';
 
 interface ChatHeaderProps {
   chat: ChatData;
@@ -31,8 +33,6 @@ interface ChatHeaderProps {
   onSearch?: () => void;
   onInfo?: () => void;
   onMore?: () => void;
-  isOnline?: boolean;
-  lastSeen?: string;
   backgroundColor?: string;
 }
 
@@ -45,12 +45,32 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
   onSearch,
   onInfo,
   onMore,
-  isOnline = false,
-  lastSeen,
   backgroundColor,
 }) => {
   const { colors } = useTheme();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
+  const [otherUserStatus, setOtherUserStatus] = useState<UserStatus | null>(null);
+
+  // Get other user ID for direct chats
+  const otherUserId = chat.type === 'direct' 
+    ? chat.participants.find(p => p.user_id !== currentUserId)?.user_id
+    : null;
+
+  // Use user status hook for direct chats
+  const { getUserStatus } = useUserStatus({
+    userIds: otherUserId ? [otherUserId] : [],
+    autoStart: true, // Re-enabled with fallback handling
+  });
+
+  // Update other user status when it changes
+  useEffect(() => {
+    if (otherUserId) {
+      const status = getUserStatus(otherUserId);
+      if (status) {
+        setOtherUserStatus(status);
+      }
+    }
+  }, [otherUserId, getUserStatus]);
 
   const handleMenuPress = () => setIsMenuVisible(!isMenuVisible);
   const handleMenuClose = () => setIsMenuVisible(false);
@@ -71,10 +91,34 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
     );
   };
 
+
   const getChatSubtitle = () => {
     if (chat.type === 'group') return `${chat.participants.length} members`;
-    if (isOnline) return 'Online';
-    if (lastSeen) return `Last seen ${new Date(lastSeen).toLocaleTimeString()}`;
+    
+    console.log('🔍 ChatHeader getChatSubtitle:', { 
+      otherUserStatus, 
+      otherUserId, 
+      participants: chat.participants.map(p => ({ 
+        id: p.user_id, 
+        online: (p.userDetails as any)?.online 
+      }))
+    });
+    
+    // Try to get status from user status hook first
+    if (otherUserStatus) {
+      return otherUserStatus.isOnline ? 'Online' : otherUserStatus.statusText;
+    }
+    
+    // Fallback to user data from chat participants
+    if (otherUserId) {
+      const otherUser = chat.participants.find(p => p.user_id === otherUserId);
+      if ((otherUser?.userDetails as any)?.online) {
+        return 'Online';
+      }
+      // Note: lastSeen is not available in current userDetails structure
+      // This would need to be added to the backend response
+    }
+    
     return 'Offline';
   };
 
@@ -157,18 +201,19 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
           )}
           <View style={styles.avatarContainer}>
             {renderAvatar()}
-            {chat.type === 'direct' && (
-              <View
-                style={[
-                  styles.statusIndicator,
-                  {
-                    backgroundColor: isOnline
-                      ? colors.accent
-                      : colors.textSecondary,
-                  },
-                ]}
-              />
-            )}
+                    {chat.type === 'direct' && (
+                      <View
+                        style={[
+                          styles.statusIndicator,
+                          {
+                            backgroundColor: (otherUserStatus?.isOnline || 
+                              (chat.participants.find(p => p.user_id === otherUserId)?.userDetails as any)?.online)
+                              ? '#4CAF50'
+                              : colors.textSecondary,
+                          },
+                        ]}
+                      />
+                    )}
           </View>
           <View style={styles.titleContainer}>
             <Text
@@ -184,12 +229,13 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
               >
                 {getChatSubtitle()}
               </Text>
-              {chat.type === 'direct' && (
+              {chat.type === 'direct' && otherUserStatus && (
                 <OnlineStatusIndicator
-                  isOnline={isOnline}
-                  lastSeen={lastSeen}
+                  status={otherUserStatus}
+                  showIcon={false}
                   showText={true}
                   size="small"
+                  variant="compact"
                 />
               )}
             </View>

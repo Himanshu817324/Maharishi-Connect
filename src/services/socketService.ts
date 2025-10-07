@@ -84,6 +84,8 @@ export interface DeliveryData {
   chatId: string;
   deliveredTo: string[];
   deliveredAt: string;
+  userId: string;
+  timestamp: string;
 }
 
 export interface TypingData {
@@ -104,7 +106,7 @@ export interface ReadReceiptData {
 export interface MessageStatusData {
   messageId: string;
   chatId: string;
-  status: 'sent' | 'delivered' | 'read';
+  status: 'sent' | 'delivered' | 'seen' | 'sending' | 'failed';
   timestamp: string;
   userId?: string;
 }
@@ -134,6 +136,7 @@ class SocketService {
   private messageListeners: ((message: MessageData) => void)[] = [];
   private messageSentListeners: ((message: MessageData) => void)[] = [];
   private messageDeliveredListeners: ((data: DeliveryData) => void)[] = [];
+  private messageSeenListeners: ((data: DeliveryData) => void)[] = [];
   private chatCreatedListeners: ((chat: ChatData) => void)[] = [];
   private joinedChatListeners: ((data: { chatId: string; participants: string[] }) => void)[] = [];
   private userOnlineListeners: ((userData: UserStatusData) => void)[] = [];
@@ -231,9 +234,7 @@ class SocketService {
       console.error('❌ Socket connection error:', error);
       console.error('❌ Error details:', {
         message: error.message,
-        description: error.description,
-        context: error.context,
-        type: error.type
+        stack: error.stack,
       });
       this.isConnected = false;
       this.connectionListeners.forEach(listener => listener(false));
@@ -262,6 +263,13 @@ class SocketService {
     this.socket.on('messageDelivered', (data: DeliveryData) => {
       console.log('Message delivered:', data);
       this.messageDeliveredListeners.forEach(listener => listener(data));
+    });
+
+    this.socket.on('messageSeen', (data: DeliveryData) => {
+      console.log('Message seen:', data);
+      this.messageSeenListeners.forEach(listener => listener(data));
+      // Also trigger read receipt listeners since messageSeen means message was read
+      this.readReceiptListeners.forEach(listener => listener(data as any));
     });
 
     // Chat events
@@ -430,6 +438,14 @@ class SocketService {
     this.socket.emit('mark_as_delivered', { messageId });
   }
 
+  // Mark message as seen (uses existing mark_as_read event)
+  markMessageAsSeen(messageId: string): void {
+    if (!this.socket || !this.isConnected) {
+      throw new Error('Socket not connected');
+    }
+    this.socket.emit('mark_as_read', { messageId });
+  }
+
   // Debug operations
   debugRoomStatus(chatId: string): void {
     if (!this.socket || !this.isConnected) {
@@ -482,6 +498,14 @@ class SocketService {
 
   removeMessageDeliveredListener(listener: (data: DeliveryData) => void): void {
     this.messageDeliveredListeners = this.messageDeliveredListeners.filter(l => l !== listener);
+  }
+
+  addMessageSeenListener(listener: (data: DeliveryData) => void): void {
+    this.messageSeenListeners.push(listener);
+  }
+
+  removeMessageSeenListener(listener: (data: DeliveryData) => void): void {
+    this.messageSeenListeners = this.messageSeenListeners.filter(l => l !== listener);
   }
 
   addChatCreatedListener(listener: (chat: ChatData) => void): void {
@@ -571,6 +595,7 @@ class SocketService {
     this.messageListeners = [];
     this.messageSentListeners = [];
     this.messageDeliveredListeners = [];
+    this.messageSeenListeners = [];
     this.chatCreatedListeners = [];
     this.joinedChatListeners = [];
     this.userOnlineListeners = [];

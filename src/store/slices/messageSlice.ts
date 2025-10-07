@@ -376,23 +376,31 @@ const messageSlice = createSlice({
     updateMessageStatus: (state, action: PayloadAction<{
       messageId: string;
       chatId: string;
-      status: 'sent' | 'delivered' | 'read';
+      status: 'sent' | 'delivered' | 'seen' | 'sending' | 'failed';
       userId?: string;
       timestamp?: string;
     }>) => {
       const { messageId, chatId, status, userId, timestamp } = action.payload;
+      console.log('📊 [Redux] updateMessageStatus called:', { messageId, chatId, status, userId, timestamp });
+      console.log('📊 [Redux] Available chats:', Object.keys(state.messages));
+      console.log('📊 [Redux] Messages in chat:', state.messages[chatId]?.length || 0);
 
       // Update message in the messages object
       if (state.messages[chatId]) {
         const messageIndex = state.messages[chatId].findIndex(m => m.id === messageId);
+        console.log('📊 [Redux] Message index found:', messageIndex);
+        
         if (messageIndex >= 0) {
           const message = state.messages[chatId][messageIndex];
+          console.log('📊 [Redux] Found message:', { id: message.id, currentStatus: message.status });
 
           // Update status
+          const oldStatus = message.status;
           message.status = status;
+          console.log('📊 [Redux] Updated message status:', { messageId, oldStatus, newStatus: status });
 
           // Update read_by or delivered_to arrays
-          if (status === 'read' && userId && timestamp) {
+          if (status === 'seen' && userId && timestamp) {
             if (!message.read_by) {
               message.read_by = [];
             }
@@ -435,10 +443,12 @@ const messageSlice = createSlice({
           const message = state.currentChatMessages[messageIndex];
 
           // Update status
+          const oldCurrentStatus = message.status;
           message.status = status;
+          console.log('📊 [Redux] Updated current chat message status:', { messageId, oldStatus: oldCurrentStatus, newStatus: status });
 
           // Update read_by or delivered_to arrays
-          if (status === 'read' && userId && timestamp) {
+          if (status === 'seen' && userId && timestamp) {
             if (!message.read_by) {
               message.read_by = [];
             }

@@ -71,6 +71,12 @@ export interface MessageData {
     filename: string;
     size: number;
     mimeType: string;
+    // File-specific metadata
+    fileId?: string;
+    fileName?: string;
+    fileSize?: number;
+    fileType?: string;
+    s3Key?: string;
   };
   reply_to_message_id?: string;
   created_at: string;
@@ -81,7 +87,12 @@ export interface MessageData {
     profilePicture?: string;
   };
   // Message status tracking
-  status?: 'sent' | 'delivered' | 'read';
+  status?: 'sending' | 'sent' | 'delivered' | 'seen' | 'failed';
+  sent_at?: string;
+  delivered_at?: string;
+  seen_at?: string;
+  failed_at?: string;
+  error?: string;
   read_by?: Array<{
     user_id: string;
     read_at: string;
@@ -785,6 +796,165 @@ class ChatService {
 
       // Re-throw other errors
       throw error;
+    }
+  }
+
+  // Send file message to chat
+  async sendFileMessage(
+    chatId: string,
+    fileData: {
+      fileId: string;
+      fileName: string;
+      fileSize: number;
+      fileType: string;
+      s3Key: string;
+      mediaUrl: string;
+    },
+    message?: string
+  ): Promise<{ status: string; message: MessageData }> {
+    try {
+      console.log(`📁 Sending file message to chat ${chatId}:`, fileData);
+
+      const response = await this.makeRequest<{
+        status: string;
+        message: MessageData;
+      }>(`/chat/${chatId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: message || '',
+          messageType: 'file',
+          mediaUrl: fileData.mediaUrl,
+          mediaMetadata: {
+            fileId: fileData.fileId,
+            fileName: fileData.fileName,
+            fileSize: fileData.fileSize,
+            fileType: fileData.fileType,
+            s3Key: fileData.s3Key,
+            filename: fileData.fileName, // Keep for backward compatibility
+            size: fileData.fileSize,
+            mimeType: fileData.fileType,
+          },
+        }),
+      });
+
+      console.log(`✅ File message sent successfully:`, response.message.id);
+      return response;
+    } catch (error) {
+      console.error('Error sending file message:', error);
+      throw error;
+    }
+  }
+
+  // Message status management methods
+  async updateMessageStatus(
+    messageId: string,
+    status: 'sending' | 'sent' | 'delivered' | 'seen' | 'failed',
+    error?: string
+  ): Promise<{ status: string; data: MessageData }> {
+    try {
+      console.log(`🔄 Updating message status for ${messageId} to ${status}`);
+      
+      const response = await this.makeRequest<MessageResponse>(
+        `/chat/messages/${messageId}/status`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            status,
+            error,
+            timestamp: new Date().toISOString(),
+          }),
+        }
+      );
+
+      console.log(`✅ Message status updated for ${messageId}:`, response);
+      return {
+        status: response.status,
+        data: response.data!,
+      };
+    } catch (error) {
+      console.error(`❌ Error updating message status for ${messageId}:`, error);
+      throw error;
+    }
+  }
+
+  async markMessageAsDelivered(messageId: string): Promise<void> {
+    try {
+      await this.updateMessageStatus(messageId, 'delivered');
+      console.log(`✅ Message ${messageId} marked as delivered`);
+    } catch (error) {
+      console.error(`❌ Error marking message as delivered:`, error);
+      throw error;
+    }
+  }
+
+  async markMessageAsSeen(messageId: string): Promise<void> {
+    try {
+      await this.updateMessageStatus(messageId, 'seen');
+      console.log(`✅ Message ${messageId} marked as seen`);
+    } catch (error) {
+      console.error(`❌ Error marking message as seen:`, error);
+      throw error;
+    }
+  }
+
+  async markMessageAsFailed(messageId: string, errorMessage: string): Promise<void> {
+    try {
+      await this.updateMessageStatus(messageId, 'failed', errorMessage);
+      console.log(`❌ Message ${messageId} marked as failed:`, errorMessage);
+    } catch (err) {
+      console.error(`❌ Error marking message as failed:`, err);
+      throw err;
+    }
+  }
+
+  async getMessageStatus(messageId: string): Promise<MessageData> {
+    try {
+      console.log(`🔍 Getting message status for: ${messageId}`);
+      
+      const response = await this.makeRequest<MessageResponse>(
+        `/chat/messages/${messageId}/status`
+      );
+
+      console.log(`✅ Message status for ${messageId}:`, response);
+      return response.data!;
+    } catch (error) {
+      console.error(`❌ Error getting message status for ${messageId}:`, error);
+      throw error;
+    }
+  }
+
+  async getMessageReadReceipts(messageId: string): Promise<Array<{ userId: string; readAt: string }>> {
+    try {
+      console.log(`🔍 Getting read receipts for message: ${messageId}`);
+      
+      const response = await this.makeRequest<{ status: string; data: Array<{ userId: string; readAt: string }> }>(
+        `/chat/messages/${messageId}/read-receipts`
+      );
+
+      console.log(`✅ Read receipts for ${messageId}:`, response.data);
+      return response.data;
+    } catch (error) {
+      console.error(`❌ Error getting read receipts for ${messageId}:`, error);
+      return [];
+    }
+  }
+
+  async getMessageDeliveryReceipts(messageId: string): Promise<Array<{ userId: string; deliveredAt: string }>> {
+    try {
+      console.log(`🔍 Getting delivery receipts for message: ${messageId}`);
+      
+      const response = await this.makeRequest<{ status: string; data: Array<{ userId: string; deliveredAt: string }> }>(
+        `/chat/messages/${messageId}/delivery-receipts`
+      );
+
+      console.log(`✅ Delivery receipts for ${messageId}:`, response.data);
+      return response.data;
+    } catch (error) {
+      console.error(`❌ Error getting delivery receipts for ${messageId}:`, error);
+      return [];
     }
   }
 }

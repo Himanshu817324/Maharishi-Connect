@@ -39,6 +39,8 @@ import {
 import { chatService } from '@/services/chatService';
 import { useContactsPermission } from '@/hooks/useContactsPermission';
 import { addChat } from '@/store/slices/chatSlice';
+import { useUserStatus } from '@/hooks/useUserStatus';
+import OnlineStatusIndicator from '@/components/OnlineStatusIndicator';
 import { AppDispatch, RootState } from '@/store';
 import CustomHeader from '@/components/atoms/ui/CustomHeader';
 
@@ -79,6 +81,17 @@ const FilteredContactsScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const [hasData, setHasData] = useState(false);
+
+  // Get user IDs for status monitoring
+  const userIds = useMemo(() => {
+    return existingUsers.map(contact => contact.user_id).filter(Boolean);
+  }, [existingUsers]);
+
+  // Use user status hook for online status
+  const { userStatuses, isUserOnline } = useUserStatus({
+    userIds,
+    autoStart: false, // Disabled until user status API is implemented
+  });
 
   // Filter out current user from contacts
   const filterCurrentUser = useCallback(
@@ -473,6 +486,8 @@ const FilteredContactsScreen: React.FC = () => {
   const renderExistingUserItem = ({ item }: { item: Contact }) => {
     const isSelected = selectedContacts.has(item.user_id);
     const avatarColor = getAvatarColor(item.localName || item.fullName);
+    const userStatus = userStatuses.get(item.user_id);
+    const isOnline = isUserOnline(item.user_id);
 
     return (
       <TouchableOpacity
@@ -487,28 +502,34 @@ const FilteredContactsScreen: React.FC = () => {
         onPress={() => handleContactSelect(item)}
         activeOpacity={0.7}
       >
-        <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
-          {(() => {
-            // Check for profile picture (prioritize local, then server)
-            const profilePicture =
-              item.localProfilePicture || item.profilePicture;
+        <View style={styles.avatarContainer}>
+          <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
+            {(() => {
+              // Check for profile picture (prioritize local, then server)
+              const profilePicture =
+                item.localProfilePicture || item.profilePicture;
 
-            if (profilePicture) {
-              return (
-                <Image
-                  source={{ uri: profilePicture }}
-                  style={styles.avatarImage}
-                  defaultSource={require('@/assets/logo.png')}
-                />
-              );
-            } else {
-              return (
-                <Text style={styles.avatarText}>
-                  {getContactAvatarInitials(item)}
-                </Text>
-              );
-            }
-          })()}
+              if (profilePicture) {
+                return (
+                  <Image
+                    source={{ uri: profilePicture }}
+                    style={styles.avatarImage}
+                    defaultSource={require('@/assets/logo.png')}
+                  />
+                );
+              } else {
+                return (
+                  <Text style={styles.avatarText}>
+                    {getContactAvatarInitials(item)}
+                  </Text>
+                );
+              }
+            })()}
+          </View>
+          {/* Online status indicator */}
+          {isOnline && (
+            <View style={[styles.onlineIndicator, { backgroundColor: '#4CAF50' }]} />
+          )}
         </View>
 
         <View style={styles.contactInfo}>
@@ -518,12 +539,23 @@ const FilteredContactsScreen: React.FC = () => {
           >
             {item.localName || item.fullName}
           </Text>
-          <Text
-            style={[styles.contactPhone, { color: colors.textSecondary }]}
-            numberOfLines={1}
-          >
-            {item.phoneNumber}
-          </Text>
+          <View style={styles.contactSubtitle}>
+            <Text
+              style={[styles.contactPhone, { color: colors.textSecondary }]}
+              numberOfLines={1}
+            >
+              {item.phoneNumber}
+            </Text>
+            {userStatus && (
+              <OnlineStatusIndicator
+                status={userStatus}
+                showIcon={false}
+                showText={true}
+                size="small"
+                variant="compact"
+              />
+            )}
+          </View>
         </View>
 
         <View style={styles.actionButtons}>
@@ -1149,14 +1181,27 @@ const styles = StyleSheet.create({
   selectedContact: {
     transform: [{ scale: 0.98 }],
   },
+  avatarContainer: {
+    position: 'relative',
+    marginRight: wp(3),
+  },
   avatar: {
     width: moderateScale(48),
     height: moderateScale(48),
     borderRadius: moderateScale(24),
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: wp(3),
     overflow: 'hidden',
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: moderateScale(12),
+    height: moderateScale(12),
+    borderRadius: moderateScale(6),
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   avatarImage: {
     width: '100%',
@@ -1179,9 +1224,15 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     marginBottom: hp(0.3),
   },
+  contactSubtitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   contactPhone: {
     fontSize: responsiveFont(14),
     fontWeight: '400',
+    flex: 1,
   },
   inviteLabel: {
     fontSize: responsiveFont(12),

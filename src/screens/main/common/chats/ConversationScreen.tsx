@@ -36,11 +36,14 @@ import { socketService, MessageData } from '@/services/socketService';
 import { messageService } from '@/services/messageService';
 import { chatService } from '@/services/chatService';
 import { ChatData } from '@/services/chatService';
+import { FileData } from '@/services/fileService';
 import ChatHeader from '@/components/atoms/chats/ChatHeader';
 import MessageBubble from '@/components/atoms/chats/MessageBubble';
 import ChatInput from '@/components/atoms/chats/ChatInput';
 import TypingIndicator from '@/components/atoms/chats/TypingIndicator';
 import CustomSafeAreaView from '@/components/atoms/ui/CustomSafeAreaView';
+import FileMessageBubble from '@/components/FileMessageBubble';
+import FilePicker from '@/components/FilePicker';
 
 interface RouteParams {
   chat: ChatData;
@@ -54,7 +57,7 @@ const ConversationScreen: React.FC = () => {
 
   const { chat: routeChat } = route.params as RouteParams;
   const { currentChat } = useSelector((state: RootState) => state.chat);
-  const { currentChatMessages, currentChatId, typingUsers } = useSelector(
+  const { currentChatMessages, currentChatId, typingUsers: _typingUsers } = useSelector(
     (state: RootState) => state.message,
   );
   const { user } = useSelector((state: RootState) => state.auth);
@@ -79,8 +82,8 @@ const ConversationScreen: React.FC = () => {
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Online status
-  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
-  const [userLastSeen, setUserLastSeen] = useState<Map<string, string>>(
+  const [_onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+  const [_userLastSeen, setUserLastSeen] = useState<Map<string, string>>(
     new Map(),
   );
 
@@ -118,6 +121,7 @@ const ConversationScreen: React.FC = () => {
       }, 10);
     }
   }, [currentChatMessages.length]);
+
 
   const setupSocketListeners = useCallback(() => {
     // Listener for sent messages (confirmation)
@@ -166,6 +170,14 @@ const ConversationScreen: React.FC = () => {
           };
           dispatch(addMessage(messageWithStatus));
 
+          // Mark message as delivered when received
+          try {
+            console.log('📬 [ConversationScreen] Marking message as delivered:', message.id);
+            socketService.markMessageAsDelivered(message.id);
+          } catch (error) {
+            console.error('❌ [ConversationScreen] Error marking message as delivered:', error);
+          }
+
           // Update the chat's last message in the chat list
           dispatch(
             updateChatLastMessage({
@@ -185,7 +197,7 @@ const ConversationScreen: React.FC = () => {
     );
 
     // Typing indicator listeners
-    const removeTypingListener = socketService.addTypingListener(data => {
+    const _removeTypingListener = socketService.addTypingListener(data => {
       if (data.chatId === chat?.id) {
         console.log('⌨️ [ConversationScreen] Typing indicator:', data);
 
@@ -208,17 +220,17 @@ const ConversationScreen: React.FC = () => {
       }
     });
 
-    // Read receipt listeners
-    const removeReadReceiptListener = socketService.addReadReceiptListener(
+    // Read receipt listeners (handles both messageRead and messageSeen events)
+    const _removeReadReceiptListener = socketService.addReadReceiptListener(
       data => {
         if (data.chatId === chat?.id) {
           console.log('📖 [ConversationScreen] Read receipt:', data);
-          // Update message status to 'read' in Redux store
+          // Update message status to 'seen' in Redux store
           dispatch(
             updateMessageStatus({
               messageId: data.messageId,
               chatId: data.chatId,
-              status: 'read',
+              status: 'seen',
               userId: data.userId,
               timestamp: data.readAt,
             }),
@@ -228,10 +240,15 @@ const ConversationScreen: React.FC = () => {
     );
 
     // Message status listeners
-    const removeMessageStatusListener = socketService.addMessageStatusListener(
+    const _removeMessageStatusListener = socketService.addMessageStatusListener(
       data => {
+        console.log('📊 [ConversationScreen] Message status update received:', data);
+        console.log('📊 [ConversationScreen] Current chat ID:', chat?.id);
+        console.log('📊 [ConversationScreen] Data chat ID:', data.chatId);
+        console.log('📊 [ConversationScreen] Chat IDs match:', data.chatId === chat?.id);
+        
         if (data.chatId === chat?.id) {
-          console.log('📊 [ConversationScreen] Message status update:', data);
+          console.log('📊 [ConversationScreen] Processing message status update:', data);
           // Update message status in Redux store
           dispatch(
             updateMessageStatus({
@@ -242,6 +259,9 @@ const ConversationScreen: React.FC = () => {
               timestamp: data.timestamp,
             }),
           );
+          console.log('📊 [ConversationScreen] Message status update dispatched to Redux');
+        } else {
+          console.log('📊 [ConversationScreen] Ignoring status update for different chat');
         }
       },
     );
@@ -249,32 +269,46 @@ const ConversationScreen: React.FC = () => {
     // Message delivered listeners
     const removeMessageDeliveredListener =
       socketService.addMessageDeliveredListener(data => {
+        console.log('📬 [ConversationScreen] Message delivered event received:', data);
+        console.log('📬 [ConversationScreen] Current chat ID:', chat?.id);
+        console.log('📬 [ConversationScreen] Data chat ID:', data.chatId);
+        console.log('📬 [ConversationScreen] Chat IDs match:', data.chatId === chat?.id);
+        
         if (data.chatId === chat?.id) {
-          console.log('📬 [ConversationScreen] Message delivered:', data);
-          // Update message status to 'delivered' for each recipient
-          data.deliveredTo.forEach(userId => {
-            dispatch(
-              updateMessageStatus({
-                messageId: data.messageId,
-                chatId: data.chatId,
-                status: 'delivered',
-                userId: userId,
-                timestamp: data.deliveredAt,
-              }),
-            );
+          console.log('📬 [ConversationScreen] Processing message delivered:', data);
+          console.log('📬 [ConversationScreen] Dispatching updateMessageStatus:', {
+            messageId: data.messageId,
+            chatId: data.chatId,
+            status: 'delivered',
+            userId: data.userId,
+            timestamp: data.timestamp,
           });
+          // Update message status to 'delivered'
+          dispatch(
+            updateMessageStatus({
+              messageId: data.messageId,
+              chatId: data.chatId,
+              status: 'delivered',
+              userId: data.userId,
+              timestamp: data.timestamp,
+            }),
+          );
+          console.log('📬 [ConversationScreen] Message delivered status dispatched to Redux');
+        } else {
+          console.log('📬 [ConversationScreen] Ignoring delivered event for different chat');
         }
       });
 
+
     // Online status listeners
-    const removeUserOnlineListener = socketService.addUserOnlineListener(
+    const _removeUserOnlineListener = socketService.addUserOnlineListener(
       userData => {
         console.log('🟢 [ConversationScreen] User came online:', userData);
         setOnlineUsers(prev => new Set([...prev, userData.user_id]));
       },
     );
 
-    const removeUserOfflineListener = socketService.addUserOfflineListener(
+    const _removeUserOfflineListener = socketService.addUserOfflineListener(
       userData => {
         console.log('🔴 [ConversationScreen] User went offline:', userData);
         setOnlineUsers(prev => {
@@ -475,6 +509,13 @@ const ConversationScreen: React.FC = () => {
   };
 
   // Typing handlers
+  const handleStopTyping = useCallback(() => {
+    if (!chat || !isTyping) return;
+
+    setIsTyping(false);
+    socketService.stopTyping(chat.id);
+  }, [chat, isTyping]);
+
   const handleStartTyping = useCallback(() => {
     if (!chat || isTyping) return;
 
@@ -488,27 +529,33 @@ const ConversationScreen: React.FC = () => {
     typingTimeoutRef.current = setTimeout(() => {
       handleStopTyping();
     }, 3000);
-  }, [chat, isTyping]);
-
-  const handleStopTyping = useCallback(() => {
-    if (!chat || !isTyping) return;
-
-    setIsTyping(false);
-    socketService.stopTyping(chat.id);
-
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = null;
-    }
-  }, [chat, isTyping]);
+  }, [chat, isTyping, handleStopTyping]);
 
   // Mark messages as read when screen is focused
   const markMessagesAsRead = useCallback(() => {
     if (chat && socketService.isSocketConnected()) {
       socketService.markChatAsRead(chat.id);
       dispatch(clearUnreadCount(chat.id));
+      
+      // Mark all unread messages in this chat as seen
+      const unreadMessages = currentChatMessages.filter(
+        message => message.sender_id !== user?.id && 
+        message.sender_id !== user?.firebaseUid && 
+        message.status !== 'seen'
+      );
+      
+      console.log('👁️ [ConversationScreen] Marking messages as seen:', unreadMessages.length);
+      
+      unreadMessages.forEach(message => {
+        try {
+          console.log('👁️ [ConversationScreen] Marking message as seen:', message.id);
+          socketService.markMessageAsSeen(message.id);
+        } catch (error) {
+          console.error('❌ [ConversationScreen] Error marking message as seen:', error);
+        }
+      });
     }
-  }, [chat, dispatch]);
+  }, [chat, dispatch, currentChatMessages, user?.id, user?.firebaseUid]);
 
   // Clear unread count when screen is focused
   useFocusEffect(
@@ -606,8 +653,59 @@ const ConversationScreen: React.FC = () => {
     Alert.alert('Coming Soon', 'Audio recorder will be implemented soon.');
   };
 
+  const [isFilePickerVisible, setIsFilePickerVisible] = useState(false);
+
   const handleSendFile = () => {
-    Alert.alert('Coming Soon', 'File picker will be implemented soon.');
+    setIsFilePickerVisible(true);
+  };
+
+  const handleFileSelected = async (file: FileData) => {
+    if (!chat) return;
+
+    try {
+      // Send file message to chat
+      const response = await chatService.sendFileMessage(chat.id, {
+        fileId: file.id,
+        fileName: file.originalName,
+        fileSize: file.size,
+        fileType: file.mimeType,
+        s3Key: file.s3Key,
+        mediaUrl: file.mediaUrl,
+      });
+
+      if (response.status === 'SUCCESS') {
+        // Add message to Redux store
+        dispatch(addMessage(response.message));
+        
+        // Update chat's last message
+        dispatch(
+          updateChatLastMessage({
+            chatId: chat.id,
+            lastMessage: {
+              id: response.message.id,
+              content: response.message.content,
+              sender_id: response.message.sender_id,
+              created_at: response.message.created_at,
+            },
+          })
+        );
+
+        // Clear reply if any
+        setReplyToMessage(null);
+        
+        // Scroll to bottom
+        scrollToBottom();
+      } else {
+        Alert.alert('Error', 'Failed to send file');
+      }
+    } catch (error) {
+      console.error('Error sending file:', error);
+      Alert.alert('Error', 'Failed to send file. Please try again.');
+    }
+  };
+
+  const handleFileUploadError = (error: string) => {
+    Alert.alert('Upload Error', error);
   };
 
   const handleBack = () => {
@@ -670,6 +768,18 @@ const ConversationScreen: React.FC = () => {
       content: item.content,
     });
 
+    // Render file message if it's a file type
+    if (item.message_type === 'file') {
+      return (
+        <FileMessageBubble
+          message={item}
+          isOwn={isOwn}
+          onPress={() => handleMessagePress(item)}
+          onLongPress={() => handleMessageLongPress(item)}
+        />
+      );
+    }
+
     return (
       <MessageBubble
         message={item}
@@ -686,11 +796,11 @@ const ConversationScreen: React.FC = () => {
   const renderTypingIndicator = () => {
     if (localTypingUsers.length === 0) return null;
 
-    return localTypingUsers.map((user, index) => (
+    return localTypingUsers.map((typingUser, index) => (
       <TypingIndicator
-        key={`${user.userId}-${index}`}
+        key={`${typingUser.userId}-${index}`}
         isVisible={true}
-        userName={user.userName}
+        userName={typingUser.userName}
         isOwn={false}
       />
     ));
@@ -761,29 +871,8 @@ const ConversationScreen: React.FC = () => {
             onSearch={handleSearch}
             onInfo={handleInfo}
             onMore={handleMore}
-            isOnline={
-              chat?.type === 'direct'
-                ? chat.participants?.some(
-                    p =>
-                      p.user_id !== (user?.id || user?.firebaseUid) &&
-                      onlineUsers.has(p.user_id),
-                  )
-                : false
-            }
-            lastSeen={
-              chat?.type === 'direct'
-                ? chat.participants?.find(
-                    p => p.user_id !== (user?.id || user?.firebaseUid),
-                  )?.user_id
-                  ? userLastSeen.get(
-                      chat.participants.find(
-                        p => p.user_id !== (user?.id || user?.firebaseUid),
-                      )?.user_id || '',
-                    )
-                  : undefined
-                : undefined
-            }
           />
+          
 
           <View style={styles.messageListContainer}>
             <FlatList
@@ -828,6 +917,15 @@ const ConversationScreen: React.FC = () => {
           </View>
         </View>
       </Container>
+
+      {/* File Picker Modal */}
+      <FilePicker
+        visible={isFilePickerVisible}
+        onClose={() => setIsFilePickerVisible(false)}
+        onFileSelected={handleFileSelected}
+        onUploadError={handleFileUploadError}
+        maxFileSize={50 * 1024 * 1024} // 50MB
+      />
     </CustomSafeAreaView>
   );
 };

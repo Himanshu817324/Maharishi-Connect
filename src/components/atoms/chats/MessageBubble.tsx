@@ -10,7 +10,7 @@ import {
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 import { MessageData } from '@/services/chatService';
-import MessageStatusIndicator from './MessageStatusIndicator';
+import MessageStatusIndicator from '@/components/MessageStatusIndicator';
 
 interface MessageBubbleProps {
   message: MessageData;
@@ -284,14 +284,29 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             </View>
           )}
 
-          {/* Message Status Indicator */}
-          <MessageStatusIndicator
-            status={message.status || 'sent'}
-            readBy={message.read_by}
-            deliveredTo={message.delivered_to}
-            isOwn={isOwn}
-            showTimestamp={false}
-          />
+          {/* Message Status Indicator - Only show for own messages */}
+          {isOwn && (
+            <>
+              {console.log('🔍 MessageBubble rendering status indicator:', { 
+                messageId: message.id, 
+                status: message.status, 
+                isOwn 
+              })}
+              <MessageStatusIndicator
+                status={message.status || 'sent'}
+                showText={true}
+                showIcon={true}
+                size="small"
+                readCount={message.read_by?.length || 0}
+                totalRecipients={1} // For direct chats, this would be 1
+                canRetry={message.status === 'failed'}
+                onRetry={() => {
+                  // Handle retry logic here
+                  console.log('Retrying message:', message.id);
+                }}
+              />
+            </>
+          )}
         </TouchableOpacity>
       </View>
     </View>
