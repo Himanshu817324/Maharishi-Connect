@@ -77,6 +77,10 @@ export interface MessageData {
     fileSize?: number;
     fileType?: string;
     s3Key?: string;
+    // Media-specific metadata
+    duration?: number; // For videos and audio
+    width?: number; // For images and videos
+    height?: number; // For images and videos
   };
   reply_to_message_id?: string;
   created_at: string;

@@ -12,6 +12,7 @@ import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 import { permissionHelper } from '@/services/permissionHelper';
 import { mediaService } from '@/services/mediaService';
+import { testDocumentPicker } from '@/utils/documentPickerTest';
 
 interface PermissionTestProps {
   visible: boolean;
@@ -76,6 +77,11 @@ const PermissionTest: React.FC<PermissionTestProps> = ({ visible, onClose }) => 
     return result.success;
   };
 
+  const testDocumentPickerLib = async () => {
+    const result = await testDocumentPicker();
+    return result.success;
+  };
+
   const runAllTests = async () => {
     setTestResults({});
     
@@ -87,6 +93,7 @@ const PermissionTest: React.FC<PermissionTestProps> = ({ visible, onClose }) => 
     await runPermissionTest('File Picking', testFilePicking);
     await runPermissionTest('Camera Photo', testCameraPhoto);
     await runPermissionTest('Camera Video', testCameraVideo);
+    await runPermissionTest('Document Picker', testDocumentPickerLib);
   };
 
   const getTestIcon = (testName: string) => {
@@ -138,6 +145,7 @@ const PermissionTest: React.FC<PermissionTestProps> = ({ visible, onClose }) => 
               'File Picking',
               'Camera Photo',
               'Camera Video',
+              'Document Picker',
             ].map((testName) => (
               <TouchableOpacity
                 key={testName}

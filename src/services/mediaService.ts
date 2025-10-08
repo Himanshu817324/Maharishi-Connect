@@ -242,6 +242,8 @@ class MediaService {
    */
   async pickAudioFiles(maxCount: number = 5): Promise<MediaPickerResult> {
     try {
+      console.log('🎵 Starting audio file picker...');
+      
       const hasPermission = await this.requestPermissions('audio');
       if (!hasPermission) {
         return {
@@ -249,6 +251,44 @@ class MediaService {
           files: [],
           error: 'Storage permission is required to access audio files'
         };
+      }
+
+      console.log('🎵 DocumentPicker available:', !!DocumentPicker);
+      console.log('🎵 DocumentPicker.pick available:', !!DocumentPicker?.pick);
+      console.log('🎵 types available:', !!types);
+
+      if (!DocumentPicker || !DocumentPicker.pick) {
+        console.error('DocumentPicker is not available. Falling back to image picker for audio files.');
+        // Fallback to image picker for audio files (not ideal but works)
+        const fallbackResult = await launchImageLibrary({
+          mediaType: 'mixed' as RNMediaType,
+          quality: 0.8 as PhotoQuality,
+          includeBase64: false,
+          selectionLimit: maxCount,
+        });
+
+        if (fallbackResult.didCancel) {
+          return { success: false, files: [], error: 'User cancelled' };
+        }
+
+        if (fallbackResult.errorMessage) {
+          return { success: false, files: [], error: fallbackResult.errorMessage };
+        }
+
+        if (fallbackResult.assets && fallbackResult.assets.length > 0) {
+          const files: MediaFile[] = fallbackResult.assets
+            .filter(asset => asset.type?.startsWith('audio/'))
+            .map(asset => ({
+              uri: asset.uri || '',
+              name: asset.fileName || 'audio_file',
+              type: asset.type || 'audio/mpeg',
+              size: asset.fileSize || 0,
+            }));
+
+          return { success: true, files };
+        }
+
+        return { success: false, files: [], error: 'No audio files selected' };
       }
 
       const result = await DocumentPicker.pick({
@@ -288,6 +328,8 @@ class MediaService {
    */
   async pickFiles(maxCount: number = 5): Promise<MediaPickerResult> {
     try {
+      console.log('📁 Starting file picker...');
+      
       const hasPermission = await this.requestPermissions('file');
       if (!hasPermission) {
         return {
@@ -295,6 +337,43 @@ class MediaService {
           files: [],
           error: 'Storage permission is required to access files'
         };
+      }
+
+      console.log('📁 DocumentPicker available:', !!DocumentPicker);
+      console.log('📁 DocumentPicker.pick available:', !!DocumentPicker?.pick);
+      console.log('📁 types available:', !!types);
+
+      if (!DocumentPicker || !DocumentPicker.pick) {
+        console.error('DocumentPicker is not available. Falling back to image picker for files.');
+        // Fallback to image picker for files (not ideal but works)
+        const fallbackResult = await launchImageLibrary({
+          mediaType: 'mixed' as RNMediaType,
+          quality: 0.8 as PhotoQuality,
+          includeBase64: false,
+          selectionLimit: maxCount,
+        });
+
+        if (fallbackResult.didCancel) {
+          return { success: false, files: [], error: 'User cancelled' };
+        }
+
+        if (fallbackResult.errorMessage) {
+          return { success: false, files: [], error: fallbackResult.errorMessage };
+        }
+
+        if (fallbackResult.assets && fallbackResult.assets.length > 0) {
+          const files: MediaFile[] = fallbackResult.assets
+            .map(asset => ({
+              uri: asset.uri || '',
+              name: asset.fileName || 'file',
+              type: asset.type || 'application/octet-stream',
+              size: asset.fileSize || 0,
+            }));
+
+          return { success: true, files };
+        }
+
+        return { success: false, files: [], error: 'No files selected' };
       }
 
       const result = await DocumentPicker.pick({

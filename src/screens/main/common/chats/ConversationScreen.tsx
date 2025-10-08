@@ -37,6 +37,7 @@ import { messageService } from '@/services/messageService';
 import { chatService } from '@/services/chatService';
 import { ChatData } from '@/services/chatService';
 import { MediaFile } from '@/services/mediaService';
+import MediaViewer from '@/components/MediaViewer';
 import ChatHeader from '@/components/atoms/chats/ChatHeader';
 import MessageBubble from '@/components/atoms/chats/MessageBubble';
 import ChatInput from '@/components/atoms/chats/ChatInput';
@@ -642,6 +643,9 @@ const ConversationScreen: React.FC = () => {
   };
 
   const [isMediaPickerVisible, setIsMediaPickerVisible] = useState(false);
+  const [isMediaViewerVisible, setIsMediaViewerVisible] = useState(false);
+  const [mediaViewerFiles, setMediaViewerFiles] = useState<MediaFile[]>([]);
+  const [mediaViewerIndex, setMediaViewerIndex] = useState(0);
 
   const handleSendImage = () => {
     setIsMediaPickerVisible(true);
@@ -666,39 +670,46 @@ const ConversationScreen: React.FC = () => {
       // For now, we'll send each file as a separate message
       // In a real implementation, you might want to batch them or create a gallery message
       for (const file of files) {
+        // Determine message type based on file type
+        let messageType: 'text' | 'image' | 'video' | 'audio' | 'file' = 'file';
+        if (type === 'image') {
+          messageType = 'image';
+        } else if (type === 'video') {
+          messageType = 'video';
+        } else if (type === 'audio') {
+          messageType = 'audio';
+        }
+
         // Create a message object for the media file
-        const messageData = {
-          id: `temp_${Date.now()}_${Math.random()}`,
-          chatId: chat.id,
-          senderId: user?.id || '',
-          content: `[${type.toUpperCase()}] ${file.name}`,
-          type: 'media' as const,
-          timestamp: new Date().toISOString(),
-          status: 'sending' as const,
-          metadata: {
+        const messageId = `temp_${Date.now()}_${Math.random()}`;
+        const timestamp = new Date().toISOString();
+
+        // Add message to Redux store immediately for optimistic UI
+        dispatch(addMessage({
+          id: messageId,
+          chat_id: chat.id,
+          sender_id: user?.id || '',
+          content: file.name, // Use file name as content
+          message_type: messageType,
+          media_url: file.uri, // Store the file URI
+          media_metadata: {
+            filename: file.name,
+            size: file.size,
+            mimeType: file.type,
             fileName: file.name,
-            fileType: file.type,
             fileSize: file.size,
-            fileUri: file.uri,
-            mediaType: type,
+            fileType: file.type,
+            // Additional metadata for media files
             duration: file.duration,
             width: file.width,
             height: file.height,
           },
-        };
-
-        // Add message to Redux store immediately for optimistic UI
-        dispatch(addMessage({
-          id: messageData.id,
-          chat_id: messageData.chatId,
-          sender_id: messageData.senderId,
-          content: messageData.content,
-          message_type: 'file',
-          created_at: messageData.timestamp,
+          created_at: timestamp,
           sender: {
             user_id: user?.id || '',
             fullName: user?.fullName || 'You',
           },
+          status: 'sending',
         }));
 
         // Here you would typically upload the file to your server
@@ -706,8 +717,8 @@ const ConversationScreen: React.FC = () => {
         // For now, we'll just simulate success
         setTimeout(() => {
           dispatch(updateMessageStatus({
-            messageId: messageData.id,
-            chatId: messageData.chatId,
+            messageId: messageId,
+            chatId: chat.id,
             status: 'sent',
           }));
         }, 1000);
@@ -715,23 +726,16 @@ const ConversationScreen: React.FC = () => {
 
       // Update chat last message
       const lastMessage = files[files.length - 1];
-      const lastMessageData = {
-        id: `temp_${Date.now()}_${Math.random()}`,
-        chatId: chat.id,
-        senderId: user?.id || '',
-        content: `[${type.toUpperCase()}] ${lastMessage.name}`,
-        type: 'media' as const,
-        timestamp: new Date().toISOString(),
-        status: 'sent' as const,
-      };
+      const lastMessageId = `temp_${Date.now()}_${Math.random()}`;
+      const lastMessageTimestamp = new Date().toISOString();
       
       dispatch(updateChatLastMessage({
         chatId: chat.id,
         lastMessage: {
-          id: lastMessageData.id,
-          content: lastMessageData.content,
-          sender_id: lastMessageData.senderId,
-          created_at: lastMessageData.timestamp,
+          id: lastMessageId,
+          content: lastMessage.name,
+          sender_id: user?.id || '',
+          created_at: lastMessageTimestamp,
         },
       }));
 
@@ -750,6 +754,25 @@ const ConversationScreen: React.FC = () => {
   const handleMediaUploadError = (error: string) => {
     console.error('Media upload error:', error);
     Alert.alert('Upload Error', error);
+  };
+
+  const handleMediaPress = (message: MessageData) => {
+    if (!message.media_url) return;
+
+    // Convert message to MediaFile format
+    const mediaFile: MediaFile = {
+      uri: message.media_url,
+      name: message.content || 'Media File',
+      type: message.media_metadata?.mimeType || 'application/octet-stream',
+      size: message.media_metadata?.size || 0,
+      duration: message.media_metadata?.duration,
+      width: message.media_metadata?.width,
+      height: message.media_metadata?.height,
+    };
+
+    setMediaViewerFiles([mediaFile]);
+    setMediaViewerIndex(0);
+    setIsMediaViewerVisible(true);
   };
 
   const handleBack = () => {
@@ -833,6 +856,7 @@ const ConversationScreen: React.FC = () => {
         isGroupChat={chat?.type === 'group'}
         onPress={() => handleMessagePress(item)}
         onLongPress={() => handleMessageLongPress(item)}
+        onMediaPress={handleMediaPress}
       />
     );
   };
@@ -963,16 +987,23 @@ const ConversationScreen: React.FC = () => {
       </Container>
 
       {/* Media Picker Modal */}
-      <MediaPicker
-        visible={isMediaPickerVisible}
-        onClose={() => setIsMediaPickerVisible(false)}
-        onMediaSelected={handleMediaSelected}
-        onUploadError={handleMediaUploadError}
-        maxFileSize={50 * 1024 * 1024} // 50MB
-      />
-    </CustomSafeAreaView>
-  );
-};
+        <MediaPicker
+          visible={isMediaPickerVisible}
+          onClose={() => setIsMediaPickerVisible(false)}
+          onMediaSelected={handleMediaSelected}
+          onUploadError={handleMediaUploadError}
+          maxFileSize={50 * 1024 * 1024} // 50MB
+        />
+
+        <MediaViewer
+          visible={isMediaViewerVisible}
+          onClose={() => setIsMediaViewerVisible(false)}
+          mediaFiles={mediaViewerFiles}
+          initialIndex={mediaViewerIndex}
+        />
+      </CustomSafeAreaView>
+    );
+  };
 
 const styles = StyleSheet.create({
   container: {

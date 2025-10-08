@@ -1,130 +1,135 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
-  Modal,
-  StyleSheet,
-  TouchableOpacity,
   Text,
-  Dimensions,
-  StatusBar,
-  SafeAreaView,
+  TouchableOpacity,
+  StyleSheet,
+  Modal,
+  Image,
   Alert,
   Linking,
-  Share,
+  ActivityIndicator,
 } from 'react-native';
-import { Image } from 'react-native';
 import { Video, ResizeMode } from 'react-native-video';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
+import { MediaFile } from '@/services/mediaService';
 import { fileService } from '@/services/fileService';
+import AudioPlayer from '@/components/AudioPlayer';
 
 interface MediaViewerProps {
   visible: boolean;
   onClose: () => void;
-  mediaUrl: string;
-  mediaType: 'image' | 'video' | 'audio' | 'document';
-  fileName?: string;
-  fileSize?: number;
+  mediaFiles: MediaFile[];
+  initialIndex?: number;
 }
-
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const MediaViewer: React.FC<MediaViewerProps> = ({
   visible,
   onClose,
-  mediaUrl,
-  mediaType,
-  fileName,
-  fileSize,
+  mediaFiles,
+  initialIndex = 0,
 }) => {
   const { colors } = useTheme();
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  
+  // Fallback colors in case theme is not available
+  const safeColors = colors || {
+    accent: '#007AFF',
+    text: '#000000',
+    textSecondary: '#666666',
+    background: '#FFFFFF',
+    surface: '#F5F5F5',
+    border: '#E0E0E0',
+  };
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const videoRef = useRef<Video>(null);
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+  const [imageScale, setImageScale] = useState(1);
+  const [imageTranslateX, setImageTranslateX] = useState(0);
+  const [imageTranslateY, setImageTranslateY] = useState(0);
+
+  const videoRef = useRef<any>(null);
+  const controlsTimeoutRef = useRef<any>(null);
+
+  const currentFile = mediaFiles[currentIndex];
 
   useEffect(() => {
     if (visible) {
-      setIsLoading(true);
-      setError(null);
+      setCurrentIndex(initialIndex);
       setIsPlaying(false);
-      setCurrentTime(0);
-      setDuration(0);
+      setVideoProgress(0);
+      setImageScale(1);
+      setImageTranslateX(0);
+      setImageTranslateY(0);
     }
-  }, [visible, mediaUrl]);
+  }, [visible, initialIndex]);
+
+  useEffect(() => {
+    if (showControls) {
+      controlsTimeoutRef.current = setTimeout(() => {
+        setShowControls(false);
+      }, 3000);
+    }
+
+    return () => {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+    };
+  }, [showControls]);
 
   const handleClose = () => {
     setIsPlaying(false);
     onClose();
   };
 
-  const handleShare = async () => {
-    try {
-      await Share.share({
-        url: mediaUrl,
-        title: fileName || 'Shared Media',
-      });
-    } catch (error) {
-      console.error('Error sharing media:', error);
-      Alert.alert('Error', 'Failed to share media');
+  const handlePrevious = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex(currentIndex - 1);
+      setIsPlaying(false);
+      setVideoProgress(0);
     }
   };
 
-  const handleDownload = async () => {
-    try {
-      if (mediaType === 'image') {
-        // For images, try to save to gallery
-        Alert.alert(
-          'Save Image',
-          'Long-press the image and select "Save to Photos" to save it to your gallery.',
-          [{ text: 'OK' }]
-        );
-      } else {
-        // For other files, open in browser for download
-        await Linking.openURL(mediaUrl);
-        Alert.alert('Info', 'File opened in browser. You can download it manually.');
-      }
-    } catch (error) {
-      console.error('Error downloading media:', error);
-      Alert.alert('Error', 'Failed to download media');
+  const handleNext = () => {
+    if (currentIndex < mediaFiles.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+      setIsPlaying(false);
+      setVideoProgress(0);
     }
   };
 
   const handlePlayPause = () => {
     setIsPlaying(!isPlaying);
+    setShowControls(true);
+  };
+
+  const handleVideoProgress = (data: any) => {
+    setVideoProgress(data.currentTime);
   };
 
   const handleVideoLoad = (data: any) => {
-    setDuration(data.duration);
-    setIsLoading(false);
+    setVideoDuration(data.duration);
   };
 
-  const handleVideoError = (error: any) => {
-    console.error('Video error:', error);
-    setError('Failed to load video');
-    setIsLoading(false);
-  };
 
-  const handleImageLoad = () => {
-    setIsLoading(false);
-  };
+  const handleFileOpen = async () => {
+    if (!currentFile) return;
 
-  const handleImageError = () => {
-    setError('Failed to load image');
-    setIsLoading(false);
-  };
-
-  const handleOpenInExternalApp = async () => {
     try {
-      const canOpen = await Linking.canOpenURL(mediaUrl);
+      const canOpen = await Linking.canOpenURL(currentFile.uri);
       if (canOpen) {
-        await Linking.openURL(mediaUrl);
+        await Linking.openURL(currentFile.uri);
       } else {
-        Alert.alert('Error', 'Cannot open this file type');
+        Alert.alert(
+          'Cannot Open File',
+          'No app available to open this file type. Please install a compatible app.',
+          [{ text: 'OK' }]
+        );
       }
     } catch (error) {
       console.error('Error opening file:', error);
@@ -132,136 +137,190 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
     }
   };
 
+  const getFileType = (file: MediaFile) => {
+    if (file.type.startsWith('image/')) return 'image';
+    if (file.type.startsWith('video/')) return 'video';
+    if (file.type.startsWith('audio/')) return 'audio';
+    return 'file';
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const renderImage = () => (
     <View style={styles.mediaContainer}>
       <Image
-        source={{ uri: mediaUrl }}
-        style={styles.image}
+        source={{ uri: currentFile.uri }}
+        style={[
+          styles.mediaImage,
+          {
+            transform: [
+              { scale: imageScale },
+              { translateX: imageTranslateX },
+              { translateY: imageTranslateY },
+            ],
+          },
+        ]}
         resizeMode="contain"
-        onLoad={handleImageLoad}
-        onError={handleImageError}
+        onLoadStart={() => setIsLoading(true)}
+        onLoadEnd={() => setIsLoading(false)}
       />
+      {isLoading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color={safeColors.accent} />
+        </View>
+      )}
     </View>
   );
 
   const renderVideo = () => (
     <View style={styles.mediaContainer}>
-      <Video
-        ref={videoRef}
-        source={{ uri: mediaUrl }}
-        style={styles.video}
-        resizeMode={ResizeMode.CONTAIN}
-        paused={!isPlaying}
-        onLoad={handleVideoLoad}
-        onError={handleVideoError}
-        onProgress={(data) => setCurrentTime(data.currentTime)}
-        onEnd={() => setIsPlaying(false)}
-        controls={false}
-      />
-      {!isLoading && !error && (
-        <TouchableOpacity
-          style={styles.playButton}
-          onPress={handlePlayPause}
-          activeOpacity={0.7}
-        >
-          <Icon
-            name={isPlaying ? 'pause' : 'play'}
-            size={moderateScale(50)}
-            color="#FFFFFF"
-          />
-        </TouchableOpacity>
-      )}
+      <TouchableOpacity
+        style={styles.videoContainer}
+        onPress={() => setShowControls(!showControls)}
+        activeOpacity={1}
+      >
+        <Video
+          ref={videoRef}
+          source={{ uri: currentFile.uri }}
+          style={styles.mediaVideo}
+          resizeMode={ResizeMode.CONTAIN}
+          paused={!isPlaying}
+          onProgress={handleVideoProgress}
+          onLoad={handleVideoLoad}
+          onLoadStart={() => setIsLoading(true)}
+          onError={(error) => {
+            console.error('Video error:', error);
+            Alert.alert('Error', 'Failed to load video');
+          }}
+        />
+        
+        {isLoading && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color={safeColors.accent} />
+          </View>
+        )}
+
+        {showControls && (
+          <View style={styles.videoControls}>
+            <TouchableOpacity
+              style={styles.playButton}
+              onPress={handlePlayPause}
+            >
+              <Icon
+                name={isPlaying ? 'pause' : 'play'}
+                size={moderateScale(40)}
+                color="#FFFFFF"
+              />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {showControls && videoDuration > 0 && (
+          <View style={styles.progressContainer}>
+            <Text style={styles.timeText}>
+              {formatTime(videoProgress)}
+            </Text>
+            <View style={styles.progressBar}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${(videoProgress / videoDuration) * 100}%` },
+                ]}
+              />
+            </View>
+            <Text style={styles.timeText}>
+              {formatTime(videoDuration)}
+            </Text>
+          </View>
+        )}
+      </TouchableOpacity>
     </View>
   );
 
   const renderAudio = () => (
-    <View style={styles.audioContainer}>
-      <View style={[styles.audioIcon, { backgroundColor: colors.accent + '20' }]}>
-        <Icon name="musical-notes" size={moderateScale(60)} color={colors.accent} />
-      </View>
-      <Text style={[styles.audioTitle, { color: colors.text }]}>
-        {fileName || 'Audio File'}
-      </Text>
-      <Text style={[styles.audioSubtitle, { color: colors.textSecondary }]}>
-        {fileSize ? fileService.formatFileSize(fileSize) : ''}
-      </Text>
-      <TouchableOpacity
-        style={[styles.audioPlayButton, { backgroundColor: colors.accent }]}
-        onPress={handlePlayPause}
-        activeOpacity={0.7}
-      >
-        <Icon
-          name={isPlaying ? 'pause' : 'play'}
-          size={moderateScale(30)}
-          color="#FFFFFF"
+    <View style={styles.mediaContainer}>
+      <View style={styles.audioContainer}>
+        <View style={styles.audioIcon}>
+          <Icon name="musical-notes" size={moderateScale(60)} color={safeColors.accent} />
+        </View>
+        
+        <Text style={[styles.audioTitle, { color: safeColors.text }]}>
+          {currentFile.name}
+        </Text>
+        
+        <Text style={[styles.audioSubtitle, { color: safeColors.textSecondary }]}>
+          {fileService?.formatFileSize?.(currentFile.size) || `${Math.round(currentFile.size / 1024)} KB`}
+        </Text>
+
+        <AudioPlayer
+          uri={currentFile.uri}
+          onProgress={(currentTime, duration) => {
+            setVideoProgress(currentTime);
+            setVideoDuration(duration);
+          }}
+          onEnd={() => setIsPlaying(false)}
+          style={styles.audioPlayer}
         />
-      </TouchableOpacity>
-    </View>
-  );
-
-  const renderDocument = () => (
-    <View style={styles.documentContainer}>
-      <View style={[styles.documentIcon, { backgroundColor: colors.accent + '20' }]}>
-        <Icon name="document" size={moderateScale(60)} color={colors.accent} />
       </View>
-      <Text style={[styles.documentTitle, { color: colors.text }]}>
-        {fileName || 'Document'}
-      </Text>
-      <Text style={[styles.documentSubtitle, { color: colors.textSecondary }]}>
-        {fileSize ? fileService.formatFileSize(fileSize) : ''}
-      </Text>
-      <TouchableOpacity
-        style={[styles.documentButton, { backgroundColor: colors.accent }]}
-        onPress={handleOpenInExternalApp}
-        activeOpacity={0.7}
-      >
-        <Icon name="open-outline" size={moderateScale(20)} color="#FFFFFF" />
-        <Text style={styles.documentButtonText}>Open with External App</Text>
-      </TouchableOpacity>
     </View>
   );
 
-  const renderContent = () => {
-    if (error) {
-      return (
-        <View style={styles.errorContainer}>
-          <Icon name="alert-circle" size={moderateScale(60)} color={colors.textSecondary} />
-          <Text style={[styles.errorText, { color: colors.text }]}>{error}</Text>
-          <TouchableOpacity
-            style={[styles.retryButton, { backgroundColor: colors.accent }]}
-            onPress={() => {
-              setError(null);
-              setIsLoading(true);
-            }}
-          >
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </TouchableOpacity>
+  const renderFile = () => (
+    <View style={styles.mediaContainer}>
+      <View style={styles.fileContainer}>
+        <View style={[styles.fileIcon, { backgroundColor: safeColors.accent + '20' }]}>
+          <Icon
+            name={fileService?.getFileIcon?.(currentFile.type) || 'document'}
+            size={moderateScale(60)}
+            color={safeColors.accent}
+          />
         </View>
-      );
-    }
+        
+        <Text style={[styles.fileTitle, { color: safeColors.text }]}>
+          {currentFile.name}
+        </Text>
+        
+        <Text style={[styles.fileSubtitle, { color: safeColors.textSecondary }]}>
+          {fileService?.formatFileSize?.(currentFile.size) || `${Math.round(currentFile.size / 1024)} KB`} • {fileService?.getFileTypeCategory?.(currentFile.type)?.toUpperCase() || 'FILE'}
+        </Text>
 
-    if (isLoading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <Icon name="hourglass-outline" size={moderateScale(60)} color={colors.accent} />
-          <Text style={[styles.loadingText, { color: colors.text }]}>Loading...</Text>
-        </View>
-      );
-    }
+        <TouchableOpacity
+          style={[styles.openFileButton, { backgroundColor: safeColors.accent }]}
+          onPress={handleFileOpen}
+        >
+          <Icon name="open-outline" size={moderateScale(20)} color="#FFFFFF" />
+          <Text style={styles.openFileText}>Open File</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
-    switch (mediaType) {
+  const renderMedia = () => {
+    if (!currentFile) return null;
+
+    const fileType = getFileType(currentFile);
+
+    switch (fileType) {
       case 'image':
         return renderImage();
       case 'video':
         return renderVideo();
       case 'audio':
         return renderAudio();
-      case 'document':
-        return renderDocument();
+      case 'file':
+        return renderFile();
       default:
-        return renderDocument();
+        return renderFile();
     }
   };
+
+  if (!visible || !currentFile || !mediaFiles || mediaFiles.length === 0) {
+    return null;
+  }
 
   return (
     <Modal
@@ -270,38 +329,75 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
       presentationStyle="fullScreen"
       onRequestClose={handleClose}
     >
-      <StatusBar hidden />
-      <SafeAreaView style={[styles.container, { backgroundColor: '#000000' }]}>
+      <View style={[styles.container, { backgroundColor: '#000000' }]}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleClose} style={styles.headerButton}>
             <Icon name="close" size={moderateScale(24)} color="#FFFFFF" />
           </TouchableOpacity>
+          
           <View style={styles.headerInfo}>
             <Text style={styles.headerTitle} numberOfLines={1}>
-              {fileName || 'Media'}
+              {currentFile.name}
             </Text>
-            {fileSize && (
-              <Text style={styles.headerSubtitle}>
-                {fileService.formatFileSize(fileSize)}
-              </Text>
-            )}
+            <Text style={styles.headerSubtitle}>
+              {currentIndex + 1} of {mediaFiles.length}
+            </Text>
           </View>
-          <View style={styles.headerActions}>
-            <TouchableOpacity onPress={handleShare} style={styles.headerButton}>
-              <Icon name="share-outline" size={moderateScale(24)} color="#FFFFFF" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleDownload} style={styles.headerButton}>
-              <Icon name="download-outline" size={moderateScale(24)} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
+          
+          <TouchableOpacity onPress={handleFileOpen} style={styles.headerButton}>
+            <Icon name="open-outline" size={moderateScale(24)} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
 
         {/* Media Content */}
         <View style={styles.content}>
-          {renderContent()}
+          {renderMedia()}
         </View>
-      </SafeAreaView>
+
+        {/* Navigation */}
+        {mediaFiles.length > 1 && (
+          <>
+            <TouchableOpacity
+              style={[styles.navButton, styles.navLeft]}
+              onPress={handlePrevious}
+              disabled={currentIndex === 0}
+            >
+              <Icon
+                name="chevron-back"
+                size={moderateScale(30)}
+                color={currentIndex === 0 ? '#666666' : '#FFFFFF'}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.navButton, styles.navRight]}
+              onPress={handleNext}
+              disabled={currentIndex === mediaFiles.length - 1}
+            >
+              <Icon
+                name="chevron-forward"
+                size={moderateScale(30)}
+                color={currentIndex === mediaFiles.length - 1 ? '#666666' : '#FFFFFF'}
+              />
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* Bottom Controls */}
+        {showControls && (
+          <View style={styles.bottomControls}>
+            <View style={styles.fileInfo}>
+              <Text style={styles.fileName} numberOfLines={1}>
+                {currentFile.name}
+              </Text>
+              <Text style={styles.fileSize}>
+                {fileService?.formatFileSize?.(currentFile.size) || `${Math.round(currentFile.size / 1024)} KB`}
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
     </Modal>
   );
 };
@@ -314,14 +410,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: wp(4),
-    paddingVertical: hp(1),
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    paddingVertical: hp(2),
+    paddingTop: hp(6), // Account for status bar
   },
   headerButton: {
     padding: moderateScale(8),
   },
   headerInfo: {
     flex: 1,
+    alignItems: 'center',
     marginHorizontal: wp(2),
   },
   headerTitle: {
@@ -332,10 +429,7 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: responsiveFont(12),
     color: '#CCCCCC',
-    marginTop: hp(0.2),
-  },
-  headerActions: {
-    flexDirection: 'row',
+    marginTop: hp(0.5),
   },
   content: {
     flex: 1,
@@ -343,42 +437,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   mediaContainer: {
-    width: screenWidth,
-    height: screenHeight * 0.8,
+    flex: 1,
+    width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  image: {
+  mediaImage: {
     width: '100%',
     height: '100%',
   },
-  video: {
+  videoContainer: {
+    flex: 1,
     width: '100%',
-    height: '100%',
-  },
-  playButton: {
-    position: 'absolute',
     justifyContent: 'center',
     alignItems: 'center',
-    width: moderateScale(80),
-    height: moderateScale(80),
-    borderRadius: moderateScale(40),
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  mediaVideo: {
+    width: '100%',
+    height: '100%',
   },
   audioContainer: {
     alignItems: 'center',
     paddingHorizontal: wp(8),
   },
   audioIcon: {
-    width: moderateScale(120),
-    height: moderateScale(120),
-    borderRadius: moderateScale(60),
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: hp(3),
   },
   audioTitle: {
-    fontSize: responsiveFont(20),
+    fontSize: responsiveFont(18),
     fontWeight: '600',
     textAlign: 'center',
     marginBottom: hp(1),
@@ -394,12 +480,17 @@ const styles = StyleSheet.create({
     borderRadius: moderateScale(40),
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: hp(3),
   },
-  documentContainer: {
+  audioPlayer: {
+    width: '100%',
+    marginTop: hp(2),
+  },
+  fileContainer: {
     alignItems: 'center',
     paddingHorizontal: wp(8),
   },
-  documentIcon: {
+  fileIcon: {
     width: moderateScale(120),
     height: moderateScale(120),
     borderRadius: moderateScale(60),
@@ -407,58 +498,119 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: hp(3),
   },
-  documentTitle: {
-    fontSize: responsiveFont(20),
+  fileTitle: {
+    fontSize: responsiveFont(18),
     fontWeight: '600',
     textAlign: 'center',
     marginBottom: hp(1),
   },
-  documentSubtitle: {
+  fileSubtitle: {
     fontSize: responsiveFont(14),
     textAlign: 'center',
     marginBottom: hp(3),
   },
-  documentButton: {
+  openFileButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: wp(6),
     paddingVertical: hp(1.5),
     borderRadius: moderateScale(25),
   },
-  documentButtonText: {
+  openFileText: {
     color: '#FFFFFF',
     fontSize: responsiveFont(16),
     fontWeight: '600',
     marginLeft: wp(2),
   },
-  loadingContainer: {
+  videoControls: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  loadingText: {
-    fontSize: responsiveFont(16),
-    marginTop: hp(2),
-  },
-  errorContainer: {
+  playButton: {
+    width: moderateScale(80),
+    height: moderateScale(80),
+    borderRadius: moderateScale(40),
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: wp(8),
   },
-  errorText: {
-    fontSize: responsiveFont(16),
-    textAlign: 'center',
-    marginTop: hp(2),
-    marginBottom: hp(3),
+  progressContainer: {
+    position: 'absolute',
+    bottom: hp(2),
+    left: wp(4),
+    right: wp(4),
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  retryButton: {
-    paddingHorizontal: wp(6),
-    paddingVertical: hp(1.5),
-    borderRadius: moderateScale(25),
+  audioProgressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
   },
-  retryButtonText: {
+  progressBar: {
+    height: moderateScale(4),
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    borderRadius: moderateScale(2),
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: moderateScale(2),
+  },
+  timeText: {
+    fontSize: responsiveFont(12),
     color: '#FFFFFF',
-    fontSize: responsiveFont(16),
-    fontWeight: '600',
+    minWidth: moderateScale(40),
+    textAlign: 'center',
+  },
+  navButton: {
+    position: 'absolute',
+    top: '50%',
+    width: moderateScale(50),
+    height: moderateScale(50),
+    borderRadius: moderateScale(25),
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  navLeft: {
+    left: wp(4),
+  },
+  navRight: {
+    right: wp(4),
+  },
+  bottomControls: {
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(2),
+  },
+  fileInfo: {
+    alignItems: 'center',
+  },
+  fileName: {
+    fontSize: responsiveFont(14),
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  fileSize: {
+    fontSize: responsiveFont(12),
+    color: '#CCCCCC',
+    marginTop: hp(0.5),
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
 });
 
 export default MediaViewer;
-
