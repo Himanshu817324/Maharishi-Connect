@@ -25,8 +25,10 @@
     <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
     
     <!-- Storage Permissions for File Transfer -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" 
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" 
+        android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     
     <!-- Media Access Permissions (Android 13+) -->
@@ -38,7 +40,17 @@
     
     <!-- File Access Permissions -->
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    
+    <!-- Additional Media Permissions -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    
+    <!-- Notification Permissions -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    
+    <!-- Vibration Permission -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     
     <!-- Network Permissions for File Upload/Download -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />

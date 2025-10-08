@@ -60,7 +60,6 @@ class ContactService {
           .map((contact) => {
             if (!contact.phoneNumber) return null;
 
-            const original = contact.phoneNumber;
             // Clean phone number - remove all non-digit characters except +
             let cleaned = contact.phoneNumber.replace(/[^\d+]/g, '');
 
@@ -586,8 +585,10 @@ class ContactService {
     }>;
   }> {
     try {
-      // Check cache first
-      if (this.contactsCache && Date.now() - this.contactsCache.timestamp < this.CACHE_DURATION) {
+      // Check cache first - only return cached data if it's valid and not empty
+      if (this.contactsCache && 
+          Date.now() - this.contactsCache.timestamp < this.CACHE_DURATION &&
+          (this.contactsCache.data.existingUsers.length > 0 || this.contactsCache.data.nonUsers.length > 0)) {
         console.log('📱 Using cached contacts data');
         return this.contactsCache.data;
       }
@@ -700,6 +701,29 @@ class ContactService {
         nonUsers: [],
       };
     }
+  }
+
+  // Check if cache has valid data
+  hasValidCache(): boolean {
+    return this.contactsCache !== null && 
+           Date.now() - this.contactsCache.timestamp < this.CACHE_DURATION &&
+           (this.contactsCache.data.existingUsers.length > 0 || this.contactsCache.data.nonUsers.length > 0);
+  }
+
+  // Get cache status for UI loading states
+  getCacheStatus(): { hasCache: boolean; isEmpty: boolean; isExpired: boolean } {
+    if (!this.contactsCache) {
+      return { hasCache: false, isEmpty: true, isExpired: false };
+    }
+    
+    const isExpired = Date.now() - this.contactsCache.timestamp >= this.CACHE_DURATION;
+    const isEmpty = this.contactsCache.data.existingUsers.length === 0 && this.contactsCache.data.nonUsers.length === 0;
+    
+    return {
+      hasCache: true,
+      isEmpty,
+      isExpired
+    };
   }
 
   // Force refresh contacts (bypass cache)

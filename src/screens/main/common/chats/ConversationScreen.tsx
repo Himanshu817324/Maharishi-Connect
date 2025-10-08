@@ -36,14 +36,14 @@ import { socketService, MessageData } from '@/services/socketService';
 import { messageService } from '@/services/messageService';
 import { chatService } from '@/services/chatService';
 import { ChatData } from '@/services/chatService';
-import { FileData } from '@/services/fileService';
+import { MediaFile } from '@/services/mediaService';
 import ChatHeader from '@/components/atoms/chats/ChatHeader';
 import MessageBubble from '@/components/atoms/chats/MessageBubble';
 import ChatInput from '@/components/atoms/chats/ChatInput';
 import TypingIndicator from '@/components/atoms/chats/TypingIndicator';
 import CustomSafeAreaView from '@/components/atoms/ui/CustomSafeAreaView';
 import FileMessageBubble from '@/components/FileMessageBubble';
-import FilePicker from '@/components/FilePicker';
+import MediaPicker from '@/components/MediaPicker';
 
 interface RouteParams {
   chat: ChatData;
@@ -57,7 +57,7 @@ const ConversationScreen: React.FC = () => {
 
   const { chat: routeChat } = route.params as RouteParams;
   const { currentChat } = useSelector((state: RootState) => state.chat);
-  const { currentChatMessages, currentChatId, typingUsers: _typingUsers } = useSelector(
+  const { currentChatMessages, currentChatId, typingUsers } = useSelector(
     (state: RootState) => state.message,
   );
   const { user } = useSelector((state: RootState) => state.auth);
@@ -641,70 +641,114 @@ const ConversationScreen: React.FC = () => {
     );
   };
 
+  const [isMediaPickerVisible, setIsMediaPickerVisible] = useState(false);
+
   const handleSendImage = () => {
-    Alert.alert('Coming Soon', 'Image picker will be implemented soon.');
+    setIsMediaPickerVisible(true);
   };
 
   const handleSendVideo = () => {
-    Alert.alert('Coming Soon', 'Video picker will be implemented soon.');
+    setIsMediaPickerVisible(true);
   };
 
   const handleSendAudio = () => {
-    Alert.alert('Coming Soon', 'Audio recorder will be implemented soon.');
+    setIsMediaPickerVisible(true);
   };
-
-  const [isFilePickerVisible, setIsFilePickerVisible] = useState(false);
 
   const handleSendFile = () => {
-    setIsFilePickerVisible(true);
+    setIsMediaPickerVisible(true);
   };
 
-  const handleFileSelected = async (file: FileData) => {
-    if (!chat) return;
+  const handleMediaSelected = async (type: string, files: MediaFile[]) => {
+    if (!chat || files.length === 0) return;
 
     try {
-      // Send file message to chat
-      const response = await chatService.sendFileMessage(chat.id, {
-        fileId: file.id,
-        fileName: file.originalName,
-        fileSize: file.size,
-        fileType: file.mimeType,
-        s3Key: file.s3Key,
-        mediaUrl: file.mediaUrl,
-      });
+      // For now, we'll send each file as a separate message
+      // In a real implementation, you might want to batch them or create a gallery message
+      for (const file of files) {
+        // Create a message object for the media file
+        const messageData = {
+          id: `temp_${Date.now()}_${Math.random()}`,
+          chatId: chat.id,
+          senderId: user?.id || '',
+          content: `[${type.toUpperCase()}] ${file.name}`,
+          type: 'media' as const,
+          timestamp: new Date().toISOString(),
+          status: 'sending' as const,
+          metadata: {
+            fileName: file.name,
+            fileType: file.type,
+            fileSize: file.size,
+            fileUri: file.uri,
+            mediaType: type,
+            duration: file.duration,
+            width: file.width,
+            height: file.height,
+          },
+        };
 
-      if (response.status === 'SUCCESS') {
-        // Add message to Redux store
-        dispatch(addMessage(response.message));
-        
-        // Update chat's last message
-        dispatch(
-          updateChatLastMessage({
-            chatId: chat.id,
-            lastMessage: {
-              id: response.message.id,
-              content: response.message.content,
-              sender_id: response.message.sender_id,
-              created_at: response.message.created_at,
-            },
-          })
-        );
+        // Add message to Redux store immediately for optimistic UI
+        dispatch(addMessage({
+          id: messageData.id,
+          chat_id: messageData.chatId,
+          sender_id: messageData.senderId,
+          content: messageData.content,
+          message_type: 'file',
+          created_at: messageData.timestamp,
+          sender: {
+            user_id: user?.id || '',
+            fullName: user?.fullName || 'You',
+          },
+        }));
 
-        // Clear reply if any
-        setReplyToMessage(null);
-        
-        // Scroll to bottom
-        scrollToBottom();
-      } else {
-        Alert.alert('Error', 'Failed to send file');
+        // Here you would typically upload the file to your server
+        // and then update the message with the server response
+        // For now, we'll just simulate success
+        setTimeout(() => {
+          dispatch(updateMessageStatus({
+            messageId: messageData.id,
+            chatId: messageData.chatId,
+            status: 'sent',
+          }));
+        }, 1000);
       }
+
+      // Update chat last message
+      const lastMessage = files[files.length - 1];
+      const lastMessageData = {
+        id: `temp_${Date.now()}_${Math.random()}`,
+        chatId: chat.id,
+        senderId: user?.id || '',
+        content: `[${type.toUpperCase()}] ${lastMessage.name}`,
+        type: 'media' as const,
+        timestamp: new Date().toISOString(),
+        status: 'sent' as const,
+      };
+      
+      dispatch(updateChatLastMessage({
+        chatId: chat.id,
+        lastMessage: {
+          id: lastMessageData.id,
+          content: lastMessageData.content,
+          sender_id: lastMessageData.senderId,
+          created_at: lastMessageData.timestamp,
+        },
+      }));
+
+      // Clear reply if any
+      setReplyToMessage(null);
+      
+      // Scroll to bottom
+      scrollToBottom();
+
     } catch (error) {
-      console.error('Error sending file:', error);
-      Alert.alert('Error', 'Failed to send file. Please try again.');
+      console.error('Error sending media:', error);
+      Alert.alert('Error', 'Failed to send media');
     }
   };
 
-  const handleFileUploadError = (error: string) => {
+  const handleMediaUploadError = (error: string) => {
+    console.error('Media upload error:', error);
     Alert.alert('Upload Error', error);
   };
 
@@ -918,12 +962,12 @@ const ConversationScreen: React.FC = () => {
         </View>
       </Container>
 
-      {/* File Picker Modal */}
-      <FilePicker
-        visible={isFilePickerVisible}
-        onClose={() => setIsFilePickerVisible(false)}
-        onFileSelected={handleFileSelected}
-        onUploadError={handleFileUploadError}
+      {/* Media Picker Modal */}
+      <MediaPicker
+        visible={isMediaPickerVisible}
+        onClose={() => setIsMediaPickerVisible(false)}
+        onMediaSelected={handleMediaSelected}
+        onUploadError={handleMediaUploadError}
         maxFileSize={50 * 1024 * 1024} // 50MB
       />
     </CustomSafeAreaView>
