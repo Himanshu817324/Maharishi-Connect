@@ -2,7 +2,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { store } from '@/store';
 import { Platform, PermissionsAndroid, Alert, Linking } from 'react-native';
 import { CameraRoll } from '@react-native-camera-roll/camera-roll';
-import { launchImageLibrary } from 'react-native-image-picker';
 
 export interface FileData {
   id: string;
@@ -108,11 +107,16 @@ class FileService {
       const b = i < str.length ? str.charCodeAt(i++) : 0;
       const c = i < str.length ? str.charCodeAt(i++) : 0;
       
+      // eslint-disable-next-line no-bitwise
       const bitmap = (a << 16) | (b << 8) | c;
       
+      // eslint-disable-next-line no-bitwise
       result += chars.charAt((bitmap >> 18) & 63);
+      // eslint-disable-next-line no-bitwise
       result += chars.charAt((bitmap >> 12) & 63);
+      // eslint-disable-next-line no-bitwise
       result += i - 2 < str.length ? chars.charAt((bitmap >> 6) & 63) : '=';
+      // eslint-disable-next-line no-bitwise
       result += i - 1 < str.length ? chars.charAt(bitmap & 63) : '=';
     }
     
@@ -181,7 +185,10 @@ class FileService {
         return 'musical-notes-outline';
       case 'document':
         if (mimeType.includes('pdf')) return 'document-text-outline';
-        if (mimeType.includes('word')) return 'document-outline';
+        if (mimeType.includes('word') || mimeType.includes('doc')) return 'document-outline';
+        if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return 'grid-outline';
+        if (mimeType.includes('powerpoint') || mimeType.includes('presentation')) return 'easel-outline';
+        if (mimeType.includes('text') || mimeType.includes('txt')) return 'document-text-outline';
         return 'document-outline';
       case 'archive':
         return 'archive-outline';
@@ -266,7 +273,7 @@ class FileService {
       });
       
       // Debug: Check if user_id is actually in the form data
-      console.log('📤 [FileService] Form data user_id check:', formData.getPart ? 'getPart available' : 'getPart not available');
+      console.log('📤 [FileService] Form data user_id check:', 'FormData created');
 
       // Upload with progress tracking
       const xhr = new XMLHttpRequest();
@@ -350,7 +357,7 @@ class FileService {
   async downloadFile(
     fileId: string,
     fileName: string,
-    onProgress?: (progress: UploadProgress) => void
+    _onProgress?: (progress: UploadProgress) => void
   ): Promise<{ success: boolean; localPath?: string; error?: string }> {
     try {
       const downloadUrl = `${this.baseURL}/user/files/${fileId}`;
@@ -587,7 +594,7 @@ class FileService {
   }
 
   // Check if file exists locally
-  async fileExistsLocally(fileName: string): Promise<boolean> {
+  async fileExistsLocally(_fileName: string): Promise<boolean> {
     // For now, always return false since we're not storing files locally
     return false;
   }
@@ -599,7 +606,7 @@ class FileService {
   }
 
   // Delete local file
-  async deleteLocalFile(fileName: string): Promise<boolean> {
+  async deleteLocalFile(_fileName: string): Promise<boolean> {
     // For now, always return true since we're not storing files locally
     return true;
   }

@@ -15,6 +15,7 @@ import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 import { fileService, FileData } from '@/services/fileService';
 import { MessageData } from '@/services/chatService';
 import MessageStatusIndicator from '@/components/MessageStatusIndicator';
+import MediaViewer from '@/components/MediaViewer';
 
 interface FileMessageBubbleProps {
   message: MessageData;
@@ -33,6 +34,7 @@ const FileMessageBubble: React.FC<FileMessageBubbleProps> = ({
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [isDownloaded, setIsDownloaded] = useState(false);
+  const [isMediaViewerVisible, setIsMediaViewerVisible] = useState(false);
 
   const fileMetadata = message.mediaMetadata;
   const fileUrl = message.mediaUrl;
@@ -50,48 +52,29 @@ const FileMessageBubble: React.FC<FileMessageBubbleProps> = ({
   }, []);
 
   const handleFilePress = useCallback(async () => {
-    if (!fileMetadata) return;
+    if (!fileMetadata || !fileUrl) return;
 
+    const fileCategory = getFileTypeCategory(fileMetadata.fileType);
+    
+    // For media files (images, videos, audio), open in media viewer
+    if (fileCategory === 'image' || fileCategory === 'video' || fileCategory === 'audio') {
+      setIsMediaViewerVisible(true);
+      return;
+    }
+
+    // For documents, try to open with external app
     try {
-      // Check if file is already downloaded
-      const localPath = fileService.getLocalFilePath(fileMetadata.fileName);
-      const exists = await fileService.fileExistsLocally(fileMetadata.fileName);
-      
-      if (exists) {
-        // File is already processed, just show info
-        console.log('📁 [FileMessageBubble] File already processed:', localPath);
-        Alert.alert('Info', 'File already processed. Check your gallery or downloads.');
-        return;
-      }
-
-      // Download file
-      setIsDownloading(true);
-      setDownloadProgress(0);
-
-      const result = await fileService.downloadFile(
-        fileMetadata.fileId,
-        fileMetadata.fileName,
-        (progress) => {
-          setDownloadProgress(progress.percentage);
-        }
-      );
-
-      if (result.success && result.localPath) {
-        setIsDownloaded(true);
-        console.log('📁 [FileMessageBubble] File processed successfully:', result.localPath);
-        // The fileService now handles the download/save logic
-        // No additional action needed here
+      const canOpen = await Linking.canOpenURL(fileUrl);
+      if (canOpen) {
+        await Linking.openURL(fileUrl);
       } else {
-        Alert.alert('Download Failed', result.error || 'Failed to download file');
+        Alert.alert('Error', 'Cannot open this file type');
       }
     } catch (error) {
-      console.error('Error handling file press:', error);
+      console.error('Error opening file:', error);
       Alert.alert('Error', 'Failed to open file');
-    } finally {
-      setIsDownloading(false);
-      setDownloadProgress(0);
     }
-  }, [fileMetadata]);
+  }, [fileMetadata, fileUrl, getFileTypeCategory]);
 
   const handleLongPress = useCallback(() => {
     onLongPress?.();
@@ -111,28 +94,29 @@ const FileMessageBubble: React.FC<FileMessageBubbleProps> = ({
   const fileIcon = getFileIcon(fileMetadata.fileType);
 
   return (
-    <TouchableOpacity
-      style={[
-        styles.container,
-        isOwn ? styles.ownContainer : styles.otherContainer,
-        { backgroundColor: isOwn ? colors.accent : colors.surface },
-      ]}
-      onPress={handleFilePress}
-      onLongPress={handleLongPress}
-      activeOpacity={0.7}
-    >
-      {/* File Icon */}
-      <View style={[styles.fileIcon, { backgroundColor: colors.background + '20' }]}>
-        {fileCategory === 'image' && fileUrl ? (
-          <Image
-            source={{ uri: fileUrl }}
-            style={styles.fileImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <Icon name={fileIcon} size={moderateScale(24)} color={colors.text} />
-        )}
-      </View>
+    <>
+      <TouchableOpacity
+        style={[
+          styles.container,
+          isOwn ? styles.ownContainer : styles.otherContainer,
+          { backgroundColor: isOwn ? colors.accent : colors.surface },
+        ]}
+        onPress={handleFilePress}
+        onLongPress={handleLongPress}
+        activeOpacity={0.7}
+      >
+        {/* File Icon */}
+        <View style={[styles.fileIcon, { backgroundColor: colors.background + '20' }]}>
+          {fileCategory === 'image' && fileUrl ? (
+            <Image
+              source={{ uri: fileUrl }}
+              style={styles.fileImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <Icon name={fileIcon} size={moderateScale(24)} color={colors.text} />
+          )}
+        </View>
 
       {/* File Info */}
       <View style={styles.fileInfo}>
@@ -229,6 +213,17 @@ const FileMessageBubble: React.FC<FileMessageBubbleProps> = ({
         </View>
       )}
     </TouchableOpacity>
+
+    {/* Media Viewer Modal */}
+    <MediaViewer
+      visible={isMediaViewerVisible}
+      onClose={() => setIsMediaViewerVisible(false)}
+      mediaUrl={fileUrl || ''}
+      mediaType={fileCategory as 'image' | 'video' | 'audio' | 'document'}
+      fileName={fileMetadata.fileName}
+      fileSize={fileMetadata.fileSize}
+    />
+  </>
   );
 };
 

@@ -88,12 +88,12 @@ const FilePicker: React.FC<FilePickerProps> = ({
 
   const pickDocument = useCallback(async () => {
     try {
-      // For now, use image picker for documents as well
-      // In a real implementation, you would use DocumentPicker
+      // Use image picker for documents as well
       const result = await launchImageLibrary({
         mediaType: 'mixed' as MediaType,
         quality: 0.8,
         includeBase64: false,
+        selectionLimit: 1,
       });
 
       if (result.assets && result.assets.length > 0) {
@@ -138,6 +138,7 @@ const FilePicker: React.FC<FilePickerProps> = ({
         mediaType: 'mixed' as MediaType,
         quality: 0.8,
         includeBase64: false,
+        selectionLimit: 1,
       });
 
       if (result.assets && result.assets.length > 0) {
@@ -176,12 +177,23 @@ const FilePicker: React.FC<FilePickerProps> = ({
         mediaType: 'photo',
         quality: 0.8,
         includeBase64: false,
+        cameraType: 'back',
+        saveToPhotos: true,
       });
 
       if (result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
         
         if (asset.uri && asset.fileName && asset.type) {
+          // Validate file size
+          if (asset.fileSize && asset.fileSize > maxFileSize) {
+            Alert.alert(
+              'File Too Large',
+              `File size ${fileService.formatFileSize(asset.fileSize)} exceeds maximum allowed size ${fileService.formatFileSize(maxFileSize)}`
+            );
+            return;
+          }
+
           setSelectedFile(asset);
           await handleFileUpload(asset.uri, asset.fileName, asset.type);
         }
@@ -190,7 +202,7 @@ const FilePicker: React.FC<FilePickerProps> = ({
       console.error('Error taking photo:', error);
       Alert.alert('Error', 'Failed to take photo');
     }
-  }, [handleFileUpload]);
+  }, [handleFileUpload, maxFileSize]);
 
   const recordVideo = useCallback(async () => {
     try {
@@ -206,12 +218,25 @@ const FilePicker: React.FC<FilePickerProps> = ({
         quality: 0.8,
         videoQuality: 'high',
         includeBase64: false,
+        cameraType: 'back',
+        saveToPhotos: true,
+        maxWidth: 1920,
+        maxHeight: 1080,
       });
 
       if (result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
         
         if (asset.uri && asset.fileName && asset.type) {
+          // Validate file size
+          if (asset.fileSize && asset.fileSize > maxFileSize) {
+            Alert.alert(
+              'File Too Large',
+              `File size ${fileService.formatFileSize(asset.fileSize)} exceeds maximum allowed size ${fileService.formatFileSize(maxFileSize)}`
+            );
+            return;
+          }
+
           setSelectedFile(asset);
           await handleFileUpload(asset.uri, asset.fileName, asset.type);
         }
@@ -220,17 +245,9 @@ const FilePicker: React.FC<FilePickerProps> = ({
       console.error('Error recording video:', error);
       Alert.alert('Error', 'Failed to record video');
     }
-  }, [handleFileUpload]);
+  }, [handleFileUpload, maxFileSize]);
 
   const fileOptions: FileOption[] = [
-    {
-      id: 'document',
-      title: 'Document',
-      subtitle: 'PDF, Word, Excel, etc.',
-      icon: 'document-outline',
-      color: '#4A90E2',
-      action: pickDocument,
-    },
     {
       id: 'gallery',
       title: 'Gallery',
@@ -254,6 +271,14 @@ const FilePicker: React.FC<FilePickerProps> = ({
       icon: 'videocam-outline',
       color: '#D0021B',
       action: recordVideo,
+    },
+    {
+      id: 'document',
+      title: 'Document',
+      subtitle: 'PDF, Word, Excel, etc.',
+      icon: 'document-outline',
+      color: '#4A90E2',
+      action: pickDocument,
     },
   ];
 
