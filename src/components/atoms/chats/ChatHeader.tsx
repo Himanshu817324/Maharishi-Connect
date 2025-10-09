@@ -49,12 +49,15 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
 }) => {
   const { colors } = useTheme();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
-  const [otherUserStatus, setOtherUserStatus] = useState<UserStatus | null>(null);
+  const [otherUserStatus, setOtherUserStatus] = useState<UserStatus | null>(
+    null,
+  );
 
   // Get other user ID for direct chats
-  const otherUserId = chat.type === 'direct' 
-    ? chat.participants.find(p => p.user_id !== currentUserId)?.user_id
-    : null;
+  const otherUserId =
+    chat.type === 'direct'
+      ? chat.participants.find(p => p.user_id !== currentUserId)?.user_id
+      : null;
 
   // Use user status hook for direct chats
   const { getUserStatus } = useUserStatus({
@@ -82,7 +85,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
   const getChatTitle = () => {
     if (chat.type === 'group') return chat.name || 'Group Chat';
     const other = chat.participants.find(
-      p => p.user_id !== currentUserId && p.user_id !== chat.created_by
+      p => p.user_id !== currentUserId && p.user_id !== chat.created_by,
     );
     return (
       other?.userDetails.localName ||
@@ -91,24 +94,23 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
     );
   };
 
-
   const getChatSubtitle = () => {
     if (chat.type === 'group') return `${chat.participants.length} members`;
-    
-    console.log('🔍 ChatHeader getChatSubtitle:', { 
-      otherUserStatus, 
-      otherUserId, 
-      participants: chat.participants.map(p => ({ 
-        id: p.user_id, 
-        online: (p.userDetails as any)?.online 
-      }))
+
+    console.log('🔍 ChatHeader getChatSubtitle:', {
+      otherUserStatus,
+      otherUserId,
+      participants: chat.participants.map(p => ({
+        id: p.user_id,
+        online: (p.userDetails as any)?.online,
+      })),
     });
-    
+
     // Try to get status from user status hook first
     if (otherUserStatus) {
       return otherUserStatus.isOnline ? 'Online' : otherUserStatus.statusText;
     }
-    
+
     // Fallback to user data from chat participants
     if (otherUserId) {
       const otherUser = chat.participants.find(p => p.user_id === otherUserId);
@@ -118,7 +120,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
       // Note: lastSeen is not available in current userDetails structure
       // This would need to be added to the backend response
     }
-    
+
     return 'Offline';
   };
 
@@ -127,7 +129,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
       return chat.name?.charAt(0).toUpperCase() || 'G';
     } else {
       const other = chat.participants.find(
-        p => p.user_id !== currentUserId && p.user_id !== chat.created_by
+        p => p.user_id !== currentUserId && p.user_id !== chat.created_by,
       );
       const name =
         other?.userDetails.localName || other?.userDetails.fullName || '';
@@ -146,7 +148,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
       );
     } else {
       const other = chat.participants.find(
-        p => p.user_id !== currentUserId && p.user_id !== chat.created_by
+        p => p.user_id !== currentUserId && p.user_id !== chat.created_by,
       );
       const profilePicture =
         other?.userDetails.localProfilePicture ||
@@ -201,19 +203,23 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
           )}
           <View style={styles.avatarContainer}>
             {renderAvatar()}
-                    {chat.type === 'direct' && (
-                      <View
-                        style={[
-                          styles.statusIndicator,
-                          {
-                            backgroundColor: (otherUserStatus?.isOnline || 
-                              (chat.participants.find(p => p.user_id === otherUserId)?.userDetails as any)?.online)
-                              ? '#4CAF50'
-                              : colors.textSecondary,
-                          },
-                        ]}
-                      />
-                    )}
+            {chat.type === 'direct' && (
+              <View
+                style={[
+                  styles.statusIndicator,
+                  {
+                    backgroundColor:
+                      otherUserStatus?.isOnline ||
+                      (
+                        chat.participants.find(p => p.user_id === otherUserId)
+                          ?.userDetails as any
+                      )?.online
+                        ? '#4CAF50'
+                        : colors.textSecondary,
+                  },
+                ]}
+              />
+            )}
           </View>
           <View style={styles.titleContainer}>
             <Text
@@ -292,13 +298,19 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
         onRequestClose={handleMenuClose}
       >
         <Pressable style={styles.menuOverlay} onPress={handleMenuClose}>
-          <View style={[styles.menuContainer, { backgroundColor: colors.surface }]}>
+          <View
+            style={[styles.menuContainer, { backgroundColor: colors.surface }]}
+          >
             {onSearch && (
               <TouchableOpacity
                 style={styles.menuItem}
                 onPress={() => handleMenuAction(onSearch)}
               >
-                <Icon name="search" size={moderateScale(20)} color={colors.text} />
+                <Icon
+                  name="search"
+                  size={moderateScale(20)}
+                  color={colors.text}
+                />
                 <Text style={[styles.menuItemText, { color: colors.text }]}>
                   Search
                 </Text>
@@ -324,7 +336,11 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
                 style={styles.menuItem}
                 onPress={() => handleMenuAction(onMore)}
               >
-                <Icon name="settings" size={moderateScale(20)} color={colors.text} />
+                <Icon
+                  name="settings"
+                  size={moderateScale(20)}
+                  color={colors.text}
+                />
                 <Text style={[styles.menuItemText, { color: colors.text }]}>
                   More Options
                 </Text>

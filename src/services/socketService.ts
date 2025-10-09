@@ -145,7 +145,7 @@ class SocketService {
   private messageDebugListeners: ((debugData: any) => void)[] = [];
   private systemStatusListeners: ((status: SystemStatus) => void)[] = [];
   private connectionListeners: ((connected: boolean) => void)[] = [];
-  
+
   // New event listeners for typing, read receipts, and message status
   private typingListeners: ((data: TypingData) => void)[] = [];
   private readReceiptListeners: ((data: ReadReceiptData) => void)[] = [];
@@ -158,13 +158,13 @@ class SocketService {
       if (!authStateData) {
         throw new Error('No auth state found');
       }
-      
+
       const authState = JSON.parse(authStateData);
       const user = authState.user;
       if (!user) {
         throw new Error('No user data found in auth state');
       }
-      
+
       const token = user.token;
       if (!token) {
         throw new Error('No authentication token found in user data');
@@ -173,7 +173,7 @@ class SocketService {
       const baseURL = 'https://api.maharishiconnect.com';
       console.log('🔌 Attempting to connect to socket:', baseURL);
       console.log('🔌 Using token:', token.substring(0, 10) + '...');
-      
+
       this.socket = io(baseURL, {
         auth: { token },
         transports: ['websocket'],
@@ -188,10 +188,10 @@ class SocketService {
         timeout: 20000,
         forceNew: true
       });
-      
+
       this.setupEventListeners();
       this.setupConnectionHandlers();
-      
+
       // Add a timeout to check connection status
       setTimeout(() => {
         console.log('🔌 Socket connection status after 5s:', {
@@ -223,7 +223,7 @@ class SocketService {
       console.log('Socket disconnected:', reason);
       this.isConnected = false;
       this.connectionListeners.forEach(listener => listener(false));
-      
+
       if (reason === 'io server disconnect') {
         // Server initiated disconnect, try to reconnect
         this.handleReconnect();
@@ -377,7 +377,7 @@ class SocketService {
       socketId: this.socket?.id,
       messageData
     });
-    
+
     if (!this.socket || !this.isConnected) {
       throw new Error('Socket not connected');
     }
@@ -472,7 +472,7 @@ class SocketService {
   addMessageListener(listener: (message: MessageData) => void): () => void {
     console.log('📨 Adding message listener, total listeners:', this.messageListeners.length + 1);
     this.messageListeners.push(listener);
-    
+
     // Return a cleanup function
     return () => {
       this.messageListeners = this.messageListeners.filter(l => l !== listener);
