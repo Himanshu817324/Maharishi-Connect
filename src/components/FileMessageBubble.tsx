@@ -36,8 +36,8 @@ const FileMessageBubble: React.FC<FileMessageBubbleProps> = ({
   const [isDownloaded, setIsDownloaded] = useState(false);
   const [isMediaViewerVisible, setIsMediaViewerVisible] = useState(false);
 
-  const fileMetadata = message.mediaMetadata;
-  const fileUrl = message.mediaUrl;
+  const fileMetadata = message.media_metadata;
+  const fileUrl = message.media_url;
 
   const getFileIcon = useCallback((mimeType: string) => {
     return fileService.getFileIcon(mimeType);

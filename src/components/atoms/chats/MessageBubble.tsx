@@ -7,6 +7,7 @@ import {
   Image,
   Alert,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 import { MessageData } from '@/services/chatService';
@@ -23,6 +24,7 @@ interface MessageBubbleProps {
   onReply?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onMediaPress?: (message: MessageData) => void;
 }
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({
@@ -36,6 +38,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   onReply,
   onEdit,
   onDelete,
+  onMediaPress,
 }) => {
   const { colors } = useTheme();
 
@@ -100,7 +103,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
         case 'image':
           return (
-            <View>
+            <TouchableOpacity
+              onPress={() => onMediaPress?.(message)}
+              activeOpacity={0.8}
+            >
               <Image
                 source={{ uri: message.media_url }}
                 style={styles.mediaImage}
@@ -116,13 +122,17 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                   {String(message.content)}
                 </Text>
               )}
-            </View>
+            </TouchableOpacity>
           );
 
         case 'video':
           return (
-            <View>
+            <TouchableOpacity
+              onPress={() => onMediaPress?.(message)}
+              activeOpacity={0.8}
+            >
               <View style={styles.mediaPlaceholder}>
+                <Icon name="play-circle" size={moderateScale(40)} color={isOwn ? colors.textOnPrimary : colors.accent} />
                 <Text
                   style={[
                     styles.mediaText,
@@ -131,6 +141,16 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 >
                   📹 Video
                 </Text>
+                {message.media_metadata?.duration && (
+                  <Text
+                    style={[
+                      styles.mediaDuration,
+                      { color: isOwn ? colors.textOnPrimary : colors.textSecondary },
+                    ]}
+                  >
+                    {Math.floor(message.media_metadata.duration / 1000)}s
+                  </Text>
+                )}
               </View>
               {message.content && (
                 <Text
@@ -142,13 +162,17 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                   {String(message.content)}
                 </Text>
               )}
-            </View>
+            </TouchableOpacity>
           );
 
         case 'audio':
           return (
-            <View>
+            <TouchableOpacity
+              onPress={() => onMediaPress?.(message)}
+              activeOpacity={0.8}
+            >
               <View style={styles.mediaPlaceholder}>
+                <Icon name="musical-notes" size={moderateScale(40)} color={isOwn ? colors.textOnPrimary : colors.accent} />
                 <Text
                   style={[
                     styles.mediaText,
@@ -157,6 +181,16 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 >
                   🎵 Audio
                 </Text>
+                {message.media_metadata?.duration && (
+                  <Text
+                    style={[
+                      styles.mediaDuration,
+                      { color: isOwn ? colors.textOnPrimary : colors.textSecondary },
+                    ]}
+                  >
+                    {Math.floor(message.media_metadata.duration / 1000)}s
+                  </Text>
+                )}
               </View>
               {message.content && (
                 <Text
@@ -168,7 +202,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                   {String(message.content)}
                 </Text>
               )}
-            </View>
+            </TouchableOpacity>
           );
 
         case 'file':
@@ -404,6 +438,12 @@ const styles = StyleSheet.create({
   mediaText: {
     fontSize: moderateScale(14),
     textAlign: 'center',
+  },
+  mediaDuration: {
+    fontSize: moderateScale(12),
+    textAlign: 'center',
+    marginTop: moderateScale(4),
+    opacity: 0.8,
   },
   timeContainer: {
     marginTop: hp(0.5),

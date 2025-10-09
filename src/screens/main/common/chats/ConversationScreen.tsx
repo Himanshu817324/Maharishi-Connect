@@ -36,14 +36,15 @@ import { socketService, MessageData } from '@/services/socketService';
 import { messageService } from '@/services/messageService';
 import { chatService } from '@/services/chatService';
 import { ChatData } from '@/services/chatService';
-import { FileData } from '@/services/fileService';
+import { MediaFile } from '@/services/mediaService';
+import MediaViewer from '@/components/MediaViewer';
 import ChatHeader from '@/components/atoms/chats/ChatHeader';
 import MessageBubble from '@/components/atoms/chats/MessageBubble';
 import ChatInput from '@/components/atoms/chats/ChatInput';
 import TypingIndicator from '@/components/atoms/chats/TypingIndicator';
 import CustomSafeAreaView from '@/components/atoms/ui/CustomSafeAreaView';
 import FileMessageBubble from '@/components/FileMessageBubble';
-import FilePicker from '@/components/FilePicker';
+import MediaPicker from '@/components/MediaPicker';
 
 interface RouteParams {
   chat: ChatData;
@@ -57,11 +58,9 @@ const ConversationScreen: React.FC = () => {
 
   const { chat: routeChat } = route.params as RouteParams;
   const { currentChat } = useSelector((state: RootState) => state.chat);
-  const {
-    currentChatMessages,
-    currentChatId,
-    typingUsers: _typingUsers,
-  } = useSelector((state: RootState) => state.message);
+  const { currentChatMessages, currentChatId, typingUsers } = useSelector(
+    (state: RootState) => state.message,
+  );
   const { user } = useSelector((state: RootState) => state.auth);
 
   const [replyToMessage, setReplyToMessage] = useState<{
@@ -686,71 +685,137 @@ const ConversationScreen: React.FC = () => {
     );
   };
 
+  const [isMediaPickerVisible, setIsMediaPickerVisible] = useState(false);
+  const [isMediaViewerVisible, setIsMediaViewerVisible] = useState(false);
+  const [mediaViewerFiles, setMediaViewerFiles] = useState<MediaFile[]>([]);
+  const [mediaViewerIndex, setMediaViewerIndex] = useState(0);
+
   const handleSendImage = () => {
-    Alert.alert('Coming Soon', 'Image picker will be implemented soon.');
+    setIsMediaPickerVisible(true);
   };
 
   const handleSendVideo = () => {
-    Alert.alert('Coming Soon', 'Video picker will be implemented soon.');
+    setIsMediaPickerVisible(true);
   };
 
   const handleSendAudio = () => {
-    Alert.alert('Coming Soon', 'Audio recorder will be implemented soon.');
+    setIsMediaPickerVisible(true);
   };
-
-  const [isFilePickerVisible, setIsFilePickerVisible] = useState(false);
 
   const handleSendFile = () => {
-    setIsFilePickerVisible(true);
+    setIsMediaPickerVisible(true);
   };
 
-  const handleFileSelected = async (file: FileData) => {
-    if (!chat) return;
+  const handleMediaSelected = async (type: string, files: MediaFile[]) => {
+    if (!chat || files.length === 0) return;
 
     try {
-      // Send file message to chat
-      const response = await chatService.sendFileMessage(chat.id, {
-        fileId: file.id,
-        fileName: file.originalName,
-        fileSize: file.size,
-        fileType: file.mimeType,
-        s3Key: file.s3Key,
-        mediaUrl: file.mediaUrl,
-      });
+      // For now, we'll send each file as a separate message
+      // In a real implementation, you might want to batch them or create a gallery message
+      for (const file of files) {
+        // Determine message type based on file type
+        let messageType: 'text' | 'image' | 'video' | 'audio' | 'file' = 'file';
+        if (type === 'image') {
+          messageType = 'image';
+        } else if (type === 'video') {
+          messageType = 'video';
+        } else if (type === 'audio') {
+          messageType = 'audio';
+        }
 
-      if (response.status === 'SUCCESS') {
-        // Add message to Redux store
-        dispatch(addMessage(response.message));
+        // Create a message object for the media file
+        const messageId = `temp_${Date.now()}_${Math.random()}`;
+        const timestamp = new Date().toISOString();
 
-        // Update chat's last message
-        dispatch(
-          updateChatLastMessage({
+        // Add message to Redux store immediately for optimistic UI
+        dispatch(addMessage({
+          id: messageId,
+          chat_id: chat.id,
+          sender_id: user?.id || '',
+          content: file.name, // Use file name as content
+          message_type: messageType,
+          media_url: file.uri, // Store the file URI
+          media_metadata: {
+            filename: file.name,
+            size: file.size,
+            mimeType: file.type,
+            fileName: file.name,
+            fileSize: file.size,
+            fileType: file.type,
+            // Additional metadata for media files
+            duration: file.duration,
+            width: file.width,
+            height: file.height,
+          },
+          created_at: timestamp,
+          sender: {
+            user_id: user?.id || '',
+            fullName: user?.fullName || 'You',
+          },
+          status: 'sending',
+        }));
+
+        // Here you would typically upload the file to your server
+        // and then update the message with the server response
+        // For now, we'll just simulate success
+        setTimeout(() => {
+          dispatch(updateMessageStatus({
+            messageId: messageId,
             chatId: chat.id,
-            lastMessage: {
-              id: response.message.id,
-              content: response.message.content,
-              sender_id: response.message.sender_id,
-              created_at: response.message.created_at,
-            },
-          }),
-        );
-
-        // Clear reply if any
-        setReplyToMessage(null);
-
-        // Scroll to bottom
-        scrollToBottom();
-      } else {
-        Alert.alert('Error', 'Failed to send file');
+            status: 'sent',
+          }));
+        }, 1000);
       }
+
+      // Update chat last message
+      const lastMessage = files[files.length - 1];
+      const lastMessageId = `temp_${Date.now()}_${Math.random()}`;
+      const lastMessageTimestamp = new Date().toISOString();
+      
+      dispatch(updateChatLastMessage({
+        chatId: chat.id,
+        lastMessage: {
+          id: lastMessageId,
+          content: lastMessage.name,
+          sender_id: user?.id || '',
+          created_at: lastMessageTimestamp,
+        },
+      }));
+
+      // Clear reply if any
+      setReplyToMessage(null);
+      
+      // Scroll to bottom
+      scrollToBottom();
+
     } catch (error) {
-      console.error('Error sending file:', error);
-      Alert.alert('Error', 'Failed to send file. Please try again.');
+      console.error('Error sending media:', error);
+      Alert.alert('Error', 'Failed to send media');
     }
   };
 
-  const handleFileUploadError = (error: string) => {
+  const handleMediaUploadError = (error: string) => {
+    console.error('Media upload error:', error);
     Alert.alert('Upload Error', error);
+  };
+
+  const handleMediaPress = (message: MessageData) => {
+    if (!message.media_url) return;
+
+    // Convert message to MediaFile format
+    const mediaFile: MediaFile = {
+      uri: message.media_url,
+      name: message.content || 'Media File',
+      type: message.media_metadata?.mimeType || 'application/octet-stream',
+      size: message.media_metadata?.size || 0,
+      duration: message.media_metadata?.duration,
+      width: message.media_metadata?.width,
+      height: message.media_metadata?.height,
+    };
+
+    setMediaViewerFiles([mediaFile]);
+    setMediaViewerIndex(0);
+    setIsMediaViewerVisible(true);
   };
 
   const handleBack = () => {
@@ -834,6 +899,7 @@ const ConversationScreen: React.FC = () => {
         isGroupChat={chat?.type === 'group'}
         onPress={() => handleMessagePress(item)}
         onLongPress={() => handleMessageLongPress(item)}
+        onMediaPress={handleMediaPress}
       />
     );
   };
@@ -962,17 +1028,24 @@ const ConversationScreen: React.FC = () => {
         </View>
       </Container>
 
-      {/* File Picker Modal */}
-      <FilePicker
-        visible={isFilePickerVisible}
-        onClose={() => setIsFilePickerVisible(false)}
-        onFileSelected={handleFileSelected}
-        onUploadError={handleFileUploadError}
-        maxFileSize={50 * 1024 * 1024} // 50MB
-      />
-    </CustomSafeAreaView>
-  );
-};
+      {/* Media Picker Modal */}
+        <MediaPicker
+          visible={isMediaPickerVisible}
+          onClose={() => setIsMediaPickerVisible(false)}
+          onMediaSelected={handleMediaSelected}
+          onUploadError={handleMediaUploadError}
+          maxFileSize={50 * 1024 * 1024} // 50MB
+        />
+
+        <MediaViewer
+          visible={isMediaViewerVisible}
+          onClose={() => setIsMediaViewerVisible(false)}
+          mediaFiles={mediaViewerFiles}
+          initialIndex={mediaViewerIndex}
+        />
+      </CustomSafeAreaView>
+    );
+  };
 
 const styles = StyleSheet.create({
   container: {
