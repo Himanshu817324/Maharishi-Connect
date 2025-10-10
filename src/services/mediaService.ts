@@ -1,8 +1,20 @@
 import { launchImageLibrary, launchCamera, ImagePickerResponse, MediaType as RNMediaType, ImageLibraryOptions, CameraOptions, PhotoQuality, CameraType } from 'react-native-image-picker';
-import DocumentPicker, { DocumentPickerResponse, types } from '@react-native-documents/picker';
 import { Platform, Alert, PermissionsAndroid } from 'react-native';
 import { permissionService } from './permissionService';
 import { permissionHelper } from './permissionHelper';
+
+// Dynamic import for DocumentPicker to handle cases where it's not available
+let DocumentPicker: any = null;
+let types: any = null;
+
+try {
+  const documentPickerModule = require('@react-native-documents/picker');
+  DocumentPicker = documentPickerModule.default || documentPickerModule;
+  types = documentPickerModule.types;
+  console.log('📁 DocumentPicker module loaded successfully');
+} catch (error) {
+  console.warn('⚠️ DocumentPicker module not available:', error);
+}
 
 export interface MediaFile {
   uri: string;
@@ -23,7 +35,37 @@ export interface MediaPickerResult {
 export type MediaType = 'image' | 'video' | 'audio' | 'file' | 'camera';
 
 class MediaService {
-  private readonly MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+  private readonly MAX_FILE_SIZE = 50 * 1024 * 1024;
+
+  /**
+   * Check if DocumentPicker is available and provide helpful error messages
+   */
+  private checkDocumentPickerAvailability(): { available: boolean; error?: string } {
+    if (!DocumentPicker) {
+      return {
+        available: false,
+        error: 'DocumentPicker module not found. Please ensure @react-native-documents/picker is properly installed and linked.'
+      };
+    }
+
+    if (!DocumentPicker.pick) {
+      return {
+        available: false,
+        error: 'DocumentPicker.pick method not available. The native module may not be properly linked. Please rebuild the app.'
+      };
+    }
+
+    if (!types) {
+      return {
+        available: false,
+        error: 'DocumentPicker types not available. Please check the package installation.'
+      };
+    }
+
+    return { available: true };
+  }
+
+  // 50MB
   private readonly SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
   private readonly SUPPORTED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/3gpp'];
   private readonly SUPPORTED_AUDIO_TYPES = ['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-m4a', 'audio/aac'];
@@ -57,7 +99,9 @@ class MediaService {
       console.log('🔐 Requesting camera permissions for Android...');
       
       const permissions = permissionHelper.getCameraPermissions();
-      const result = await permissionHelper.requestMultiplePermissions(permissions);
+      console.log('🔐 Required camera permissions:', permissions);
+      
+      const result = await permissionHelper.requestPermissionsIfNeeded(permissions);
       
       if (!result.granted) {
         console.warn('⚠️ Some camera permissions were denied:', result.deniedPermissions);
@@ -65,8 +109,8 @@ class MediaService {
         // Show user-friendly error message
         const deniedNames = result.deniedPermissions.map(p => permissionHelper.getPermissionDisplayName(p));
         Alert.alert(
-          'Permission Required',
-          `The following permissions are required: ${deniedNames.join(', ')}. Please grant these permissions in settings.`,
+          'Camera Permission Required',
+          `Camera permission is required to take photos and videos. The following permissions are needed: ${deniedNames.join(', ')}. Please grant these permissions in settings.`,
           [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Open Settings', onPress: () => permissionHelper.openAppSettings() },
@@ -84,7 +128,9 @@ class MediaService {
       console.log('🔐 Requesting storage permissions for Android...');
       
       const permissions = permissionHelper.getStoragePermissions();
-      const result = await permissionHelper.requestMultiplePermissions(permissions);
+      console.log('🔐 Required storage permissions:', permissions);
+      
+      const result = await permissionHelper.requestPermissionsIfNeeded(permissions);
       
       if (!result.granted) {
         console.warn('⚠️ Some storage permissions were denied:', result.deniedPermissions);
@@ -92,8 +138,8 @@ class MediaService {
         // Show user-friendly error message
         const deniedNames = result.deniedPermissions.map(p => permissionHelper.getPermissionDisplayName(p));
         Alert.alert(
-          'Permission Required',
-          `The following permissions are required: ${deniedNames.join(', ')}. Please grant these permissions in settings.`,
+          'Storage Permission Required',
+          `Storage permission is required to access files. The following permissions are needed: ${deniedNames.join(', ')}. Please grant these permissions in settings.`,
           [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Open Settings', onPress: () => permissionHelper.openAppSettings() },
@@ -257,42 +303,16 @@ class MediaService {
       console.log('🎵 DocumentPicker.pick available:', !!DocumentPicker?.pick);
       console.log('🎵 types available:', !!types);
 
-      if (!DocumentPicker || !DocumentPicker.pick) {
-        console.error('DocumentPicker is not available. Falling back to image picker for audio files.');
-        // Fallback to image picker for audio files (not ideal but works)
-        const fallbackResult = await launchImageLibrary({
-          mediaType: 'mixed' as RNMediaType,
-          quality: 0.8 as PhotoQuality,
-          includeBase64: false,
-          selectionLimit: maxCount,
-        });
-
-        if (fallbackResult.didCancel) {
-          return { success: false, files: [], error: 'User cancelled' };
-        }
-
-        if (fallbackResult.errorMessage) {
-          return { success: false, files: [], error: fallbackResult.errorMessage };
-        }
-
-        if (fallbackResult.assets && fallbackResult.assets.length > 0) {
-          const files: MediaFile[] = fallbackResult.assets
-            .filter(asset => asset.type?.startsWith('audio/'))
-            .map(asset => ({
-              uri: asset.uri || '',
-              name: asset.fileName || 'audio_file',
-              type: asset.type || 'audio/mpeg',
-              size: asset.fileSize || 0,
-            }));
-
-          return { success: true, files };
-        }
-
-        return { success: false, files: [], error: 'No audio files selected' };
+      // Check if DocumentPicker is available
+      const availability = this.checkDocumentPickerAvailability();
+      if (!availability.available) {
+        console.warn('DocumentPicker not available for audio:', availability.error);
+        console.log('Trying fallback method...');
+        return await this.pickAudioFilesFallback(maxCount);
       }
 
       const result = await DocumentPicker.pick({
-        type: [types.audio],
+        type: [types?.audio || 'audio/*'],
         allowMultiSelection: maxCount > 1,
         copyTo: 'cachesDirectory',
       });
@@ -312,9 +332,55 @@ class MediaService {
         return { success: false, files: [], error: 'No audio files selected' };
       }
     } catch (error) {
+      console.error('Audio file picker error:', error);
+      
       if (error && typeof error === 'object' && 'code' in error && error.code === 'DOCUMENT_PICKER_CANCELED') {
         return { success: false, files: [], error: 'User cancelled' };
       }
+      
+      // Try fallback method if DocumentPicker fails
+      console.log('Audio DocumentPicker failed, trying fallback...');
+      return await this.pickAudioFilesFallback(maxCount);
+    }
+  }
+
+  /**
+   * Fallback method for audio file selection using image picker
+   */
+  private async pickAudioFilesFallback(maxCount: number = 5): Promise<MediaPickerResult> {
+    try {
+      console.log('🎵 Using fallback audio picker (image picker)...');
+      
+      const result = await launchImageLibrary({
+        mediaType: 'video' as RNMediaType, // Use video to potentially access audio files
+        quality: 0.8,
+        includeBase64: false,
+        selectionLimit: maxCount,
+      });
+
+      if (result.assets && result.assets.length > 0) {
+        const files: MediaFile[] = result.assets
+          .filter(asset => {
+            const type = asset.type || '';
+            return type.startsWith('audio/') || type.startsWith('video/');
+          })
+          .map(asset => ({
+            uri: asset.uri || '',
+            name: asset.fileName || asset.uri?.split('/').pop() || 'Unknown',
+            type: asset.type || 'audio/mpeg',
+            size: asset.fileSize || 0,
+            duration: asset.duration,
+            width: asset.width,
+            height: asset.height,
+          }))
+          .filter(file => this.validateFile(file, 'audio'));
+
+        return { success: true, files };
+      } else {
+        return { success: false, files: [], error: 'No audio files selected' };
+      }
+    } catch (error) {
+      console.error('Fallback audio picker error:', error);
       return {
         success: false,
         files: [],
@@ -324,7 +390,7 @@ class MediaService {
   }
 
   /**
-   * Pick any file type
+   * Pick any file type with fallback options
    */
   async pickFiles(maxCount: number = 5): Promise<MediaPickerResult> {
     try {
@@ -339,45 +405,20 @@ class MediaService {
         };
       }
 
+      // Check if DocumentPicker is available
+      const availability = this.checkDocumentPickerAvailability();
+      if (!availability.available) {
+        console.warn('DocumentPicker not available:', availability.error);
+        console.log('Trying fallback method...');
+        return await this.pickFilesFallback(maxCount);
+      }
+
       console.log('📁 DocumentPicker available:', !!DocumentPicker);
       console.log('📁 DocumentPicker.pick available:', !!DocumentPicker?.pick);
       console.log('📁 types available:', !!types);
 
-      if (!DocumentPicker || !DocumentPicker.pick) {
-        console.error('DocumentPicker is not available. Falling back to image picker for files.');
-        // Fallback to image picker for files (not ideal but works)
-        const fallbackResult = await launchImageLibrary({
-          mediaType: 'mixed' as RNMediaType,
-          quality: 0.8 as PhotoQuality,
-          includeBase64: false,
-          selectionLimit: maxCount,
-        });
-
-        if (fallbackResult.didCancel) {
-          return { success: false, files: [], error: 'User cancelled' };
-        }
-
-        if (fallbackResult.errorMessage) {
-          return { success: false, files: [], error: fallbackResult.errorMessage };
-        }
-
-        if (fallbackResult.assets && fallbackResult.assets.length > 0) {
-          const files: MediaFile[] = fallbackResult.assets
-            .map(asset => ({
-              uri: asset.uri || '',
-              name: asset.fileName || 'file',
-              type: asset.type || 'application/octet-stream',
-              size: asset.fileSize || 0,
-            }));
-
-          return { success: true, files };
-        }
-
-        return { success: false, files: [], error: 'No files selected' };
-      }
-
       const result = await DocumentPicker.pick({
-        type: [types.allFiles],
+        type: [types?.allFiles || '*/*'],
         allowMultiSelection: maxCount > 1,
         copyTo: 'cachesDirectory',
       });
@@ -397,9 +438,50 @@ class MediaService {
         return { success: false, files: [], error: 'No files selected' };
       }
     } catch (error) {
+      console.error('DocumentPicker error:', error);
+      
       if (error && typeof error === 'object' && 'code' in error && error.code === 'DOCUMENT_PICKER_CANCELED') {
         return { success: false, files: [], error: 'User cancelled' };
       }
+      
+      // Try fallback method if DocumentPicker fails
+      console.log('DocumentPicker failed, trying fallback...');
+      return await this.pickFilesFallback(maxCount);
+    }
+  }
+
+  /**
+   * Fallback method using react-native-image-picker for file selection
+   */
+  private async pickFilesFallback(maxCount: number = 5): Promise<MediaPickerResult> {
+    try {
+      console.log('📁 Using fallback file picker (image picker)...');
+      
+      const result = await launchImageLibrary({
+        mediaType: 'mixed' as RNMediaType,
+        quality: 0.8,
+        includeBase64: false,
+        selectionLimit: maxCount,
+      });
+
+      if (result.assets && result.assets.length > 0) {
+        const files: MediaFile[] = result.assets
+          .map(asset => ({
+            uri: asset.uri || '',
+            name: asset.fileName || asset.uri?.split('/').pop() || 'Unknown',
+            type: asset.type || 'application/octet-stream',
+            size: asset.fileSize || 0,
+            width: asset.width,
+            height: asset.height,
+          }))
+          .filter(file => this.validateFile(file, 'file'));
+
+        return { success: true, files };
+      } else {
+        return { success: false, files: [], error: 'No files selected' };
+      }
+    } catch (error) {
+      console.error('Fallback file picker error:', error);
       return {
         success: false,
         files: [],

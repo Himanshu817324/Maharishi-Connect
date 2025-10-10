@@ -11,6 +11,7 @@ export interface MessageState {
   messageQueue: MessageQueueItem[];
   typingUsers: { [chatId: string]: string[] };
   lastFetch: { [chatId: string]: number };
+  pagination: { [chatId: string]: { hasMore: boolean; isLoadingOlder: boolean } };
 }
 
 const initialState: MessageState = {
@@ -22,6 +23,7 @@ const initialState: MessageState = {
   messageQueue: [],
   typingUsers: {},
   lastFetch: {},
+  pagination: {},
 };
 
 // Async thunks
@@ -34,7 +36,7 @@ export const fetchChatMessages = createAsyncThunk(
     beforeMessageId?: string;
   }, { rejectWithValue }) => {
     try {
-      const messages = await messageService.getChatMessages(
+      const response = await messageService.getChatMessages(
         params.chatId,
         {
           limit: params.limit,
@@ -42,7 +44,11 @@ export const fetchChatMessages = createAsyncThunk(
           beforeMessageId: params.beforeMessageId,
         }
       );
-      return { chatId: params.chatId, messages };
+      return { 
+        chatId: params.chatId, 
+        messages: response.messages,
+        pagination: response.pagination || { hasMore: false, limit: 0, offset: 0 }
+      };
     } catch (error: any) {
       return rejectWithValue(error.message || 'Failed to fetch messages');
     }
@@ -229,6 +235,13 @@ const messageSlice = createSlice({
       console.log('🧹 Clearing current chat messages');
       state.currentChatId = null;
       state.currentChatMessages = [];
+    },
+    setLoadingOlderMessages: (state, action: PayloadAction<{ chatId: string; isLoading: boolean }>) => {
+      const { chatId, isLoading } = action.payload;
+      if (!state.pagination[chatId]) {
+        state.pagination[chatId] = { hasMore: true, isLoadingOlder: false };
+      }
+      state.pagination[chatId].isLoadingOlder = isLoading;
     },
     addMessage: (state, action: PayloadAction<MessageData>) => {
       const message = action.payload;
@@ -492,10 +505,36 @@ const messageSlice = createSlice({
       })
       .addCase(fetchChatMessages.fulfilled, (state, action) => {
         state.loading = false;
-        const { chatId, messages } = action.payload;
-        state.messages[chatId] = messages;
+        const { chatId, messages, pagination } = action.payload;
+        
+        // Initialize messages array if it doesn't exist
+        if (!state.messages[chatId]) {
+          state.messages[chatId] = [];
+        }
+        
+        // Merge new messages with existing ones, avoiding duplicates
+        const existingMessageIds = new Set(state.messages[chatId].map(m => m.id));
+        const newMessages = messages.filter(msg => !existingMessageIds.has(msg.id));
+        
+        // Add new messages and sort by created_at
+        state.messages[chatId] = [...state.messages[chatId], ...newMessages]
+          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        
+        // Update pagination state
+        state.pagination[chatId] = {
+          hasMore: pagination.hasMore,
+          isLoadingOlder: false,
+        };
+        
         state.lastFetch[chatId] = Date.now();
         state.error = null;
+        
+        console.log(`📱 [Redux] Messages loaded for chat ${chatId}:`, {
+          existingCount: state.messages[chatId].length - newMessages.length,
+          newCount: newMessages.length,
+          totalCount: state.messages[chatId].length,
+          hasMore: pagination.hasMore
+        });
       })
       .addCase(fetchChatMessages.rejected, (state, action) => {
         state.loading = false;
@@ -664,6 +703,7 @@ const messageSlice = createSlice({
 export const {
   setCurrentChatMessages,
   clearCurrentChatMessages,
+  setLoadingOlderMessages,
   addMessage,
   addMessageAndCreateChat,
   updateMessage,

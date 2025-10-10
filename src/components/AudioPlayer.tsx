@@ -7,7 +7,7 @@ import {
   Slider,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { useTheme } from '@/theme';
+// import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont } from '@/theme/responsive';
 
 interface AudioPlayerProps {
@@ -23,10 +23,10 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   onEnd,
   style,
 }) => {
-  const { safeColors } = useTheme();
+  // const { safeColors } = useTheme();
   
   // Fallback safeColors in case theme is not available
-  const safeColors = safeColors || {
+  const safeColors = {
     accent: '#007AFF',
     text: '#000000',
     textSecondary: '#666666',

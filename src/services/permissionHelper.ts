@@ -1,4 +1,5 @@
 import { Platform, PermissionsAndroid, Alert, Linking } from 'react-native';
+import { manifestPermissionManager } from './manifestPermissionManager';
 
 export interface PermissionResult {
   granted: boolean;
@@ -91,27 +92,8 @@ class PermissionHelper {
    */
   getCameraPermissions(): string[] {
     if (Platform.OS === 'android') {
-      const androidVersion = Platform.Version;
-      const permissions = [
-        PermissionsAndroid.PERMISSIONS.CAMERA,
-        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-      ];
-
-      if (androidVersion < 33) {
-        // For older Android versions, use traditional storage permissions
-        permissions.push(
-          PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
-          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-        );
-      } else {
-        // For Android 13+ (API 33+), use granular media permissions
-        permissions.push(
-          PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
-          PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO,
-          PermissionsAndroid.PERMISSIONS.READ_MEDIA_AUDIO,
-        );
-      }
-
+      const permissions = manifestPermissionManager.getCameraPermissions();
+      console.log(`📱 Camera permissions from manifest:`, permissions);
       return permissions;
     }
     return [];
@@ -123,23 +105,115 @@ class PermissionHelper {
   getStoragePermissions(): string[] {
     if (Platform.OS === 'android') {
       const androidVersion = Platform.Version;
-
-      if (androidVersion < 33) {
-        // For older Android versions, use traditional storage permissions
-        return [
-          PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
-          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-        ];
-      } else {
-        // For Android 13+ (API 33+), use granular media permissions
-        return [
-          PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
-          PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO,
-          PermissionsAndroid.PERMISSIONS.READ_MEDIA_AUDIO,
-        ];
-      }
+      const permissions = manifestPermissionManager.getStoragePermissions();
+      console.log(`📱 Android version: ${androidVersion}`);
+      console.log(`📱 Storage permissions from manifest:`, permissions);
+      return permissions;
     }
     return [];
+  }
+
+  /**
+   * Check if all required permissions are already granted
+   */
+  async checkAllPermissions(permissions: string[]): Promise<boolean> {
+    if (Platform.OS === 'android') {
+      try {
+        const results = await Promise.all(
+          permissions.map(permission => this.checkPermission(permission))
+        );
+        const allGranted = results.every(granted => granted);
+        console.log(`🔍 All permissions granted: ${allGranted}`);
+        return allGranted;
+      } catch (error) {
+        console.error('💥 Error checking all permissions:', error);
+        return false;
+      }
+    }
+    return true; // iOS permissions are handled by native pickers
+  }
+
+  /**
+   * Request permissions only if not already granted
+   */
+  async requestPermissionsIfNeeded(permissions: string[]): Promise<PermissionResult> {
+    if (Platform.OS === 'android') {
+      try {
+        // Check if all permissions are already granted
+        const allGranted = await this.checkAllPermissions(permissions);
+        if (allGranted) {
+          console.log('✅ All permissions already granted');
+          return {
+            granted: true,
+            permissions: {},
+            deniedPermissions: [],
+          };
+        }
+
+        // Request permissions that are not granted
+        console.log('🔐 Some permissions not granted, requesting...');
+        return await this.requestMultiplePermissions(permissions);
+      } catch (error) {
+        console.error('💥 Error requesting permissions if needed:', error);
+        return {
+          granted: false,
+          permissions: {},
+          deniedPermissions: permissions,
+        };
+      }
+    }
+    return {
+      granted: true,
+      permissions: {},
+      deniedPermissions: [],
+    };
+  }
+
+  /**
+   * Show permission rationale and request permission
+   */
+  async requestPermissionWithRationale(
+    permission: string,
+    title: string,
+    message: string
+  ): Promise<boolean> {
+    if (Platform.OS === 'android') {
+      try {
+        // Check if we should show rationale
+        const shouldShowRationale = await this.shouldShowRequestPermissionRationale(permission);
+        
+        if (shouldShowRationale) {
+          console.log(`💡 Showing rationale for ${permission}`);
+          return new Promise((resolve) => {
+            Alert.alert(
+              title,
+              message,
+              [
+                {
+                  text: 'Cancel',
+                  style: 'cancel',
+                  onPress: () => resolve(false),
+                },
+                {
+                  text: 'OK',
+                  onPress: async () => {
+                    const granted = await this.requestPermission(permission);
+                    resolve(granted);
+                  },
+                },
+              ]
+            );
+          });
+        } else {
+          // Request permission directly
+          return await this.requestPermission(permission);
+        }
+      } catch (error) {
+        console.error(`💥 Error requesting permission with rationale for ${permission}:`, error);
+        return false;
+      }
+    }
+    return true; // iOS permissions are handled by native pickers
   }
 
   /**
@@ -203,20 +277,24 @@ class PermissionHelper {
   }
 
   /**
+   * Get manifest permission summary for debugging
+   */
+  getManifestSummary(): any {
+    return manifestPermissionManager.getManifestSummary();
+  }
+
+  /**
+   * Get all permission groups from manifest
+   */
+  getPermissionGroups(): any[] {
+    return manifestPermissionManager.getPermissionGroups();
+  }
+
+  /**
    * Get user-friendly permission names
    */
   getPermissionDisplayName(permission: string): string {
-    const permissionNames: Record<string, string> = {
-      [PermissionsAndroid.PERMISSIONS.CAMERA]: 'Camera',
-      [PermissionsAndroid.PERMISSIONS.RECORD_AUDIO]: 'Microphone',
-      [PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE]: 'Storage',
-      [PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE]: 'Storage',
-      [PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES]: 'Photos',
-      [PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO]: 'Videos',
-      [PermissionsAndroid.PERMISSIONS.READ_MEDIA_AUDIO]: 'Audio Files',
-    };
-
-    return permissionNames[permission] || permission;
+    return manifestPermissionManager.getPermissionDescription(permission);
   }
 }
 

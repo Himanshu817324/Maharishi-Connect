@@ -30,6 +30,8 @@ import {
   addMessage,
   setCurrentChatMessages,
   clearCurrentChatMessages,
+  setLoadingOlderMessages,
+  updateMessage,
   updateMessageStatus,
 } from '@/store/slices/messageSlice';
 import { socketService, MessageData } from '@/services/socketService';
@@ -58,7 +60,7 @@ const ConversationScreen: React.FC = () => {
 
   const { chat: routeChat } = route.params as RouteParams;
   const { currentChat } = useSelector((state: RootState) => state.chat);
-  const { currentChatMessages, currentChatId, typingUsers } = useSelector(
+  const { currentChatMessages, currentChatId, pagination } = useSelector(
     (state: RootState) => state.message,
   );
   const { user } = useSelector((state: RootState) => state.auth);
@@ -268,7 +270,7 @@ const ConversationScreen: React.FC = () => {
     );
 
     // Message delivered listeners
-    const removeMessageDeliveredListener =
+    const _removeMessageDeliveredListener =
       socketService.addMessageDeliveredListener(data => {
         console.log('📬 [ConversationScreen] Message delivered event received:', data);
         console.log('📬 [ConversationScreen] Current chat ID:', chat?.id);
@@ -362,7 +364,7 @@ const ConversationScreen: React.FC = () => {
       const result = await dispatch(
         fetchChatMessages({
           chatId: chat.id,
-          limit: 50,
+          limit: 200, // Increased from 50 to 200
         }),
       ).unwrap();
       console.log('📱 Messages loaded:', result);
@@ -373,6 +375,36 @@ const ConversationScreen: React.FC = () => {
       console.error('Error loading messages:', error);
     }
   }, [chat, dispatch]);
+
+  const loadOlderMessages = useCallback(async () => {
+    if (!chat || currentChatMessages.length === 0) return;
+    
+    const chatPagination = pagination[chat.id];
+    if (!chatPagination?.hasMore || chatPagination.isLoadingOlder) return;
+
+    try {
+      dispatch(setLoadingOlderMessages({ chatId: chat.id, isLoading: true }));
+      console.log('📱 Loading older messages for chat:', chat.id);
+      const oldestMessage = currentChatMessages[0];
+      
+      const result = await dispatch(
+        fetchChatMessages({
+          chatId: chat.id,
+          limit: 100,
+          beforeMessageId: oldestMessage.id,
+        }),
+      ).unwrap();
+      
+      console.log('📱 Older messages loaded:', result);
+      
+      // Update current chat messages after loading older ones
+      dispatch(setCurrentChatMessages(chat.id));
+    } catch (error) {
+      console.error('Error loading older messages:', error);
+    } finally {
+      dispatch(setLoadingOlderMessages({ chatId: chat.id, isLoading: false }));
+    }
+  }, [chat, currentChatMessages, dispatch, pagination]);
 
   useEffect(() => {
     if (chat) {
@@ -691,7 +723,7 @@ const ConversationScreen: React.FC = () => {
           sender_id: user?.id || '',
           content: file.name, // Use file name as content
           message_type: messageType,
-          media_url: file.uri, // Store the file URI
+          media_url: file.uri, // Store the local URI temporarily
           media_metadata: {
             filename: file.name,
             size: file.size,
@@ -712,16 +744,90 @@ const ConversationScreen: React.FC = () => {
           status: 'sending',
         }));
 
-        // Here you would typically upload the file to your server
-        // and then update the message with the server response
-        // For now, we'll just simulate success
-        setTimeout(() => {
+        // Upload the file to server and update message with server URL
+        try {
+          let uploadResult;
+          
+          if (messageType === 'image') {
+            // Use image upload service for images
+            const { imageUploadService } = await import('@/services/imageUploadService');
+            uploadResult = await imageUploadService.uploadChatImage(file.uri, chat.id);
+          } else {
+            // For other file types, use the general file service
+            const { fileService } = await import('@/services/fileService');
+            const result = await fileService.uploadFile(file.uri, file.name, file.type);
+            uploadResult = {
+              success: result.status === 'SUCCESS',
+              url: result.file?.mediaUrl,
+              s3Key: result.file?.s3Key,
+              fileId: result.file?.id,
+              error: result.error,
+            };
+          }
+
+          if (uploadResult.success && uploadResult.url) {
+            // Update message with server URL
+            dispatch(updateMessage({
+              id: messageId,
+              chat_id: chat.id,
+              sender_id: user?.id || '',
+              content: file.name,
+              message_type: messageType,
+              media_url: uploadResult.url, // Update with server URL
+              media_metadata: {
+                filename: file.name,
+                size: file.size,
+                mimeType: file.type,
+                fileName: file.name,
+                fileSize: file.size,
+                fileType: file.type,
+                duration: file.duration,
+                width: file.width,
+                height: file.height,
+                // Add server metadata
+                s3Key: (uploadResult as any).s3Key,
+                fileId: (uploadResult as any).fileId,
+              },
+              created_at: timestamp,
+              sender: {
+                user_id: user?.id || '',
+                fullName: user?.fullName || 'You',
+              },
+              status: 'sent',
+            }));
+
+            // Send message to server via socket
+            messageService.sendMessageImmediate(
+              chat.id,
+              file.name,
+              messageType,
+              {
+                mediaUrl: uploadResult.url,
+                mediaMetadata: {
+                  filename: file.name,
+                  size: file.size,
+                  mimeType: file.type,
+                },
+              }
+            );
+          } else {
+            // Upload failed, update message status
+            console.error('Upload failed:', uploadResult.error || 'Upload failed');
+            dispatch(updateMessageStatus({
+              messageId: messageId,
+              chatId: chat.id,
+              status: 'failed',
+            }));
+          }
+        } catch (uploadError) {
+          console.error('Error uploading file:', uploadError);
+          // Update message status to failed
           dispatch(updateMessageStatus({
             messageId: messageId,
             chatId: chat.id,
-            status: 'sent',
+            status: 'failed',
           }));
-        }, 1000);
+        }
       }
 
       // Update chat last message
@@ -765,9 +871,9 @@ const ConversationScreen: React.FC = () => {
       name: message.content || 'Media File',
       type: message.media_metadata?.mimeType || 'application/octet-stream',
       size: message.media_metadata?.size || 0,
-      duration: message.media_metadata?.duration,
-      width: message.media_metadata?.width,
-      height: message.media_metadata?.height,
+      duration: (message.media_metadata as any)?.duration,
+      width: (message.media_metadata as any)?.width,
+      height: (message.media_metadata as any)?.height,
     };
 
     setMediaViewerFiles([mediaFile]);
@@ -943,6 +1049,13 @@ const ConversationScreen: React.FC = () => {
           
 
           <View style={styles.messageListContainer}>
+            {pagination[chat?.id || '']?.isLoadingOlder && (
+              <View style={styles.loadingIndicator}>
+                <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+                  Loading older messages...
+                </Text>
+              </View>
+            )}
             <FlatList
               ref={flatListRef}
               data={currentChatMessages}
@@ -953,6 +1066,8 @@ const ConversationScreen: React.FC = () => {
               contentContainerStyle={styles.flatListContent}
               onContentSizeChange={scrollToBottom}
               onLayout={scrollToBottom}
+              onEndReached={loadOlderMessages}
+              onEndReachedThreshold={0.1}
               maintainVisibleContentPosition={{
                 minIndexForVisible: 0,
                 autoscrollToTopThreshold: 10,
@@ -1017,6 +1132,15 @@ const styles = StyleSheet.create({
   },
   messageListContainer: {
     flex: 1,
+  },
+  loadingIndicator: {
+    paddingVertical: hp(1),
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  loadingText: {
+    fontSize: responsiveFont(12),
+    fontStyle: 'italic',
   },
   flatListContent: {
     flexGrow: 1,

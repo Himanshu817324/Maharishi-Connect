@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  Modal,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '@/theme';
@@ -13,6 +14,8 @@ import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 import { permissionHelper } from '@/services/permissionHelper';
 import { mediaService } from '@/services/mediaService';
 import { testDocumentPicker } from '@/utils/documentPickerTest';
+import DocumentPickerTest from '@/components/DocumentPickerTest';
+import PermissionTestUtils from '@/utils/permissionTestUtils';
 
 interface PermissionTestProps {
   visible: boolean;
@@ -22,6 +25,7 @@ interface PermissionTestProps {
 const PermissionTest: React.FC<PermissionTestProps> = ({ visible, onClose }) => {
   const { colors } = useTheme();
   const [testResults, setTestResults] = useState<Record<string, boolean>>({});
+  const [showDocumentPickerTest, setShowDocumentPickerTest] = useState(false);
 
   const runPermissionTest = async (testName: string, testFunction: () => Promise<boolean>) => {
     try {
@@ -37,13 +41,13 @@ const PermissionTest: React.FC<PermissionTestProps> = ({ visible, onClose }) => 
 
   const testCameraPermissions = async () => {
     const permissions = permissionHelper.getCameraPermissions();
-    const result = await permissionHelper.requestMultiplePermissions(permissions);
+    const result = await permissionHelper.requestPermissionsIfNeeded(permissions);
     return result.granted;
   };
 
   const testStoragePermissions = async () => {
     const permissions = permissionHelper.getStoragePermissions();
-    const result = await permissionHelper.requestMultiplePermissions(permissions);
+    const result = await permissionHelper.requestPermissionsIfNeeded(permissions);
     return result.granted;
   };
 
@@ -82,18 +86,24 @@ const PermissionTest: React.FC<PermissionTestProps> = ({ visible, onClose }) => 
     return result.success;
   };
 
-  const runAllTests = async () => {
-    setTestResults({});
-    
-    await runPermissionTest('Camera Permissions', testCameraPermissions);
-    await runPermissionTest('Storage Permissions', testStoragePermissions);
-    await runPermissionTest('Image Picking', testImagePicking);
-    await runPermissionTest('Video Picking', testVideoPicking);
-    await runPermissionTest('Audio Picking', testAudioPicking);
-    await runPermissionTest('File Picking', testFilePicking);
-    await runPermissionTest('Camera Photo', testCameraPhoto);
-    await runPermissionTest('Camera Video', testCameraVideo);
-    await runPermissionTest('Document Picker', testDocumentPickerLib);
+  const runComprehensiveTest = async () => {
+    try {
+      console.log('🧪 Running comprehensive permission test...');
+      const results = await PermissionTestUtils.runAllPermissionTests();
+      PermissionTestUtils.logTestResults(results);
+      
+      const passed = results.filter(r => r.success).length;
+      const failed = results.filter(r => !r.success).length;
+      
+      Alert.alert(
+        'Permission Test Complete',
+        `Tests completed: ${passed} passed, ${failed} failed. Check console for detailed results.`,
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      console.error('💥 Comprehensive test error:', error);
+      Alert.alert('Test Error', 'Failed to run comprehensive test. Check console for details.');
+    }
   };
 
   const getTestIcon = (testName: string) => {
@@ -129,10 +139,18 @@ const PermissionTest: React.FC<PermissionTestProps> = ({ visible, onClose }) => 
 
           <TouchableOpacity
             style={[styles.runAllButton, { backgroundColor: colors.accent }]}
-            onPress={runAllTests}
+            onPress={runComprehensiveTest}
           >
-            <Icon name="play" size={moderateScale(20)} color="#FFFFFF" />
-            <Text style={styles.runAllText}>Run All Tests</Text>
+            <Icon name="checkmark-circle" size={moderateScale(20)} color="#FFFFFF" />
+            <Text style={styles.runAllText}>Run Comprehensive Test</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.runAllButton, { backgroundColor: colors.textSecondary, marginTop: hp(1) }]}
+            onPress={() => setShowDocumentPickerTest(true)}
+          >
+            <Icon name="document-outline" size={moderateScale(20)} color="#FFFFFF" />
+            <Text style={styles.runAllText}>Test DocumentPicker</Text>
           </TouchableOpacity>
 
           <View style={styles.testList}>
@@ -173,6 +191,26 @@ const PermissionTest: React.FC<PermissionTestProps> = ({ visible, onClose }) => 
           </View>
         </ScrollView>
       </View>
+
+      {/* DocumentPicker Test Modal */}
+      <Modal
+        visible={showDocumentPickerTest}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowDocumentPickerTest(false)}
+      >
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.title, { color: colors.text }]}>
+              DocumentPicker Test
+            </Text>
+            <TouchableOpacity onPress={() => setShowDocumentPickerTest(false)}>
+              <Icon name="close" size={moderateScale(24)} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+          <DocumentPickerTest />
+        </View>
+      </Modal>
     </View>
   );
 };
