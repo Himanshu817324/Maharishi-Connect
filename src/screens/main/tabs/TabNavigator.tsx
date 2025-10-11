@@ -68,14 +68,14 @@ export default function TabNavigator() {
             tabBarActiveTintColor: colors.accentLight,
             tabBarInactiveTintColor: colors.textOnPrimary,
             tabBarStyle: {
-              backgroundColor: colors.primary,
-              borderTopColor: colors.primary,
+              backgroundColor: '#183535',
+              borderTopColor: '#183535',
               borderTopWidth: 0,
               height: Platform.OS === 'ios' ? moderateScale(85) : moderateScale(65),
               paddingBottom: Platform.OS === 'ios' ? moderateScale(25) : moderateScale(10),
               paddingTop: 0, // Removed extra top padding
               elevation: 8,
-              shadowColor: colors.primary,
+              shadowColor: '#183535',
               shadowOffset: {
                 width: 0,
                 height: -2,

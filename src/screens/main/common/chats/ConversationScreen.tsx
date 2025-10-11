@@ -46,7 +46,67 @@ import ChatInput from '@/components/atoms/chats/ChatInput';
 import TypingIndicator from '@/components/atoms/chats/TypingIndicator';
 import CustomSafeAreaView from '@/components/atoms/ui/CustomSafeAreaView';
 import FileMessageBubble from '@/components/FileMessageBubble';
-import MediaPicker from '@/components/MediaPicker';
+
+// Utility function to format date for day separators
+const formatDateForSeparator = (dateString: string): string => {
+  const messageDate = new Date(dateString);
+  const now = new Date();
+  
+  // Get local date strings in YYYY-MM-DD format for comparison
+  const messageDateStr = messageDate.getFullYear() + '-' + 
+    String(messageDate.getMonth() + 1).padStart(2, '0') + '-' + 
+    String(messageDate.getDate()).padStart(2, '0');
+  
+  const todayStr = now.getFullYear() + '-' + 
+    String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+    String(now.getDate()).padStart(2, '0');
+  
+  // Calculate yesterday
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.getFullYear() + '-' + 
+    String(yesterday.getMonth() + 1).padStart(2, '0') + '-' + 
+    String(yesterday.getDate()).padStart(2, '0');
+  
+  console.log('📅 Date comparison:', {
+    messageDateStr,
+    todayStr,
+    yesterdayStr,
+    originalDateString: dateString,
+    messageDateLocal: messageDate.toLocaleDateString(),
+    nowLocal: now.toLocaleDateString(),
+    yesterdayLocal: yesterday.toLocaleDateString()
+  });
+  
+  if (messageDateStr === todayStr) {
+    return 'Today';
+  } else if (messageDateStr === yesterdayStr) {
+    return 'Yesterday';
+  } else {
+    // Format as "Sunday 23 September" or similar
+    const options: Intl.DateTimeFormatOptions = { 
+      weekday: 'long', 
+      day: 'numeric', 
+      month: 'long' 
+    };
+    return messageDate.toLocaleDateString('en-US', options);
+  }
+};
+
+// Utility function to check if two dates are on the same day (currently unused but kept for future use)
+// const isSameDay = (date1: string, date2: string): boolean => {
+//   const d1 = new Date(date1);
+//   const d2 = new Date(date2);
+//   return d1.getFullYear() === d2.getFullYear() &&
+//          d1.getMonth() === d2.getMonth() &&
+//          d1.getDate() === d2.getDate();
+// };
+
+// Interface for grouped message items
+interface GroupedMessageItem {
+  type: 'message' | 'separator';
+  data: MessageData | { date: string; formattedDate: string };
+}
 
 interface RouteParams {
   chat: ChatData;
@@ -200,6 +260,7 @@ const ConversationScreen: React.FC = () => {
     );
 
     // Typing indicator listeners
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const _removeTypingListener = socketService.addTypingListener(data => {
       if (data.chatId === chat?.id) {
         console.log('⌨️ [ConversationScreen] Typing indicator:', data);
@@ -224,6 +285,7 @@ const ConversationScreen: React.FC = () => {
     });
 
     // Read receipt listeners (handles both messageRead and messageSeen events)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const _removeReadReceiptListener = socketService.addReadReceiptListener(
       data => {
         if (data.chatId === chat?.id) {
@@ -243,6 +305,7 @@ const ConversationScreen: React.FC = () => {
     );
 
     // Message status listeners
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const _removeMessageStatusListener = socketService.addMessageStatusListener(
       data => {
         console.log('📊 [ConversationScreen] Message status update received:', data);
@@ -270,6 +333,7 @@ const ConversationScreen: React.FC = () => {
     );
 
     // Message delivered listeners
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const _removeMessageDeliveredListener =
       socketService.addMessageDeliveredListener(data => {
         console.log('📬 [ConversationScreen] Message delivered event received:', data);
@@ -304,6 +368,7 @@ const ConversationScreen: React.FC = () => {
 
 
     // Online status listeners
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const _removeUserOnlineListener = socketService.addUserOnlineListener(
       userData => {
         console.log('🟢 [ConversationScreen] User came online:', userData);
@@ -311,6 +376,7 @@ const ConversationScreen: React.FC = () => {
       },
     );
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const _removeUserOfflineListener = socketService.addUserOfflineListener(
       userData => {
         console.log('🔴 [ConversationScreen] User went offline:', userData);
@@ -674,29 +740,75 @@ const ConversationScreen: React.FC = () => {
     );
   };
 
-  const [isMediaPickerVisible, setIsMediaPickerVisible] = useState(false);
   const [isMediaViewerVisible, setIsMediaViewerVisible] = useState(false);
   const [mediaViewerFiles, setMediaViewerFiles] = useState<MediaFile[]>([]);
   const [mediaViewerIndex, setMediaViewerIndex] = useState(0);
 
-  const handleSendImage = () => {
-    setIsMediaPickerVisible(true);
+  // Function to group messages with day separators
+  const groupMessagesWithSeparators = (messages: MessageData[]): GroupedMessageItem[] => {
+    if (messages.length === 0) return [];
+    
+    const groupedItems: GroupedMessageItem[] = [];
+    let lastDate = '';
+    
+    console.log('📅 Grouping messages:', messages.length, 'messages');
+    
+    messages.forEach((message, _index) => {
+      const messageDate = new Date(message.created_at);
+      // Get local date string in YYYY-MM-DD format
+      const currentDate = messageDate.getFullYear() + '-' + 
+        String(messageDate.getMonth() + 1).padStart(2, '0') + '-' + 
+        String(messageDate.getDate()).padStart(2, '0');
+      
+      console.log('📅 Processing message:', {
+        messageId: message.id,
+        created_at: message.created_at,
+        currentDate,
+        lastDate,
+        isNewDay: currentDate !== lastDate,
+        messageDateLocal: messageDate.toLocaleDateString()
+      });
+      
+      // Add separator if this is a new day
+      if (currentDate !== lastDate) {
+        const formattedDate = formatDateForSeparator(message.created_at);
+        console.log('📅 Adding separator:', formattedDate);
+        
+        groupedItems.push({
+          type: 'separator',
+          data: {
+            date: currentDate,
+            formattedDate: formattedDate
+          }
+        });
+        lastDate = currentDate;
+      }
+      
+      // Add the message
+      groupedItems.push({
+        type: 'message',
+        data: message
+      });
+    });
+    
+    console.log('📅 Final grouped items:', groupedItems.length, 'items');
+    return groupedItems;
   };
 
-  const handleSendVideo = () => {
-    setIsMediaPickerVisible(true);
-  };
+  // Get grouped messages for rendering
+  const groupedMessages = groupMessagesWithSeparators(currentChatMessages);
 
-  const handleSendAudio = () => {
-    setIsMediaPickerVisible(true);
-  };
-
-  const handleSendFile = () => {
-    setIsMediaPickerVisible(true);
-  };
 
   const handleMediaSelected = async (type: string, files: MediaFile[]) => {
     if (!chat || files.length === 0) return;
+
+    // Debug: Test server response format
+    try {
+      const { apiService } = await import('@/services/apiService');
+      await apiService.testServerResponse();
+    } catch (error) {
+      console.error('Server test failed:', error);
+    }
 
     try {
       // For now, we'll send each file as a separate message
@@ -821,12 +933,31 @@ const ConversationScreen: React.FC = () => {
           }
         } catch (uploadError) {
           console.error('Error uploading file:', uploadError);
+          
+          // Provide more detailed error information
+          let errorMessage = 'Upload failed';
+          if (uploadError instanceof Error) {
+            errorMessage = uploadError.message;
+            console.error('Upload error details:', {
+              message: uploadError.message,
+              name: uploadError.name,
+              stack: uploadError.stack?.substring(0, 200)
+            });
+          }
+          
           // Update message status to failed
           dispatch(updateMessageStatus({
             messageId: messageId,
             chatId: chat.id,
             status: 'failed',
           }));
+          
+          // Show user-friendly error message
+          Alert.alert(
+            'Upload Failed',
+            `Failed to upload ${file.name}: ${errorMessage}`,
+            [{ text: 'OK' }]
+          );
         }
       }
 
@@ -857,10 +988,6 @@ const ConversationScreen: React.FC = () => {
     }
   };
 
-  const handleMediaUploadError = (error: string) => {
-    console.error('Media upload error:', error);
-    Alert.alert('Upload Error', error);
-  };
 
   const handleMediaPress = (message: MessageData) => {
     if (!message.media_url) return;
@@ -909,59 +1036,86 @@ const ConversationScreen: React.FC = () => {
     ]);
   };
 
+  // Day separator component
+  const renderDaySeparator = (formattedDate: string) => (
+    <View style={styles.daySeparatorContainer}>
+      <View style={[styles.daySeparatorLine, { backgroundColor: colors.border }]} />
+      <Text style={[styles.daySeparatorText, { color: colors.textSecondary }]}>
+        {formattedDate}
+      </Text>
+      <View style={[styles.daySeparatorLine, { backgroundColor: colors.border }]} />
+    </View>
+  );
+
   const renderMessage = ({
     item,
     index,
   }: {
-    item: MessageData;
+    item: GroupedMessageItem;
     index: number;
   }) => {
+    // Handle day separator
+    if (item.type === 'separator') {
+      const separatorData = item.data as { date: string; formattedDate: string };
+      return renderDaySeparator(separatorData.formattedDate);
+    }
+
+    // Handle message
+    const messageData = item.data as MessageData;
     const currentUserId = user?.id || user?.firebaseUid;
     const isOwn =
-      item.sender_id === currentUserId ||
-      item.sender_id === user?.id ||
-      item.sender_id === user?.firebaseUid;
-    const previousMessage = index > 0 ? currentChatMessages[index - 1] : null;
+      messageData.sender_id === currentUserId ||
+      messageData.sender_id === user?.id ||
+      messageData.sender_id === user?.firebaseUid;
+    
+    // Find previous message (skip separators)
+    let previousMessage: MessageData | null = null;
+    for (let i = index - 1; i >= 0; i--) {
+      if (groupedMessages[i].type === 'message') {
+        previousMessage = groupedMessages[i].data as MessageData;
+        break;
+      }
+    }
 
     // Only show avatar for group chats, not for direct contacts
     const showAvatar =
       chat?.type === 'group' &&
       !isOwn &&
-      (!previousMessage || previousMessage.sender_id !== item.sender_id);
+      (!previousMessage || previousMessage.sender_id !== messageData.sender_id);
 
     console.log('📱 Rendering message:', {
-      messageId: item.id,
-      senderId: item.sender_id,
+      messageId: messageData.id,
+      senderId: messageData.sender_id,
       currentUserId,
       user_id: user?.id,
       user_firebaseUid: user?.firebaseUid,
       isOwn,
       chatType: chat?.type,
       showAvatar,
-      content: item.content,
+      content: messageData.content,
     });
 
     // Render file message if it's a file type
-    if (item.message_type === 'file') {
+    if (messageData.message_type === 'file') {
       return (
         <FileMessageBubble
-          message={item}
+          message={messageData}
           isOwn={isOwn}
-          onPress={() => handleMessagePress(item)}
-          onLongPress={() => handleMessageLongPress(item)}
+          onPress={() => handleMessagePress(messageData)}
+          onLongPress={() => handleMessageLongPress(messageData)}
         />
       );
     }
 
     return (
       <MessageBubble
-        message={item}
+        message={messageData}
         isOwn={isOwn}
         showAvatar={showAvatar}
         showTime={true}
         isGroupChat={chat?.type === 'group'}
-        onPress={() => handleMessagePress(item)}
-        onLongPress={() => handleMessageLongPress(item)}
+        onPress={() => handleMessagePress(messageData)}
+        onLongPress={() => handleMessageLongPress(messageData)}
         onMediaPress={handleMediaPress}
       />
     );
@@ -1026,7 +1180,7 @@ const ConversationScreen: React.FC = () => {
   return (
     <CustomSafeAreaView
       style={styles.container}
-      topColor={colors.primary}
+      topColor={colors.background}
       bottomColor={colors.background}
     >
       <Container
@@ -1058,8 +1212,12 @@ const ConversationScreen: React.FC = () => {
             )}
             <FlatList
               ref={flatListRef}
-              data={currentChatMessages}
-              keyExtractor={item => item.id}
+              data={groupedMessages}
+              keyExtractor={(item, _index) => 
+                item.type === 'separator' 
+                  ? `separator-${(item.data as { date: string; formattedDate: string }).date}`
+                  : (item.data as MessageData).id
+              }
               renderItem={renderMessage}
               ListEmptyComponent={renderEmptyState}
               showsVerticalScrollIndicator={false}
@@ -1085,10 +1243,7 @@ const ConversationScreen: React.FC = () => {
           >
             <ChatInput
               onSendMessage={handleSendMessage}
-              onSendImage={handleSendImage}
-              onSendVideo={handleSendVideo}
-              onSendAudio={handleSendAudio}
-              onSendFile={handleSendFile}
+              onMediaSelected={handleMediaSelected}
               replyToMessage={replyToMessage || undefined}
               onCancelReply={() => setReplyToMessage(null)}
               disabled={false}
@@ -1101,14 +1256,6 @@ const ConversationScreen: React.FC = () => {
         </View>
       </Container>
 
-      {/* Media Picker Modal */}
-        <MediaPicker
-          visible={isMediaPickerVisible}
-          onClose={() => setIsMediaPickerVisible(false)}
-          onMediaSelected={handleMediaSelected}
-          onUploadError={handleMediaUploadError}
-          maxFileSize={50 * 1024 * 1024} // 50MB
-        />
 
         <MediaViewer
           visible={isMediaViewerVisible}
@@ -1246,6 +1393,24 @@ const styles = StyleSheet.create({
     fontSize: responsiveFont(13),
     fontWeight: '500',
     fontStyle: 'italic',
+  },
+  daySeparatorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: hp(2),
+    paddingHorizontal: wp(4),
+  },
+  daySeparatorLine: {
+    flex: 1,
+    height: 1,
+    opacity: 0.3,
+  },
+  daySeparatorText: {
+    fontSize: responsiveFont(12),
+    fontWeight: '500',
+    marginHorizontal: wp(3),
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });
 

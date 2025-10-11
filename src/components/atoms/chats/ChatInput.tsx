@@ -7,20 +7,19 @@ import {
   Text,
   TouchableWithoutFeedback,
   Platform,
+  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
+import { mediaService, MediaFile } from '@/services/mediaService';
 
 interface ChatInputProps {
   onSendMessage: (
     content: string,
     messageType?: 'text' | 'image' | 'video' | 'audio' | 'file',
   ) => void;
-  onSendImage?: () => void;
-  onSendVideo?: () => void;
-  onSendAudio?: () => void;
-  onSendFile?: () => void;
+  onMediaSelected: (type: string, files: MediaFile[]) => void;
   placeholder?: string;
   disabled?: boolean;
   replyToMessage?: {
@@ -37,10 +36,7 @@ interface ChatInputProps {
 
 const ChatInput: React.FC<ChatInputProps> = ({
   onSendMessage,
-  onSendImage,
-  onSendVideo,
-  onSendAudio,
-  onSendFile,
+  onMediaSelected,
   placeholder = 'Type a message...',
   disabled = false,
   replyToMessage,
@@ -94,26 +90,107 @@ const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
-  const handleMediaPress = (
+  const handleMediaPress = async (
     type: 'camera' | 'gallery' | 'video' | 'audio' | 'file',
   ) => {
     setShowMediaMenu(false); // Close menu after selection
-    switch (type) {
-      case 'camera':
-        onSendImage?.();
-        break;
-      case 'gallery':
-        onSendImage?.();
-        break;
-      case 'video':
-        onSendVideo?.();
-        break;
-      case 'audio':
-        onSendAudio?.();
-        break;
-      case 'file':
-        onSendFile?.();
-        break;
+    
+    try {
+      switch (type) {
+        case 'camera':
+          await takePhoto();
+          break;
+        case 'gallery':
+          await pickImages();
+          break;
+        case 'video':
+          await pickVideos();
+          break;
+        case 'audio':
+          await pickAudio();
+          break;
+        case 'file':
+          await pickFiles();
+          break;
+      }
+    } catch (error) {
+      console.error('Media selection error:', error);
+      Alert.alert('Error', 'Failed to select media. Please try again.');
+    }
+  };
+
+  const takePhoto = async () => {
+    try {
+      const result = await mediaService.takePhoto();
+      
+      if (result.success && result.files.length > 0) {
+        onMediaSelected('image', result.files);
+      } else if (result.error) {
+        Alert.alert('Error', result.error);
+      }
+    } catch (error) {
+      console.error('Camera error:', error);
+      throw error;
+    }
+  };
+
+  const pickImages = async () => {
+    try {
+      const result = await mediaService.pickImages(10);
+      
+      if (result.success && result.files.length > 0) {
+        onMediaSelected('image', result.files);
+      } else if (result.error) {
+        Alert.alert('Error', result.error);
+      }
+    } catch (error) {
+      console.error('Image picker error:', error);
+      throw error;
+    }
+  };
+
+  const pickVideos = async () => {
+    try {
+      const result = await mediaService.pickVideos(5);
+      
+      if (result.success && result.files.length > 0) {
+        onMediaSelected('video', result.files);
+      } else if (result.error) {
+        Alert.alert('Error', result.error);
+      }
+    } catch (error) {
+      console.error('Video picker error:', error);
+      throw error;
+    }
+  };
+
+  const pickAudio = async () => {
+    try {
+      const result = await mediaService.pickAudioFiles(5);
+      
+      if (result.success && result.files.length > 0) {
+        onMediaSelected('audio', result.files);
+      } else if (result.error) {
+        Alert.alert('Error', result.error);
+      }
+    } catch (error) {
+      console.error('Audio picker error:', error);
+      throw error;
+    }
+  };
+
+  const pickFiles = async () => {
+    try {
+      const result = await mediaService.pickFiles(5);
+      
+      if (result.success && result.files.length > 0) {
+        onMediaSelected('file', result.files);
+      } else if (result.error) {
+        Alert.alert('Error', result.error);
+      }
+    } catch (error) {
+      console.error('File picker error:', error);
+      throw error;
     }
   };
 

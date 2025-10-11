@@ -91,14 +91,16 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       switch (message.message_type) {
         case 'text':
           return (
-            <Text
-              style={[
-                styles.messageText,
-                { color: isOwn ? colors.textOnPrimary : colors.text },
-              ]}
-            >
-              {String(message.content || 'No content')}
-            </Text>
+            <View style={styles.messageTextContainer}>
+              <Text
+                style={[
+                  styles.messageText,
+                  { color: isOwn ? colors.chatBubbleText : colors.chatBubbleTextOther },
+                ]}
+              >
+                {String(message.content || 'No content')}
+              </Text>
+            </View>
           );
 
         case 'image':
@@ -289,58 +291,53 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         <TouchableOpacity
           style={[
             styles.bubble,
+            isOwn ? styles.ownBubble : styles.otherBubble,
             {
-              backgroundColor: isOwn ? colors.accent : colors.surface,
-              borderColor: isOwn ? colors.accent : colors.border,
+              backgroundColor: isOwn ? colors.chatBubble : colors.chatBubbleOther,
+              borderColor: isOwn ? colors.chatBubble : colors.chatBubbleOther,
             },
           ]}
           onPress={onPress}
           onLongPress={handleLongPress}
           activeOpacity={0.7}
         >
-          {renderMessageContent()}
-
-          {showTime && (
-            <View style={styles.timeContainer}>
-              <Text
-                style={[
-                  styles.timeText,
-                  {
-                    color: isOwn ? colors.textOnPrimary : colors.textSecondary,
-                  },
-                ]}
-              >
-                {formatTime(message.created_at)}
-                {message.edited_at && (
-                  <Text style={styles.editedText}> (edited)</Text>
+          <View style={styles.messageContentContainer}>
+            {renderMessageContent()}
+            
+            {showTime && (
+              <View style={styles.timeAndStatusContainer}>
+                <Text
+                  style={[
+                    styles.timeText,
+                    {
+                      color: isOwn ? colors.chatBubbleText : colors.chatBubbleTextOther,
+                    },
+                  ]}
+                >
+                  {formatTime(message.created_at)}
+                  {message.edited_at && (
+                    <Text style={styles.editedText}> (edited)</Text>
+                  )}
+                </Text>
+                
+                {/* Message Status Indicator - Only show for own messages */}
+                {isOwn && (
+                  <MessageStatusIndicator
+                    status={message.status || 'sent'}
+                    showText={false}
+                    showIcon={true}
+                    size="small"
+                    readCount={message.read_by?.length || 0}
+                    totalRecipients={1}
+                    canRetry={message.status === 'failed'}
+                    onRetry={() => {
+                      console.log('Retrying message:', message.id);
+                    }}
+                  />
                 )}
-              </Text>
-            </View>
-          )}
-
-          {/* Message Status Indicator - Only show for own messages */}
-          {isOwn && (
-            <>
-              {console.log('🔍 MessageBubble rendering status indicator:', { 
-                messageId: message.id, 
-                status: message.status, 
-                isOwn 
-              })}
-              <MessageStatusIndicator
-                status={message.status || 'sent'}
-                showText={true}
-                showIcon={true}
-                size="small"
-                readCount={message.read_by?.length || 0}
-                totalRecipients={1} // For direct chats, this would be 1
-                canRetry={message.status === 'failed'}
-                onRetry={() => {
-                  // Handle retry logic here
-                  console.log('Retrying message:', message.id);
-                }}
-              />
-            </>
-          )}
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
       </View>
     </View>
@@ -350,10 +347,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    marginVertical: hp(0.8), // Increased vertical margin for better spacing
-    paddingHorizontal: wp(2), // Reduced padding for more space
-    minHeight: hp(5), // Increased minimum height for touch targets
-    alignItems: 'flex-end', // Align items to bottom for better text alignment
+    marginVertical: hp(0.3), // Reduced margin for WhatsApp-like tight spacing
+    paddingHorizontal: wp(2),
+    alignItems: 'flex-end',
   },
   ownContainer: {
     justifyContent: 'flex-end',
@@ -378,9 +374,7 @@ const styles = StyleSheet.create({
   },
   messageContainer: {
     flex: 1,
-    maxWidth: wp(80), // Use responsive width
-    minWidth: wp(20), // Ensure minimum width
-    marginHorizontal: wp(1), // Add horizontal margin for better spacing
+    maxWidth: wp(85), // Increased width to reduce wrapping
   },
   ownMessageContainer: {
     alignItems: 'flex-end',
@@ -395,21 +389,32 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   bubble: {
-    paddingHorizontal: wp(4), // Increased padding for better text spacing
-    paddingVertical: hp(1.5), // Increased vertical padding
-    paddingBottom: hp(1), // Less bottom padding to accommodate time
-    borderRadius: moderateScale(20), // More rounded corners
-    borderWidth: 1,
-    minHeight: hp(5), // Increased minimum height
-    maxWidth: '100%', // Ensure bubble doesn't exceed container
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.2),
+    borderRadius: moderateScale(18),
+    minHeight: hp(4),
+    maxWidth: wp(85), // Increased width to reduce wrapping
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2, // Increased shadow offset
+      height: 1,
     },
-    shadowOpacity: 0.15, // Increased shadow opacity
-    shadowRadius: 4, // Increased shadow radius
-    elevation: 3, // Increased elevation for Android
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  ownBubble: {
+    borderTopRightRadius: moderateScale(4), // Pointed edge on bottom right (sender's side)
+  },
+  otherBubble: {
+    borderTopLeftRadius: moderateScale(4), // Pointed edge on bottom left (receiver's side)
+    borderWidth: 1,
+  },
+  messageTextContainer: {
+    flex: 1,
+    flexShrink: 1,
+    marginRight: wp(1),
+    minWidth: 0,
   },
   messageText: {
     fontSize: responsiveFont(16),
@@ -420,20 +425,20 @@ const styles = StyleSheet.create({
     textAlign: 'left', // Ensure consistent text alignment
     includeFontPadding: false, // Remove extra font padding on Android
     textAlignVertical: 'center', // Center text vertically on Android
-    marginBottom: hp(0.2), // Small margin to separate from time
+    marginBottom: 0, // Remove bottom margin for inline layout
   },
   mediaImage: {
     width: wp(50),
     height: hp(20),
     borderRadius: moderateScale(8),
-    marginBottom: hp(0.5),
+    marginBottom: 0, // Remove bottom margin for inline layout
     maxWidth: wp(80), // Ensure it doesn't exceed screen width
   },
   mediaPlaceholder: {
     padding: moderateScale(12),
     borderRadius: moderateScale(8),
     backgroundColor: 'rgba(0,0,0,0.1)',
-    marginBottom: moderateScale(4),
+    marginBottom: 0, // Remove bottom margin for inline layout
   },
   mediaText: {
     fontSize: moderateScale(14),
@@ -444,15 +449,25 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: moderateScale(4),
     opacity: 0.8,
+    marginBottom: 0, // Remove bottom margin for inline layout
   },
-  timeContainer: {
-    marginTop: hp(0.5),
-    alignItems: 'flex-end', // Align time to the right
+  messageContentContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start', // Start alignment instead of space-between
+    flexWrap: 'nowrap',
+    maxWidth: '100%',
+  },
+  timeAndStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: wp(1),
+    flexShrink: 0,
   },
   timeText: {
-    fontSize: responsiveFont(10),
-    opacity: 0.7, // Slightly transparent for subtle appearance
-    fontWeight: '500',
+    fontSize: responsiveFont(11),
+    opacity: 0.6, // More subtle for WhatsApp-like appearance
+    fontWeight: '400',
   },
   editedText: {
     fontSize: responsiveFont(9),

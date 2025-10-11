@@ -163,7 +163,11 @@ class FileService {
   }
 
   // Get file type category for UI display
-  getFileTypeCategory(mimeType: string): 'document' | 'image' | 'video' | 'audio' | 'archive' | 'other' {
+  getFileTypeCategory(mimeType: string | undefined): 'document' | 'image' | 'video' | 'audio' | 'archive' | 'other' {
+    if (!mimeType || typeof mimeType !== 'string') {
+      return 'other';
+    }
+    
     if (mimeType.startsWith('image/')) return 'image';
     if (mimeType.startsWith('video/')) return 'video';
     if (mimeType.startsWith('audio/')) return 'audio';
@@ -173,7 +177,7 @@ class FileService {
   }
 
   // Get file icon based on type
-  getFileIcon(mimeType: string): string {
+  getFileIcon(mimeType: string | undefined): string {
     const category = this.getFileTypeCategory(mimeType);
     
     switch (category) {
@@ -184,11 +188,11 @@ class FileService {
       case 'audio':
         return 'musical-notes-outline';
       case 'document':
-        if (mimeType.includes('pdf')) return 'document-text-outline';
-        if (mimeType.includes('word') || mimeType.includes('doc')) return 'document-outline';
-        if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return 'grid-outline';
-        if (mimeType.includes('powerpoint') || mimeType.includes('presentation')) return 'easel-outline';
-        if (mimeType.includes('text') || mimeType.includes('txt')) return 'document-text-outline';
+        if (mimeType && mimeType.includes('pdf')) return 'document-text-outline';
+        if (mimeType && mimeType.includes('word') || mimeType && mimeType.includes('doc')) return 'document-outline';
+        if (mimeType && mimeType.includes('excel') || mimeType && mimeType.includes('spreadsheet')) return 'grid-outline';
+        if (mimeType && mimeType.includes('powerpoint') || mimeType && mimeType.includes('presentation')) return 'easel-outline';
+        if (mimeType && mimeType.includes('text') || mimeType && mimeType.includes('txt')) return 'document-text-outline';
         return 'document-outline';
       case 'archive':
         return 'archive-outline';

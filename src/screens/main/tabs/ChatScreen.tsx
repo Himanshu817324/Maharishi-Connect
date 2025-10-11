@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import {
   View,
   FlatList,
@@ -6,6 +6,9 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
+  Image,
+  TextInput,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
@@ -16,7 +19,9 @@ import { RootState, AppDispatch } from '@/store';
 import { fetchUserChats, setCurrentChat, clearUnreadCount } from '@/store/slices/chatSlice';
 import { socketService } from '@/services/socketService';
 import { ChatData } from '@/services/chatService';
-import CustomHeader from '@/components/atoms/ui/CustomHeader';
+import PermissionDebugger from '@/components/PermissionDebugger';
+import SimplePermissionTest from '@/components/SimplePermissionTest';
+import { useDrawer } from '@/contexts/DrawerContext';
 
 const ChatScreen: React.FC = () => {
   const { colors } = useTheme();
@@ -25,6 +30,52 @@ const ChatScreen: React.FC = () => {
   
   const { chats, loading } = useSelector((state: RootState) => state.chat);
   const { user } = useSelector((state: RootState) => state.auth);
+  const { openDrawer } = useDrawer();
+  const [isPermissionDebuggerVisible, setIsPermissionDebuggerVisible] = useState(false);
+  const [isSimpleTestVisible, setIsSimpleTestVisible] = useState(false);
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const [searchText, setSearchText] = useState('');
+
+  const getChatTitle = (chat: ChatData) => {
+    if (chat.type === 'group') {
+      return chat.name || 'Group Chat';
+    } else {
+      const otherParticipant = chat.participants.find(
+        p => p.user_id !== user?.id && p.user_id !== user?.firebaseUid
+      );
+      return otherParticipant?.userDetails?.localName || 
+             otherParticipant?.userDetails?.fullName || 
+             otherParticipant?.userDetails?.phoneNumber || 
+             'Unknown User';
+    }
+  };
+
+  // Filter chats based on search text
+  const filteredChats = chats.filter(chat => {
+    if (!searchText.trim()) return true;
+    
+    const searchLower = searchText.toLowerCase();
+    const chatTitle = getChatTitle(chat).toLowerCase();
+    const lastMessage = chat.last_message?.content?.toLowerCase() || '';
+    
+    return chatTitle.includes(searchLower) || lastMessage.includes(searchLower);
+  });
+
+  const toggleSearch = useCallback(() => {
+    setIsSearchVisible(!isSearchVisible);
+    if (isSearchVisible) {
+      setSearchText(''); // Clear search when hiding
+    }
+  }, [isSearchVisible]);
+
+  const handleSearchTextChange = useCallback((text: string) => {
+    setSearchText(text);
+  }, []);
+
+  const hideSearch = useCallback(() => {
+    setIsSearchVisible(false);
+    setSearchText('');
+  }, []);
 
   const loadChats = useCallback(async (forceRefresh: boolean = false) => {
     try {
@@ -75,15 +126,12 @@ const ChatScreen: React.FC = () => {
     (navigation as any).navigate('FilteredContactsScreen');
   };
 
-  const getChatTitle = (chat: ChatData) => {
-    if (chat.type === 'group') {
-      return chat.name || 'Group Chat';
-    } else {
-      const otherParticipant = chat.participants.find(
-        p => p.user_id !== user?.id && p.user_id !== user?.firebaseUid
-      );
-      return otherParticipant?.userDetails?.localName || otherParticipant?.userDetails?.fullName || 'Unknown User';
-    }
+  const handleFabLongPress = () => {
+    setIsPermissionDebuggerVisible(true);
+  };
+
+  const handleFabPress = () => {
+    setIsSimpleTestVisible(true);
   };
 
   const getChatSubtitle = (chat: ChatData) => {
@@ -202,7 +250,6 @@ const ChatScreen: React.FC = () => {
     const chatItemStyle = [
       styles.chatItem,
       { 
-        backgroundColor: colors.surface,
         borderLeftColor: hasUnread ? colors.accent : 'transparent'
       }
     ];
@@ -213,15 +260,45 @@ const ChatScreen: React.FC = () => {
         onPress={() => handleChatPress(item)}
         activeOpacity={0.7}
       >
-        <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
-          <Text style={styles.avatarText}>
-            {getChatAvatarInitials(item)}
-          </Text>
-          {item.type === 'group' && (
-            <View style={styles.groupBadge}>
-              <Icon name="people" size={moderateScale(10)} color="#FFFFFF" />
-            </View>
-          )}
+        <View style={styles.avatar}>
+          {(() => {
+            if (item.type === 'group') {
+              return (
+                <View style={[styles.avatarPlaceholder, { backgroundColor: avatarColor }]}>
+                  <Text style={styles.avatarText}>
+                    {getChatAvatarInitials(item)}
+                  </Text>
+                  <View style={styles.groupBadge}>
+                    <Icon name="people" size={moderateScale(10)} color="#FFFFFF" />
+                  </View>
+                </View>
+              );
+            } else {
+              const otherParticipant = item.participants.find(
+                p => p.user_id !== user?.id && p.user_id !== user?.firebaseUid
+              );
+              const profilePicture = otherParticipant?.userDetails?.localProfilePicture || 
+                                   otherParticipant?.userDetails?.profilePicture;
+
+              if (profilePicture) {
+                return (
+                  <Image
+                    source={{ uri: profilePicture }}
+                    style={styles.avatarImage}
+                    defaultSource={require('@/assets/logo.png')}
+                  />
+                );
+              } else {
+                return (
+                  <View style={[styles.avatarPlaceholder, { backgroundColor: avatarColor }]}>
+                    <Text style={styles.avatarText}>
+                      {getChatAvatarInitials(item)}
+                    </Text>
+                  </View>
+                );
+              }
+            }
+          })()}
         </View>
         
         <View style={styles.chatContent}>
@@ -237,7 +314,7 @@ const ChatScreen: React.FC = () => {
               {getChatTitle(item)}
             </Text>
             {item.last_message && (
-              <Text style={[styles.chatTime, { color: colors.textSecondary }]}>
+              <Text style={styles.chatTime}>
                 {formatLastMessageTime(item.last_message.created_at)}
               </Text>
             )}
@@ -303,11 +380,54 @@ const ChatScreen: React.FC = () => {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <CustomHeader title="Chats" />
+    <TouchableWithoutFeedback onPress={hideSearch}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Custom Header with Maharishi Connect */}
+      <View style={[styles.header, { backgroundColor: colors.background }]}>
+        <TouchableOpacity 
+          style={styles.headerButton}
+          onPress={openDrawer}
+        >
+          <Icon name="menu-outline" size={moderateScale(24)} color={colors.text} />
+        </TouchableOpacity>
+        
+        <Text style={[styles.headerTitle, { color: colors.text }]}>
+          Maharishi Connect
+        </Text>
+        
+        <TouchableOpacity 
+          style={styles.headerButton}
+          onPress={toggleSearch}
+        >
+          <Icon name="search-outline" size={moderateScale(24)} color={colors.text} />
+        </TouchableOpacity>
+      </View>
+      
+      {/* Search Bar */}
+      {isSearchVisible && (
+        <View style={[styles.searchContainer, { backgroundColor: colors.surface }]}>
+          <View style={[styles.searchInputContainer, { backgroundColor: colors.background }]}>
+            <Icon name="search-outline" size={moderateScale(20)} color={colors.textSecondary} style={styles.searchIcon} />
+            <TextInput
+              style={[styles.searchInput, { color: colors.text }]}
+              placeholder="Search chats..."
+              placeholderTextColor={colors.textSecondary}
+              value={searchText}
+              onChangeText={handleSearchTextChange}
+              autoFocus={true}
+              returnKeyType="search"
+            />
+            {searchText.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchText('')} style={styles.clearButton}>
+                <Icon name="close-circle" size={moderateScale(20)} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
       
       <FlatList
-        data={chats}
+        data={filteredChats}
         keyExtractor={(item) => item.id}
         renderItem={renderChatItem}
         ListEmptyComponent={renderEmptyState}
@@ -317,18 +437,88 @@ const ChatScreen: React.FC = () => {
       
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: colors.accent }]}
-        onPress={handleCreateChat}
+        onPress={handleFabPress}
+        onLongPress={handleFabLongPress}
         activeOpacity={0.85}
       >
         <Icon name="create-outline" size={moderateScale(28)} color="#FFFFFF" />
       </TouchableOpacity>
+
+      {/* Permission Debugger */}
+      <PermissionDebugger
+        visible={isPermissionDebuggerVisible}
+        onClose={() => setIsPermissionDebuggerVisible(false)}
+      />
+
+      {/* Simple Permission Test */}
+      {isSimpleTestVisible && (
+        <View style={styles.testOverlay}>
+          <View style={[styles.testContainer, { backgroundColor: colors.surface }]}>
+            <TouchableOpacity
+              style={styles.closeTestButton}
+              onPress={() => setIsSimpleTestVisible(false)}
+            >
+              <Text style={[styles.closeTestText, { color: colors.text }]}>✕</Text>
+            </TouchableOpacity>
+            <SimplePermissionTest />
+          </View>
+        </View>
+      )}
     </View>
+    </TouchableWithoutFeedback>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(2),
+    paddingTop: hp(4), // Extra padding for status bar
+  },
+  headerButton: {
+    padding: wp(2),
+    borderRadius: moderateScale(8),
+  },
+  headerTitle: {
+    fontSize: responsiveFont(20),
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  searchContainer: {
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: moderateScale(12),
+    paddingHorizontal: wp(3),
+    paddingVertical: hp(1),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  searchIcon: {
+    marginRight: wp(2),
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: responsiveFont(16),
+    paddingVertical: 0,
+  },
+  clearButton: {
+    marginLeft: wp(2),
+    padding: wp(1),
   },
   centerContainer: {
     justifyContent: 'center',
@@ -350,24 +540,35 @@ const styles = StyleSheet.create({
   chatItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: wp(5),
-    paddingVertical: hp(1.8),
-    marginHorizontal: wp(2),
-    marginVertical: hp(0.4),
-    borderRadius: moderateScale(16),
-    borderLeftWidth: 3,
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.5),
+    borderRadius: moderateScale(8),
   },
   avatar: {
-    width: moderateScale(56),
-    height: moderateScale(56),
-    borderRadius: moderateScale(28),
+    width: moderateScale(50),
+    height: moderateScale(50),
+    borderRadius: moderateScale(25),
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: wp(3.5),
+    marginRight: wp(3),
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: moderateScale(25),
+  },
+  avatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    borderRadius: moderateScale(25),
+    justifyContent: 'center',
+    alignItems: 'center',
     position: 'relative',
   },
   avatarText: {
-    fontSize: responsiveFont(22),
+    fontSize: responsiveFont(20),
     fontWeight: '700',
     color: '#FFFFFF',
     letterSpacing: 0.5,
@@ -408,6 +609,7 @@ const styles = StyleSheet.create({
   chatTime: {
     fontSize: responsiveFont(13),
     fontWeight: '500',
+    color: '#AAAAAA',
   },
   chatSubtitle: {
     flexDirection: 'row',
@@ -496,6 +698,34 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  testOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  testContainer: {
+    width: '90%',
+    height: '80%',
+    borderRadius: moderateScale(12),
+    padding: wp(4),
+  },
+  closeTestButton: {
+    position: 'absolute',
+    top: wp(2),
+    right: wp(2),
+    zIndex: 1001,
+    padding: moderateScale(8),
+  },
+  closeTestText: {
+    fontSize: responsiveFont(18),
+    fontWeight: '600',
   },
 });
 

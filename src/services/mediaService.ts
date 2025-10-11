@@ -135,16 +135,22 @@ class MediaService {
       if (!result.granted) {
         console.warn('⚠️ Some storage permissions were denied:', result.deniedPermissions);
         
-        // Show user-friendly error message
-        const deniedNames = result.deniedPermissions.map(p => permissionHelper.getPermissionDisplayName(p));
-        Alert.alert(
-          'Storage Permission Required',
-          `Storage permission is required to access files. The following permissions are needed: ${deniedNames.join(', ')}. Please grant these permissions in settings.`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => permissionHelper.openAppSettings() },
-          ]
-        );
+        // Check if any permissions were set to "never ask again"
+        if (result.neverAskAgainPermissions && result.neverAskAgainPermissions.length > 0) {
+          console.warn('⚠️ Some permissions set to NEVER_ASK_AGAIN:', result.neverAskAgainPermissions);
+          permissionHelper.showNeverAskAgainAlert(result.neverAskAgainPermissions);
+        } else {
+          // Show user-friendly error message for regular denials
+          const deniedNames = result.deniedPermissions.map(p => permissionHelper.getPermissionDisplayName(p));
+          Alert.alert(
+            'Storage Permission Required',
+            `Storage permission is required to access files. The following permissions are needed: ${deniedNames.join(', ')}. Please grant these permissions in settings.`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => permissionHelper.openAppSettings() },
+            ]
+          );
+        }
       }
       
       return result.granted;
