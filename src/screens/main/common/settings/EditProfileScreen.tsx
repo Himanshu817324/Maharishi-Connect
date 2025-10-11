@@ -79,33 +79,122 @@ export default function EditProfileScreen() {
     loadLocations();
   }, [user?.country]);
 
-  const handleImagePicker = async () => {
+  const openImageLibrary = async () => {
     try {
+      console.log('🖼️ Opening image library...');
       setUploading(true);
-      const result = await lightweightImagePicker.pickImage();
+      const result = await lightweightImagePicker.pickImages(1);
       
-      if (result && result.uri) {
-        setProfileImage(result.uri);
-        
-        // Upload image
-        const uploadResult = await imageUploadService.uploadImage(result.uri, 'profile');
-        if (uploadResult.success) {
-          setUploadTempId(uploadResult.tempId);
-          Toast.show({
-            type: 'success',
-            text1: 'Image uploaded successfully',
-          });
-        }
+      console.log('🖼️ Image picker result:', result);
+      
+      if (result.success && result.files.length > 0) {
+        const file = result.files[0];
+        console.log('🖼️ Selected file:', file);
+        uploadImage(file.uri);
+      } else if (result.error) {
+        console.error('🖼️ Gallery error:', result.error);
+        Toast.show({
+          type: 'error',
+          text1: 'Gallery Error',
+          text2: result.error,
+        });
       }
     } catch (error) {
-      console.error('Error picking image:', error);
+      console.error('Gallery error:', error);
       Toast.show({
         type: 'error',
-        text1: 'Failed to upload image',
+        text1: 'Gallery Error',
+        text2: 'Failed to access gallery',
       });
     } finally {
       setUploading(false);
     }
+  };
+
+  const openCamera = async () => {
+    try {
+      console.log('📷 Opening camera...');
+      const result = await lightweightImagePicker.takePhoto();
+      
+      console.log('📷 Camera result:', result);
+      
+      if (result.success && result.files.length > 0) {
+        const file = result.files[0];
+        console.log('📷 Captured file:', file);
+        uploadImage(file.uri);
+      } else if (result.error) {
+        console.error('📷 Camera error:', result.error);
+        Toast.show({
+          type: 'error',
+          text1: 'Camera Error',
+          text2: result.error,
+        });
+      }
+    } catch (error) {
+      console.error('Camera error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Camera Error',
+        text2: 'Failed to access camera',
+      });
+    }
+  };
+
+  const uploadImage = async (imageUri: string) => {
+    try {
+      setUploading(true);
+
+      // Show initial upload status
+      Toast.show({
+        type: 'info',
+        text1: 'Uploading image...',
+        text2: 'Please wait',
+      });
+
+      // Upload image
+      const uploadResult = await imageUploadService.uploadProfileImage(imageUri, user?.id || '');
+      
+      if (uploadResult.success) {
+        setProfileImage(uploadResult.imageUrl || uploadResult.url || imageUri);
+        setUploadTempId(uploadResult.tempId);
+        
+        Toast.show({
+          type: 'success',
+          text1: '✅ Image uploaded successfully!',
+          text2: 'Profile picture updated',
+        });
+      } else {
+        throw new Error(uploadResult.error || 'Upload failed');
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      Toast.show({
+        type: 'error',
+        text1: '❌ Upload failed',
+        text2: error instanceof Error ? error.message : 'Please try again',
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleImagePicker = () => {
+    console.log('🖼️ Image picker button pressed');
+    Alert.alert(
+      'Select Profile Picture',
+      'Choose how you want to add a profile picture',
+      [
+        { text: 'Camera', onPress: () => {
+          console.log('📷 Camera option selected');
+          openCamera();
+        }},
+        { text: 'Gallery', onPress: () => {
+          console.log('🖼️ Gallery option selected');
+          openImageLibrary();
+        }},
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
   };
 
   const handleCountryChange = async (country: string) => {

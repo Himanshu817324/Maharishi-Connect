@@ -44,22 +44,43 @@ class PermissionService {
   async requestStoragePermissions(): Promise<PermissionResult> {
     if (Platform.OS === 'android') {
       try {
-        const granted = await PermissionsAndroid.requestMultiple([
-          PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
-          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-        ]);
-
-        const readGranted = granted[PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE] === PermissionsAndroid.RESULTS.GRANTED;
-        const writeGranted = granted[PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE] === PermissionsAndroid.RESULTS.GRANTED;
+        // Check Android version for appropriate permissions
+        const androidVersion = Platform.Version;
+        let permissionsToRequest: string[] = [];
         
-        const canAskAgain = 
-          granted[PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE] !== PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN &&
-          granted[PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE] !== PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN;
+        if (androidVersion >= 33) {
+          // Android 13+ (API 33+) - Use new media permissions
+          permissionsToRequest = [
+            PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
+            PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO,
+          ];
+        } else {
+          // Android 12 and below - Use legacy storage permissions
+          permissionsToRequest = [
+            PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+            PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+          ];
+        }
+
+        console.log(`🔐 Requesting storage permissions for Android ${androidVersion}:`, permissionsToRequest);
+        
+        const granted = await PermissionsAndroid.requestMultiple(permissionsToRequest);
+        
+        // Check if all requested permissions are granted
+        const allGranted = permissionsToRequest.every(permission => 
+          granted[permission] === PermissionsAndroid.RESULTS.GRANTED
+        );
+        
+        const canAskAgain = permissionsToRequest.every(permission => 
+          granted[permission] !== PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
+        );
+
+        console.log(`🔐 Storage permissions result:`, { allGranted, canAskAgain, granted });
 
         return {
-          granted: readGranted && writeGranted,
+          granted: allGranted,
           canAskAgain,
-          message: !readGranted || !writeGranted ? 'Storage permissions are required to access files' : undefined,
+          message: !allGranted ? 'Storage permissions are required to access photos and files' : undefined,
         };
       } catch (error) {
         console.error('Error requesting storage permissions:', error);
