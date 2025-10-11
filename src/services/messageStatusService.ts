@@ -263,17 +263,17 @@ class MessageStatusService {
   getStatusColor(status: MessageStatus): string {
     switch (status) {
       case 'sending':
-        return '#FFA500'; // Orange
+        return '#FFA500'; // Orange for timer/clock
       case 'sent':
-        return '#808080'; // Gray
+        return '#666666'; // Dark gray for single tick
       case 'delivered':
-        return '#0000FF'; // Blue
+        return '#666666'; // Dark gray for double tick
       case 'seen':
-        return '#00FF00'; // Green
+        return '#007AFF'; // Blue for seen (blue tick)
       case 'failed':
-        return '#FF0000'; // Red
+        return '#FF3B30'; // Red for failed
       default:
-        return '#808080'; // Gray
+        return '#666666'; // Dark gray
     }
   }
 
@@ -281,17 +281,17 @@ class MessageStatusService {
   getStatusIcon(status: MessageStatus): string {
     switch (status) {
       case 'sending':
-        return 'time';
+        return 'time-outline'; // Timer/clock icon for sending
       case 'sent':
-        return 'checkmark';
+        return 'checkmark'; // Single gray tick for sent
       case 'delivered':
-        return 'checkmark-done';
+        return 'checkmark-done'; // Double tick for delivered
       case 'seen':
-        return 'eye';
+        return 'checkmark-done'; // Blue tick for seen (same as delivered but different color)
       case 'failed':
-        return 'close-circle';
+        return 'close-circle-outline'; // Failed icon
       default:
-        return 'help-circle';
+        return 'help-circle-outline';
     }
   }
 

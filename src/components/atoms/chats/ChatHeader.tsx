@@ -178,12 +178,11 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
       style={[
         styles.container,
         {
-          backgroundColor: backgroundColor || colors.primary,
-          shadowColor: '#000',
+          backgroundColor: backgroundColor || colors.background,
         },
       ]}
     >
-      <CustomStatusBar backgroundColor={colors.primary} />
+      <CustomStatusBar backgroundColor={colors.background} />
       <View style={styles.headerContent}>
         <View style={styles.leftSection}>
           {onBack && (
@@ -195,36 +194,36 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
               <Icon
                 name="arrow-back"
                 size={moderateScale(24)}
-                color={colors.textOnPrimary}
+                color={colors.text}
               />
             </TouchableOpacity>
           )}
           <View style={styles.avatarContainer}>
             {renderAvatar()}
-                    {chat.type === 'direct' && (
-                      <View
-                        style={[
-                          styles.statusIndicator,
-                          {
-                            backgroundColor: (otherUserStatus?.isOnline || 
-                              (chat.participants.find(p => p.user_id === otherUserId)?.userDetails as any)?.online)
-                              ? '#4CAF50'
-                              : colors.textSecondary,
-                          },
-                        ]}
-                      />
-                    )}
+            {chat.type === 'direct' && (
+              <View
+                style={[
+                  styles.statusIndicator,
+                  {
+                    backgroundColor: (otherUserStatus?.isOnline || 
+                      (chat.participants.find(p => p.user_id === otherUserId)?.userDetails as any)?.online)
+                      ? '#4CAF50'
+                      : colors.textSecondary,
+                  },
+                ]}
+              />
+            )}
           </View>
           <View style={styles.titleContainer}>
             <Text
-              style={[styles.title, { color: colors.textOnPrimary }]}
+              style={[styles.title, { color: colors.text }]}
               numberOfLines={1}
             >
               {getChatTitle()}
             </Text>
             <View style={styles.subtitleContainer}>
               <Text
-                style={[styles.subtitle, { color: colors.textOnPrimary }]}
+                style={[styles.subtitle, { color: colors.textSecondary }]}
                 numberOfLines={1}
               >
                 {getChatSubtitle()}
@@ -252,7 +251,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
               <Icon
                 name="call"
                 size={moderateScale(20)}
-                color={colors.textOnPrimary}
+                color={colors.text}
               />
             </TouchableOpacity>
           )}
@@ -266,7 +265,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
               <Icon
                 name="videocam"
                 size={moderateScale(20)}
-                color={colors.textOnPrimary}
+                color={colors.text}
               />
             </TouchableOpacity>
           )}
@@ -278,7 +277,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
             <Icon
               name="ellipsis-vertical"
               size={moderateScale(20)}
-              color={colors.textOnPrimary}
+              color={colors.text}
             />
           </TouchableOpacity>
         </View>
@@ -341,10 +340,6 @@ const styles = StyleSheet.create({
   container: {
     paddingTop: Platform.OS === 'ios' ? hp(6) : hp(1),
     paddingBottom: hp(1.5),
-    elevation: 4,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
   },
   headerContent: {
     flexDirection: 'row',

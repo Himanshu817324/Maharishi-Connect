@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Image,
   Linking,
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '@/theme';
@@ -16,6 +17,7 @@ import { fileService, FileData } from '@/services/fileService';
 import { MessageData } from '@/services/chatService';
 import MessageStatusIndicator from '@/components/MessageStatusIndicator';
 import MediaViewer from '@/components/MediaViewer';
+import { permissionService } from '@/services/permissionService';
 
 interface FileMessageBubbleProps {
   message: MessageData;
@@ -39,11 +41,11 @@ const FileMessageBubble: React.FC<FileMessageBubbleProps> = ({
   const fileMetadata = message.media_metadata;
   const fileUrl = message.media_url;
 
-  const getFileIcon = useCallback((mimeType: string) => {
+  const getFileIcon = useCallback((mimeType: string | undefined) => {
     return fileService.getFileIcon(mimeType);
   }, []);
 
-  const getFileTypeCategory = useCallback((mimeType: string) => {
+  const getFileTypeCategory = useCallback((mimeType: string | undefined) => {
     return fileService.getFileTypeCategory(mimeType);
   }, []);
 
@@ -51,10 +53,67 @@ const FileMessageBubble: React.FC<FileMessageBubbleProps> = ({
     return fileService.formatFileSize(size);
   }, []);
 
+  const handleDownload = useCallback(async () => {
+    if (!fileMetadata || !fileUrl) return;
+
+    try {
+      // Request storage permissions before downloading
+      const permissionResult = await permissionService.requestStoragePermissions();
+      
+      if (!permissionResult.granted) {
+        if (!permissionResult.canAskAgain) {
+          Alert.alert(
+            'Storage Permission Required',
+            'Storage permission is required to download files. Please enable it in Settings.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => Linking.openSettings() }
+            ]
+          );
+        } else {
+          Alert.alert(
+            'Storage Permission Required',
+            'Storage permission is required to download files. Please grant permission to continue.',
+            [{ text: 'OK' }]
+          );
+        }
+        return;
+      }
+
+      setIsDownloading(true);
+      setDownloadProgress(0);
+
+      // Create a mock file ID for download (you might need to adjust this based on your API)
+      const fileId = fileMetadata.fileId || 'temp-file-id';
+      
+      const result = await fileService.downloadFile(
+        fileId,
+        fileMetadata.fileName,
+        (progress) => {
+          const percentage = Math.round((progress.loaded / progress.total) * 100);
+          setDownloadProgress(percentage);
+        }
+      );
+
+      if (result.success) {
+        setIsDownloaded(true);
+        Alert.alert('Success', 'File downloaded successfully!');
+      } else {
+        Alert.alert('Error', result.error || 'Failed to download file');
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+      Alert.alert('Error', 'Failed to download file');
+    } finally {
+      setIsDownloading(false);
+      setDownloadProgress(0);
+    }
+  }, [fileMetadata, fileUrl]);
+
   const handleFilePress = useCallback(async () => {
     if (!fileMetadata || !fileUrl) return;
 
-    const fileCategory = getFileTypeCategory(fileMetadata.fileType);
+    const fileCategory = getFileTypeCategory(fileMetadata.fileType || fileMetadata.mimeType);
     
     // For media files (images, videos, audio), open in media viewer
     if (fileCategory === 'image' || fileCategory === 'video' || fileCategory === 'audio') {
@@ -83,15 +142,15 @@ const FileMessageBubble: React.FC<FileMessageBubbleProps> = ({
   if (!fileMetadata) {
     return (
       <View style={[styles.container, isOwn ? styles.ownContainer : styles.otherContainer]}>
-        <Text style={[styles.errorText, { color: colors.textSecondary }]}>
+        <Text style={[styles.errorText, { color: '#666666' }]}>
           Invalid file message
         </Text>
       </View>
     );
   }
 
-  const fileCategory = getFileTypeCategory(fileMetadata.fileType);
-  const fileIcon = getFileIcon(fileMetadata.fileType);
+  const fileCategory = getFileTypeCategory(fileMetadata?.fileType || fileMetadata?.mimeType);
+  const fileIcon = getFileIcon(fileMetadata?.fileType || fileMetadata?.mimeType);
 
   return (
     <>
@@ -99,7 +158,11 @@ const FileMessageBubble: React.FC<FileMessageBubbleProps> = ({
         style={[
           styles.container,
           isOwn ? styles.ownContainer : styles.otherContainer,
-          { backgroundColor: isOwn ? colors.accent : colors.surface },
+          isOwn ? styles.ownBubble : styles.otherBubble,
+          {
+            backgroundColor: isOwn ? colors.chatBubble : colors.chatBubbleOther,
+            borderColor: isOwn ? colors.chatBubble : colors.chatBubbleOther,
+          },
         ]}
         onPress={handleFilePress}
         onLongPress={handleLongPress}
@@ -118,47 +181,73 @@ const FileMessageBubble: React.FC<FileMessageBubbleProps> = ({
           )}
         </View>
 
-      {/* File Info */}
-      <View style={styles.fileInfo}>
-        <Text
-          style={[
-            styles.fileName,
-            { color: isOwn ? '#FFFFFF' : colors.text },
-          ]}
-          numberOfLines={2}
-        >
-          {fileMetadata.fileName}
-        </Text>
-        <Text
-          style={[
-            styles.fileSize,
-            { color: isOwn ? '#FFFFFF' : colors.textSecondary },
-          ]}
-        >
-          {formatFileSize(fileMetadata.fileSize)}
-        </Text>
-        <Text
-          style={[
-            styles.fileType,
-            { color: isOwn ? '#FFFFFF' : colors.textSecondary },
-          ]}
-        >
-          {fileCategory.toUpperCase()}
-        </Text>
-      </View>
+        {/* File Info Container */}
+        <View style={styles.fileInfoContainer}>
+          <View style={styles.fileInfo}>
+            <Text
+              style={[
+                styles.fileName,
+                { color: isOwn ? colors.chatBubbleText : colors.chatBubbleTextOther },
+              ]}
+              numberOfLines={2}
+            >
+              {fileMetadata.fileName}
+            </Text>
+            <Text
+              style={[
+                styles.fileSize,
+                { color: isOwn ? colors.chatBubbleText : colors.chatBubbleTextOther },
+              ]}
+            >
+              {formatFileSize(fileMetadata.fileSize)}
+            </Text>
+            <Text
+              style={[
+                styles.fileType,
+                { color: isOwn ? colors.chatBubbleText : colors.chatBubbleTextOther },
+              ]}
+            >
+              {fileCategory.toUpperCase()}
+            </Text>
+          </View>
+          
+          {/* Message Status Indicator - Only show for own messages */}
+          {isOwn && (
+            <View style={styles.statusContainer}>
+              <MessageStatusIndicator
+                status={message.status || 'sent'}
+                showText={false} // No text, only icon
+                showIcon={true}
+                size="small"
+                readCount={message.read_by?.length || 0}
+                totalRecipients={1} // For direct chats, this would be 1
+                canRetry={message.status === 'failed'}
+                onRetry={() => {
+                  // Handle retry logic here
+                  console.log('Retrying file message:', message.id);
+                }}
+              />
+            </View>
+          )}
+        </View>
 
       {/* Download Status */}
-      <View style={styles.downloadStatus}>
+      <TouchableOpacity 
+        style={styles.downloadStatus}
+        onPress={handleDownload}
+        disabled={isDownloading || isDownloaded}
+        activeOpacity={0.7}
+      >
         {isDownloading ? (
           <View style={styles.downloadingContainer}>
             <ActivityIndicator
               size="small"
-              color={isOwn ? '#FFFFFF' : colors.accent}
+              color={isOwn ? colors.chatBubbleText : colors.accent}
             />
             <Text
               style={[
                 styles.downloadText,
-                { color: isOwn ? '#FFFFFF' : colors.textSecondary },
+                { color: isOwn ? '#FFFFFF' : '#666666' },
               ]}
             >
               {downloadProgress}%
@@ -168,16 +257,16 @@ const FileMessageBubble: React.FC<FileMessageBubbleProps> = ({
           <Icon
             name="checkmark-circle"
             size={moderateScale(20)}
-            color={isOwn ? '#FFFFFF' : colors.accent}
+            color={isOwn ? colors.chatBubbleText : colors.accent}
           />
         ) : (
           <Icon
             name="download-outline"
             size={moderateScale(20)}
-            color={isOwn ? '#FFFFFF' : colors.textSecondary}
+            color={isOwn ? colors.textOnPrimary : '#666666'}
           />
         )}
-      </View>
+      </TouchableOpacity>
 
       {/* Download Progress Bar */}
       {isDownloading && (
@@ -190,25 +279,6 @@ const FileMessageBubble: React.FC<FileMessageBubbleProps> = ({
                 width: `${downloadProgress}%`,
               },
             ]}
-          />
-        </View>
-      )}
-
-      {/* Message Status Indicator - Only show for own messages */}
-      {isOwn && (
-        <View style={styles.statusContainer}>
-          <MessageStatusIndicator
-            status={message.status || 'sent'}
-            showText={true}
-            showIcon={true}
-            size="small"
-            readCount={message.read_by?.length || 0}
-            totalRecipients={1} // For direct chats, this would be 1
-            canRetry={message.status === 'failed'}
-            onRetry={() => {
-              // Handle retry logic here
-              console.log('Retrying file message:', message.id);
-            }}
           />
         </View>
       )}
@@ -232,17 +302,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: wp(4),
-    paddingVertical: hp(1.5),
-    marginVertical: hp(0.5),
-    borderRadius: moderateScale(12),
-    maxWidth: wp(80),
+    paddingVertical: hp(1.2),
+    borderRadius: moderateScale(18),
+    marginVertical: hp(0.3),
+    maxWidth: wp(85), // Increased width to reduce wrapping
     minHeight: moderateScale(80),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   ownContainer: {
     alignSelf: 'flex-end',
   },
   otherContainer: {
     alignSelf: 'flex-start',
+  },
+  ownBubble: {
+    borderBottomRightRadius: moderateScale(4), // Pointed edge on bottom right (sender's side)
+  },
+  otherBubble: {
+    borderBottomLeftRadius: moderateScale(4), // Pointed edge on bottom left (receiver's side)
+    borderWidth: 1,
   },
   fileIcon: {
     width: moderateScale(48),
@@ -257,9 +339,18 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  fileInfoContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
+    maxWidth: '100%',
+  },
   fileInfo: {
     flex: 1,
     justifyContent: 'center',
+    marginRight: wp(1),
+    minWidth: 0,
   },
   fileName: {
     fontSize: responsiveFont(14),
@@ -304,9 +395,10 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   statusContainer: {
-    position: 'absolute',
-    bottom: moderateScale(4),
-    right: moderateScale(4),
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: wp(1),
+    flexShrink: 0,
   },
 });
 

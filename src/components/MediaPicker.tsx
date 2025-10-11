@@ -14,7 +14,6 @@ import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 import { mediaService, MediaFile, MediaPickerResult } from '@/services/mediaService';
 import Toast from 'react-native-toast-message';
-import PermissionTest from './PermissionTest';
 
 interface MediaPickerProps {
   onMediaSelected: (type: string, files: MediaFile[]) => void;
@@ -47,7 +46,6 @@ const MediaPicker: React.FC<MediaPickerProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [loadingType, setLoadingType] = useState<string>('');
   const [selectedFiles, setSelectedFiles] = useState<MediaFile[]>([]);
-  const [showPermissionTest, setShowPermissionTest] = useState(false);
 
   const showError = useCallback((message: string) => {
     Toast.show({
@@ -337,16 +335,7 @@ const MediaPicker: React.FC<MediaPickerProps> = ({
           <Text style={[styles.headerTitle, { color: colors.text }]}>
             Share Media
           </Text>
-          <TouchableOpacity 
-            onPress={() => setShowPermissionTest(true)}
-            disabled={isLoading}
-          >
-            <Icon 
-              name="settings" 
-              size={moderateScale(24)} 
-              color={isLoading ? colors.textSecondary : colors.accent} 
-            />
-          </TouchableOpacity>
+          <View style={{ width: moderateScale(24) }} />
         </View>
 
         {/* Loading Overlay */}
@@ -393,11 +382,6 @@ const MediaPicker: React.FC<MediaPickerProps> = ({
         </ScrollView>
       </View>
 
-      {/* Permission Test Modal */}
-      <PermissionTest
-        visible={showPermissionTest}
-        onClose={() => setShowPermissionTest(false)}
-      />
     </Modal>
   );
 };

@@ -16,12 +16,17 @@ import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 import { MediaFile } from '@/services/mediaService';
 import { fileService } from '@/services/fileService';
+import { permissionService } from '@/services/permissionService';
 import AudioPlayer from '@/components/AudioPlayer';
 
 interface MediaViewerProps {
   visible: boolean;
   onClose: () => void;
-  mediaFiles: MediaFile[];
+  mediaFiles?: MediaFile[];
+  mediaUrl?: string;
+  mediaType?: 'image' | 'video' | 'audio' | 'document';
+  fileName?: string;
+  fileSize?: number;
   initialIndex?: number;
 }
 
@@ -29,9 +34,40 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
   visible,
   onClose,
   mediaFiles,
+  mediaUrl,
+  mediaType,
+  fileName,
+  fileSize,
   initialIndex = 0,
 }) => {
   const { colors } = useTheme();
+  
+  // Helper function to convert media type to MIME type
+  const getMimeTypeFromMediaType = (type: string): string => {
+    switch (type) {
+      case 'image':
+        return 'image/jpeg';
+      case 'video':
+        return 'video/mp4';
+      case 'audio':
+        return 'audio/mpeg';
+      case 'document':
+      default:
+        return 'application/octet-stream';
+    }
+  };
+  
+  // Create a single media file from individual props if mediaFiles is not provided
+  const singleMediaFile: MediaFile | null = mediaUrl ? {
+    uri: mediaUrl,
+    name: fileName || 'Unknown File',
+    type: getMimeTypeFromMediaType(mediaType || 'document'),
+    size: fileSize || 0,
+  } : null;
+  
+  // Use mediaFiles array or create array from single file
+  const filesArray = mediaFiles || (singleMediaFile ? [singleMediaFile] : []);
+  
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   
   // Fallback colors in case theme is not available
@@ -51,11 +87,13 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
   const [imageScale, setImageScale] = useState(1);
   const [imageTranslateX, setImageTranslateX] = useState(0);
   const [imageTranslateY, setImageTranslateY] = useState(0);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [_downloadProgress, setDownloadProgress] = useState(0);
 
   const videoRef = useRef<any>(null);
   const controlsTimeoutRef = useRef<any>(null);
 
-  const currentFile = mediaFiles[currentIndex];
+  const currentFile = filesArray[currentIndex];
 
   useEffect(() => {
     if (visible) {
@@ -96,7 +134,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
   };
 
   const handleNext = () => {
-    if (currentIndex < mediaFiles.length - 1) {
+    if (currentIndex < filesArray.length - 1) {
       setCurrentIndex(currentIndex + 1);
       setIsPlaying(false);
       setVideoProgress(0);
@@ -134,6 +172,62 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
     } catch (error) {
       console.error('Error opening file:', error);
       Alert.alert('Error', 'Failed to open file');
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!currentFile) return;
+
+    try {
+      // Request storage permissions before downloading
+      const permissionResult = await permissionService.requestStoragePermissions();
+      
+      if (!permissionResult.granted) {
+        if (!permissionResult.canAskAgain) {
+          Alert.alert(
+            'Storage Permission Required',
+            'Storage permission is required to download files. Please enable it in Settings.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => Linking.openSettings() }
+            ]
+          );
+        } else {
+          Alert.alert(
+            'Storage Permission Required',
+            'Storage permission is required to download files. Please grant permission to continue.',
+            [{ text: 'OK' }]
+          );
+        }
+        return;
+      }
+
+      setIsDownloading(true);
+      setDownloadProgress(0);
+
+      // Create a mock file ID for download (you might need to adjust this based on your API)
+      const fileId = 'temp-media-file-id';
+      
+      const result = await fileService.downloadFile(
+        fileId,
+        currentFile.name,
+        (progress) => {
+          const percentage = Math.round((progress.loaded / progress.total) * 100);
+          setDownloadProgress(percentage);
+        }
+      );
+
+      if (result.success) {
+        Alert.alert('Success', 'File downloaded successfully!');
+      } else {
+        Alert.alert('Error', result.error || 'Failed to download file');
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+      Alert.alert('Error', 'Failed to download file');
+    } finally {
+      setIsDownloading(false);
+      setDownloadProgress(0);
     }
   };
 
@@ -318,7 +412,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
     }
   };
 
-  if (!visible || !currentFile || !mediaFiles || mediaFiles.length === 0) {
+  if (!visible || !currentFile || !filesArray || filesArray.length === 0) {
     return null;
   }
 
@@ -341,13 +435,27 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
               {currentFile.name}
             </Text>
             <Text style={styles.headerSubtitle}>
-              {currentIndex + 1} of {mediaFiles.length}
+              {currentIndex + 1} of {filesArray.length}
             </Text>
           </View>
           
-          <TouchableOpacity onPress={handleFileOpen} style={styles.headerButton}>
-            <Icon name="open-outline" size={moderateScale(24)} color="#FFFFFF" />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity 
+              onPress={handleDownload} 
+              style={styles.headerButton}
+              disabled={isDownloading}
+            >
+              {isDownloading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Icon name="download-outline" size={moderateScale(24)} color="#FFFFFF" />
+              )}
+            </TouchableOpacity>
+            
+            <TouchableOpacity onPress={handleFileOpen} style={styles.headerButton}>
+              <Icon name="open-outline" size={moderateScale(24)} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Media Content */}
@@ -356,7 +464,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
         </View>
 
         {/* Navigation */}
-        {mediaFiles.length > 1 && (
+        {filesArray.length > 1 && (
           <>
             <TouchableOpacity
               style={[styles.navButton, styles.navLeft]}
@@ -373,12 +481,12 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
             <TouchableOpacity
               style={[styles.navButton, styles.navRight]}
               onPress={handleNext}
-              disabled={currentIndex === mediaFiles.length - 1}
+              disabled={currentIndex === filesArray.length - 1}
             >
               <Icon
                 name="chevron-forward"
                 size={moderateScale(30)}
-                color={currentIndex === mediaFiles.length - 1 ? '#666666' : '#FFFFFF'}
+                color={currentIndex === filesArray.length - 1 ? '#666666' : '#FFFFFF'}
               />
             </TouchableOpacity>
           </>
@@ -420,6 +528,10 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     marginHorizontal: wp(2),
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: responsiveFont(16),

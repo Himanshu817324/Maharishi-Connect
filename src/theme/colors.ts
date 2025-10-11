@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 // Base color palette
 const BaseColors = {
   // Primary colors
-  primary: "#075E54",
+  primary: "#183535",
   primaryLight: "#128C7E",
   primaryDark: "#004D40",
   
@@ -164,8 +164,8 @@ export const LightColors = {
 
 export const DarkColors = {
   // Core colors
-  background: "#000000",
-  surface: "#1C1C1C",
+  background: "#102323", // Updated background color for dark mode
+  surface: "#1A2A2A",
   surfaceVariant: "#2C2C2C",
   
   // Text colors
@@ -233,10 +233,10 @@ export const DarkColors = {
   ...(Platform.OS === 'android' ? platformColors.android : {}),
   
   // Chat specific
-  chatBubble: BaseColors.primaryLight,
-  chatBubbleOther: BaseColors.gray700,
+  chatBubble: "#05c7c7", // My chat bubble color
+  chatBubbleOther: "#214a4a", // Other person's chat bubble color
   chatBubbleText: BaseColors.white,
-  chatBubbleTextOther: BaseColors.gray200,
+  chatBubbleTextOther: BaseColors.white,
   chatTime: BaseColors.gray400,
   chatTimeOther: BaseColors.gray400,
   
