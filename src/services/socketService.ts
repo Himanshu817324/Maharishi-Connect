@@ -51,12 +51,14 @@ class SocketService {
       return;
     }
 
+    console.log('📤 [SocketService] Sending message immediately:', { chatId, content, messageType });
     this.socket.emit('send_message', {
       chat_id: chatId,
       content,
       message_type: messageType,
       timestamp: new Date().toISOString()
     });
+    console.log('✅ [SocketService] Message sent via socket');
   }
 
   // Typing indicators
@@ -201,11 +203,13 @@ class SocketService {
     }
   }
 
-  reconnect(): Promise<void> {
+  async reconnect(): Promise<void> {
     if (this.socket) {
-      return this.socket.connect();
+      this.socket.disconnect();
+      await this.socket.connect();
+    } else {
+      throw new Error('Socket not initialized');
     }
-    throw new Error('Socket not initialized');
   }
 
   isSocketConnected(): boolean {

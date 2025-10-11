@@ -14,6 +14,7 @@ import {
   Platform,
   StatusBar,
   Modal,
+  Animated,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { RootStackParamList } from '../../types/navigation';
@@ -47,6 +48,7 @@ const LoginScreen = () => {
   const [normalizedPhone, setNormalizedPhone] = useState<string>('');
 
   const otpInputRefs = useRef<(TextInput | null)[]>([]);
+  const otpAnim = useRef(new Animated.Value(0)).current;
 
   // Get current country code
   const getCurrentCountryCode = () => {
@@ -63,6 +65,23 @@ const LoginScreen = () => {
       return () => clearInterval(interval);
     }
   }, [otpSent, timer]);
+
+  // OTP Animation effect
+  useEffect(() => {
+    if (otpSent) {
+      Animated.timing(otpAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(otpAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [otpSent, otpAnim]);
 
   // OTP Handling Functions
   const handleOtpChange = (value: string, index: number) => {
@@ -389,151 +408,172 @@ const LoginScreen = () => {
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       
       <View style={styles.content}>
-        {/* Phone Icon */}
-        <View style={styles.iconContainer}>
-          <Icon name="phone-portrait-outline" size={40} color="#8B5CF6" />
-        </View>
-
-        {/* Heading */}
-        <Text style={styles.heading}>Enter your phone number</Text>
-
-        {/* Country Selector */}
-        <TouchableOpacity
-          style={styles.countrySelector}
-          onPress={() => setShowCountryDropdown(true)}
-          disabled={otpSent}
-        >
-          <Text style={styles.countryFlag}>
-            {countries.find(c => c.name === selectedCountry)?.flag}
-          </Text>
-          <Text style={styles.countryText}>{selectedCountry}</Text>
-          {!otpSent && <Icon name="chevron-down" size={20} color="#8B5CF6" />}
-        </TouchableOpacity>
-
-        {/* Phone Number Input */}
-        <View style={styles.phoneInputContainer}>
-          <View style={styles.countryCodeContainer}>
-            <Text style={styles.countryCodeText}>{getCurrentCountryCode()}</Text>
+        {/* Main Content Area */}
+        <View style={styles.mainContent}>
+          {/* Phone Icon */}
+          <View style={styles.iconContainer}>
+            <Icon name="phone-portrait-outline" size={40} color="#8B5CF6" />
           </View>
-          <TextInput
-            style={[styles.phoneInput, otpSent && styles.phoneInputDisabled]}
-            placeholder="Phone number"
-            placeholderTextColor="#9CA3AF"
-            value={phoneNumber}
-            onChangeText={setPhoneNumber}
-            keyboardType="phone-pad"
-            maxLength={10}
-            editable={!otpSent}
-            autoFocus={!otpSent}
-          />
+
+          {/* Heading */}
+          <Text style={styles.heading}>Enter your phone number</Text>
+
+          {/* Country Selector */}
+          <TouchableOpacity
+            style={styles.countrySelector}
+            onPress={() => setShowCountryDropdown(true)}
+            disabled={otpSent}
+          >
+            <Text style={styles.countryFlag}>
+              {countries.find(c => c.name === selectedCountry)?.flag}
+            </Text>
+            <Text style={styles.countryText}>{selectedCountry}</Text>
+            {!otpSent && <Icon name="chevron-down" size={20} color="#8B5CF6" />}
+          </TouchableOpacity>
+
+          {/* Phone Number Input */}
+          <View style={styles.phoneInputRow}>
+            {/* Country Code Input */}
+            <View style={styles.countryCodeInput}>
+              <Text style={styles.countryCodeText}>{getCurrentCountryCode()}</Text>
+            </View>
+            
+            {/* Phone Number Input */}
+            <TextInput
+              style={[styles.phoneNumberInput, otpSent && styles.phoneInputDisabled]}
+              placeholder="Phone number"
+              placeholderTextColor="#9CA3AF"
+              value={phoneNumber}
+              onChangeText={setPhoneNumber}
+              keyboardType="phone-pad"
+              maxLength={10}
+              editable={!otpSent}
+              autoFocus={!otpSent}
+            />
+          </View>
+
+          {/* Error Message */}
+          {error ? (
+            <Text style={styles.errorText}>{error}</Text>
+          ) : null}
+
+          {/* Reserved Space for OTP Section */}
+          <View style={styles.otpReservedSpace}>
+            <Animated.View 
+              style={[
+                styles.otpSection,
+                {
+                  opacity: otpAnim,
+                  transform: [{
+                    translateY: otpAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [20, 0],
+                    }),
+                  }],
+                },
+              ]}
+            >
+              {/* Enter OTP Text */}
+              <Text style={styles.otpInstructionText}>
+                Enter the 6-digit code sent to your phone
+              </Text>
+
+              {/* OTP Input */}
+              <View style={styles.otpContainer}>
+                {otp.map((digit, index) => (
+                  <TextInput
+                    key={index}
+                    ref={(ref) => {
+                      if (ref) {
+                        otpInputRefs.current[index] = ref;
+                      }
+                    }}
+                    style={[
+                      styles.otpInput,
+                      digit && styles.otpInputFilled,
+                      error && styles.otpInputError,
+                    ]}
+                    value={digit}
+                    onChangeText={(text) => handleOtpChange(text, index)}
+                    keyboardType="numeric"
+                    maxLength={1}
+                    selectTextOnFocus
+                    onKeyPress={(e) => handleKeyPress(e.nativeEvent.key, index)}
+                    onFocus={() => {}}
+                  />
+                ))}
+              </View>
+            </Animated.View>
+          </View>
         </View>
 
-        {/* Error Message */}
-        {error ? (
-          <Text style={styles.errorText}>{error}</Text>
-        ) : null}
+        {/* Bottom Section with Disclaimer and Buttons */}
+        <View style={styles.bottomSection}>
+          {/* Disclaimer */}
+          <Text style={styles.disclaimerText}>
+            By continuing, you agree to our{' '}
+            <Text style={styles.linkText}>Terms of Service</Text> and{' '}
+            <Text style={styles.linkText}>Privacy Policy</Text>
+          </Text>
 
-        {/* OTP Section - Only visible when OTP is sent */}
-        {otpSent && (
-          <>
-            {/* Enter OTP Text */}
-            <Text style={styles.otpInstructionText}>
-              Enter the 6-digit code sent to your phone
-            </Text>
-
-            {/* OTP Input */}
-            <View style={styles.otpContainer}>
-              {otp.map((digit, index) => (
-                <TextInput
-                  key={index}
-                  ref={(ref) => {
-                    if (ref) {
-                      otpInputRefs.current[index] = ref;
-                    }
-                  }}
-                  style={[
-                    styles.otpInput,
-                    digit && styles.otpInputFilled,
-                    error && styles.otpInputError,
-                  ]}
-                  value={digit}
-                  onChangeText={(text) => handleOtpChange(text, index)}
-                  keyboardType="numeric"
-                  maxLength={1}
-                  selectTextOnFocus
-                  onKeyPress={(e) => handleKeyPress(e.nativeEvent.key, index)}
-                  onFocus={() => {}}
-                />
-              ))}
-            </View>
-
-          </>
-        )}
-
-        {/* Button Section */}
-        <View style={styles.buttonContainer}>
-          {!otpSent ? (
-            /* Send OTP Button */
-            <TouchableOpacity
-              style={[styles.sendButton, loading && styles.sendButtonDisabled]}
-              onPress={handleSendOtp}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#ffffff" size="small" />
-              ) : (
-                <Text style={styles.sendButtonText}>Get OTP</Text>
-              )}
-            </TouchableOpacity>
-          ) : (
-            /* OTP Verification Buttons */
-            <View style={styles.otpButtonContainer}>
-              {/* Verify OTP Button */}
+          {/* Button Section */}
+          <View style={styles.buttonContainer}>
+            {!otpSent ? (
+              /* Send OTP Button */
               <TouchableOpacity
-                style={[
-                  styles.verifyButton,
-                  otpLoading && styles.verifyButtonDisabled,
-                ]}
-                onPress={handleVerifyOtp}
-                disabled={otpLoading}
+                style={[styles.sendButton, loading && styles.sendButtonDisabled]}
+                onPress={handleSendOtp}
+                disabled={loading}
               >
-                {otpLoading ? (
-                  <ActivityIndicator color="#ffffff" size="small" />
+                {loading ? (
+                  <Text style={styles.sendButtonText}>Sending OTP...</Text>
                 ) : (
-                  <Text style={styles.verifyButtonText}>Verify OTP</Text>
+                  <Text style={styles.sendButtonText}>Get OTP</Text>
                 )}
               </TouchableOpacity>
+            ) : (
+              /* OTP Verification Buttons */
+              <View style={styles.otpButtonContainer}>
+                {/* Verify OTP Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.verifyButton,
+                    otpLoading && styles.verifyButtonDisabled,
+                  ]}
+                  onPress={handleVerifyOtp}
+                  disabled={otpLoading}
+                >
+                  {otpLoading ? (
+                    <ActivityIndicator color="#ffffff" size="small" />
+                  ) : (
+                    <Text style={styles.verifyButtonText}>Verify OTP</Text>
+                  )}
+                </TouchableOpacity>
 
-              {/* Resend OTP Link */}
-              <View style={styles.resendContainer}>
-                {timer > 0 ? (
-                  <Text style={styles.timerText}>
-                    Resend OTP in {timer}s
-                  </Text>
-                ) : (
-                  <TouchableOpacity
-                    onPress={handleResendOtp}
-                    disabled={resendLoading}
-                    style={styles.resendButton}
-                  >
-                    {resendLoading ? (
-                      <ActivityIndicator color="#8B5CF6" size="small" />
-                    ) : (
-                      <Text style={styles.resendButtonText}>Resend OTP</Text>
-                    )}
-                  </TouchableOpacity>
-                )}
+                {/* Resend OTP Link */}
+                <View style={styles.resendContainer}>
+                  {timer > 0 ? (
+                    <Text style={styles.timerText}>
+                      Resend OTP in {timer}s
+                    </Text>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={handleResendOtp}
+                      disabled={resendLoading}
+                      style={styles.resendButton}
+                    >
+                      {resendLoading ? (
+                        <ActivityIndicator color="#8B5CF6" size="small" />
+                      ) : (
+                        <Text style={styles.resendButtonText}>Resend OTP</Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
-            </View>
-          )}
+            )}
+          </View>
         </View>
-
-        {/* Footer */}
-        <Text style={styles.disclaimerText}>
-          By continuing, you agree to our{' '}
-          <Text style={styles.linkText}>Terms of Service</Text> and{' '}
-          <Text style={styles.linkText}>Privacy Policy</Text>
-        </Text>
       </View>
 
       {/* Country Dropdown Modal */}
@@ -593,9 +633,17 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    justifyContent: 'center',
     paddingHorizontal: 24,
+  },
+  mainContent: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 40,
+  },
+  bottomSection: {
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    paddingTop: 20,
   },
   iconContainer: {
     width: 80,
@@ -635,31 +683,38 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#374151',
   },
-  phoneInputContainer: {
+  phoneInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    width: '100%',
+    marginBottom: 16,
+    gap: 8,
+  },
+  countryCodeInput: {
     backgroundColor: '#F9FAFB',
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    marginBottom: 16,
-    width: '100%',
-  },
-  countryCodeContainer: {
-    marginRight: 12,
+    minWidth: 80,
+    alignItems: 'center',
   },
   countryCodeText: {
     fontSize: 16,
     fontWeight: '500',
     color: '#374151',
   },
-  phoneInput: {
+  phoneNumberInput: {
     flex: 1,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
     fontSize: 16,
     color: '#374151',
-    paddingVertical: 0,
   },
   phoneInputDisabled: {
     color: '#9CA3AF',
@@ -670,6 +725,15 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginBottom: 16,
     textAlign: 'center',
+  },
+  otpReservedSpace: {
+    height: 120, // Fixed height to reserve space
+    marginBottom: 16,
+    justifyContent: 'center',
+  },
+  otpSection: {
+    flex: 1,
+    justifyContent: 'center',
   },
   otpInstructionText: {
     fontSize: 16,
@@ -685,6 +749,7 @@ const styles = StyleSheet.create({
     maxWidth: 300,
     marginBottom: 32,
     alignSelf: 'center',
+    gap: 8,
   },
   otpInput: {
     width: 45,
@@ -712,6 +777,7 @@ const styles = StyleSheet.create({
   resendContainer: {
     alignItems: 'center',
     marginTop: 16,
+    width: '100%',
   },
   timerText: {
     fontSize: 14,
@@ -719,8 +785,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   resendButton: {
-    paddingVertical: 8,
+    paddingVertical: 12,
     paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#8B5CF6',
+    borderRadius: 8,
+    width: '100%',
+    alignItems: 'center',
   },
   resendButtonText: {
     fontSize: 14,
@@ -730,7 +801,6 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     width: '100%',
-    marginBottom: 24,
   },
   sendButton: {
     backgroundColor: '#8B5CF6',
@@ -751,10 +821,12 @@ const styles = StyleSheet.create({
   verifyButton: {
     backgroundColor: '#8B5CF6',
     borderRadius: 12,
-    paddingVertical: 16,
+    paddingVertical: 18,
     paddingHorizontal: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
+    minHeight: 56,
   },
   verifyButtonDisabled: {
     backgroundColor: '#9CA3AF',
@@ -763,6 +835,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+    textAlign: 'center',
   },
   disclaimerText: {
     fontSize: 12,

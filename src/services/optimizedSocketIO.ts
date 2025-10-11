@@ -27,17 +27,26 @@ class OptimizedSocketIO {
   private options: SocketIOOptions;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
-  private reconnectInterval = 5000;
+  private reconnectInterval = 1000; // Faster reconnection for real-time
   private reconnectTimer: NodeJS.Timeout | null = null;
+  private messageQueue: Array<{ event: string; data: any; timestamp: number }> = [];
 
   constructor(options: SocketIOOptions) {
     this.options = {
       options: {
-        transports: ['websocket'], // Force WebSocket transport
-        upgrade: false, // Disable transport upgrades
-        rememberUpgrade: false,
-        timeout: 20000,
-        forceNew: true,
+        transports: ['websocket', 'polling'], // WebSocket first, polling fallback
+        upgrade: true, // Enable transport upgrades
+        rememberUpgrade: true, // Remember successful upgrades
+        timeout: 10000, // Faster timeout for real-time delivery
+        forceNew: false, // Don't force new connections unnecessarily
+        reconnection: true, // Enable automatic reconnection
+        reconnectionAttempts: 5, // Reasonable reconnection attempts
+        reconnectionDelay: 1000, // Very fast reconnection
+        reconnectionDelayMax: 5000, // Max delay between attempts
+        maxReconnectionAttempts: 5,
+        // Optimize for real-time performance
+        pingTimeout: 60000,
+        pingInterval: 25000,
         ...options.options,
         // Ensure auth is properly merged
         auth: {
@@ -56,6 +65,10 @@ class OptimizedSocketIO {
         this.socket.on('connect', () => {
           this.reconnectAttempts = 0;
           logger.info('Socket.IO connected');
+          
+          // Process queued messages
+          this.processQueuedMessages();
+          
           this.options.onConnect?.();
           resolve();
         });
@@ -102,7 +115,16 @@ class OptimizedSocketIO {
     } else {
       logger.warn('Socket not connected, message queued');
       // Queue message for when connection is restored
-      setTimeout(() => this.emit(event, data), 1000);
+      this.messageQueue.push({
+        event,
+        data,
+        timestamp: Date.now()
+      });
+      
+      // Clean old messages (older than 1 minute for real-time)
+      this.messageQueue = this.messageQueue.filter(
+        msg => Date.now() - msg.timestamp < 60000
+      );
     }
   }
 
@@ -114,6 +136,22 @@ class OptimizedSocketIO {
     this.socket?.off(event, callback);
   }
 
+  private processQueuedMessages(): void {
+    if (this.messageQueue.length > 0) {
+      logger.info(`Processing ${this.messageQueue.length} queued messages`);
+      
+      // Process messages immediately without delay
+      const messagesToProcess = [...this.messageQueue];
+      this.messageQueue = []; // Clear queue first to prevent duplicates
+      
+      messagesToProcess.forEach(({ event, data }) => {
+        if (this.socket?.connected) {
+          this.socket.emit(event, data);
+        }
+      });
+    }
+  }
+
   private handleReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       logger.error('Max reconnection attempts reached');
@@ -121,10 +159,18 @@ class OptimizedSocketIO {
     }
 
     this.reconnectAttempts++;
+    const delay = Math.min(this.reconnectInterval * this.reconnectAttempts, 5000); // Max 5 seconds for real-time
+    
     this.reconnectTimer = setTimeout(() => {
       logger.info(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-      this.connect().catch(console.error);
-    }, this.reconnectInterval);
+      this.connect().catch((error) => {
+        logger.error('Reconnection failed:', error);
+        // Continue trying if we haven't reached max attempts
+        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+          this.handleReconnect();
+        }
+      });
+    }, delay);
   }
 
   get isConnected(): boolean {

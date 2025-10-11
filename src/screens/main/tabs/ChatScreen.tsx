@@ -20,8 +20,6 @@ import { RootState, AppDispatch } from '@/store';
 import { fetchUserChats, setCurrentChat, clearUnreadCount } from '@/store/slices/chatSlice';
 import { socketService } from '@/services/socketService';
 import { ChatData } from '@/services/chatService';
-import PermissionDebugger from '@/components/PermissionDebugger';
-import SimplePermissionTest from '@/components/SimplePermissionTest';
 import { useDrawer } from '@/contexts/DrawerContext';
 import { useFilter } from '@/contexts/FilterContext';
 
@@ -33,8 +31,6 @@ const ChatScreen: React.FC = () => {
   const { chats, loading } = useSelector((state: RootState) => state.chat);
   const { user } = useSelector((state: RootState) => state.auth);
   const { openDrawer } = useDrawer();
-  const [isPermissionDebuggerVisible, setIsPermissionDebuggerVisible] = useState(false);
-  const [isSimpleTestVisible, setIsSimpleTestVisible] = useState(false);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [searchText, setSearchText] = useState('');
   const { activeFilter, setActiveFilter } = useFilter();
@@ -159,14 +155,6 @@ const ChatScreen: React.FC = () => {
   const handleCreateChat = useCallback(() => {
     (navigation as any).navigate('FilteredContactsScreen');
   }, [navigation]);
-
-  const handleFabLongPress = () => {
-    setIsPermissionDebuggerVisible(true);
-  };
-
-  const handleFabPress = () => {
-    setIsSimpleTestVisible(true);
-  };
 
   const getChatSubtitle = useCallback((chat: ChatData) => {
     if (chat.last_message) {
@@ -629,33 +617,11 @@ const ChatScreen: React.FC = () => {
       
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: colors.accent }]}
-        onPress={handleFabPress}
-        onLongPress={handleFabLongPress}
+        onPress={handleCreateChat}
         activeOpacity={0.85}
       >
         <OptimizedIcon name="create-outline" size={moderateScale(28)} color="#FFFFFF" />
       </TouchableOpacity>
-
-      {/* Permission Debugger */}
-      <PermissionDebugger
-        visible={isPermissionDebuggerVisible}
-        onClose={() => setIsPermissionDebuggerVisible(false)}
-      />
-
-      {/* Simple Permission Test */}
-      {isSimpleTestVisible && (
-        <View style={styles.testOverlay}>
-          <View style={[styles.testContainer, { backgroundColor: colors.surface }]}>
-            <TouchableOpacity
-              style={styles.closeTestButton}
-              onPress={() => setIsSimpleTestVisible(false)}
-            >
-              <Text style={[styles.closeTestText, { color: colors.text }]}>✕</Text>
-            </TouchableOpacity>
-            <SimplePermissionTest />
-          </View>
-        </View>
-      )}
     </View>
     </TouchableWithoutFeedback>
   );
@@ -916,34 +882,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
-  },
-  testOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000,
-  },
-  testContainer: {
-    width: '90%',
-    height: '80%',
-    borderRadius: moderateScale(12),
-    padding: wp(4),
-  },
-  closeTestButton: {
-    position: 'absolute',
-    top: wp(2),
-    right: wp(2),
-    zIndex: 1001,
-    padding: moderateScale(8),
-  },
-  closeTestText: {
-    fontSize: responsiveFont(18),
-    fontWeight: '600',
   },
 });
 

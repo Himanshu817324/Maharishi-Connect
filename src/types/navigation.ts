@@ -8,10 +8,6 @@ export type OnboardingStackParamList = {
 
 export type AuthStackParamList = {
   LoginScreen: undefined;
-  OTPScreen: {
-    verificationId: string;
-    phoneNumber: string;
-  };
   ProfileScreen: undefined;
 };
 

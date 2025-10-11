@@ -1,6 +1,6 @@
 import { useNavigation } from '@react-navigation/native';
 import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, Image, Switch } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '@/store/slices/authSlice';
@@ -9,7 +9,7 @@ import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 
 export default function SettingsScreen() {
-  const { colors } = useTheme();
+  const { colors, isDark, toggleTheme, isSystemTheme, setIsSystemTheme } = useTheme();
   const navigation = useNavigation();
   const dispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
@@ -35,6 +35,24 @@ export default function SettingsScreen() {
     );
   };
 
+  const themeItems = [
+    { 
+      title: 'Follow System', 
+      icon: 'phone-portrait-outline', 
+      isSwitch: true,
+      switchValue: isSystemTheme,
+      onSwitchChange: () => setIsSystemTheme(!isSystemTheme)
+    },
+    { 
+      title: 'Dark Mode', 
+      icon: isDark ? 'moon' : 'sunny-outline', 
+      isSwitch: true,
+      switchValue: isDark,
+      onSwitchChange: toggleTheme,
+      disabled: isSystemTheme
+    },
+  ];
+
   const accountItems = [
     { title: 'Account', icon: 'key-outline', onPress: () => navigation.navigate('UserInfoScreen' as never) },
     { title: 'Privacy', icon: 'lock-closed-outline', onPress: () => {} },
@@ -50,15 +68,33 @@ export default function SettingsScreen() {
   const renderMenuItem = (item: any) => (
     <TouchableOpacity
       key={item.title}
-      style={styles.menuItem}
+      style={[styles.menuItem, item.disabled && styles.disabledItem]}
       onPress={item.onPress}
       activeOpacity={0.7}
+      disabled={item.isSwitch}
     >
-      <Icon name={item.icon} size={moderateScale(24)} color={colors.text} />
-      <Text style={[styles.menuText, { color: colors.text }]}>
+      <Icon 
+        name={item.icon} 
+        size={moderateScale(24)} 
+        color={item.disabled ? colors.textSecondary : colors.text} 
+      />
+      <Text style={[
+        styles.menuText, 
+        { color: item.disabled ? colors.textSecondary : colors.text }
+      ]}>
         {item.title}
       </Text>
-      <Icon name="chevron-forward" size={moderateScale(20)} color={colors.textSecondary} style={styles.arrowIcon} />
+      {item.isSwitch ? (
+        <Switch
+          value={item.switchValue}
+          onValueChange={item.onSwitchChange}
+          trackColor={{ false: colors.border, true: colors.accent }}
+          thumbColor={item.switchValue ? colors.accent : colors.textTertiary}
+          disabled={item.disabled}
+        />
+      ) : (
+        <Icon name="chevron-forward" size={moderateScale(20)} color={colors.textSecondary} style={styles.arrowIcon} />
+      )}
     </TouchableOpacity>
   );
 
@@ -118,6 +154,16 @@ export default function SettingsScreen() {
           </View>
           <Icon name="chevron-forward" size={moderateScale(20)} color={colors.textSecondary} />
         </TouchableOpacity>
+
+        {/* Theme Section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            Appearance
+          </Text>
+          <View style={styles.menuContainer}>
+            {themeItems.map(renderMenuItem)}
+          </View>
+        </View>
 
         {/* Account Section */}
         <View style={styles.section}>
@@ -240,6 +286,9 @@ const styles = StyleSheet.create({
   },
   menuContainer: {
     paddingHorizontal: wp(5),
+  },
+  disabledItem: {
+    opacity: 0.6,
   },
   menuItem: {
     flexDirection: 'row',

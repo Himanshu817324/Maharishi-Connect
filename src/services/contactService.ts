@@ -156,17 +156,21 @@ class ContactService {
   // Get contact by ID
   async getContactById(userId: string): Promise<Contact | null> {
     try {
-      const response = await this.makeRequest<{ status: string; contact: Contact }>(`/contacts/${userId}`);
-      if (response.status === 'SUCCESS') {
-        return response.contact;
+      // Since the contacts API endpoint doesn't exist, use local search only
+      console.log('🔍 Searching for contact locally:', userId);
+      const contacts = this.contactsCache?.data.existingUsers || [];
+      const contact = contacts.find(c => c.user_id === userId);
+      
+      if (contact) {
+        console.log('✅ Contact found locally:', contact.fullName);
+        return contact;
       } else {
+        console.log('❌ Contact not found locally');
         return null;
       }
     } catch (error) {
       console.error('Error fetching contact:', error);
-      // Fallback to local search
-      const contacts = this.contactsCache?.data.existingUsers || [];
-      return contacts.find(contact => contact.user_id === userId) || null;
+      return null;
     }
   }
 
@@ -237,14 +241,13 @@ class ContactService {
   // Add contact to favorites
   async addToFavorites(userId: string): Promise<void> {
     try {
-      await this.makeRequest(`/contacts/${userId}/favorite`, {
-        method: 'POST',
-      });
-      // Update local cache
+      // Since the contacts API endpoint doesn't exist, update local cache only
+      console.log('⭐ Adding to favorites locally:', userId);
       const contacts = this.contactsCache?.data.existingUsers || [];
       const contact = contacts.find(c => c.user_id === userId);
       if (contact) {
         contact.isFavorite = true;
+        console.log('✅ Contact added to favorites locally');
       }
     } catch (error) {
       console.error('Error adding to favorites:', error);
@@ -255,14 +258,13 @@ class ContactService {
   // Remove contact from favorites
   async removeFromFavorites(userId: string): Promise<void> {
     try {
-      await this.makeRequest(`/contacts/${userId}/favorite`, {
-        method: 'DELETE',
-      });
-      // Update local cache
+      // Since the contacts API endpoint doesn't exist, update local cache only
+      console.log('⭐ Removing from favorites locally:', userId);
       const contacts = this.contactsCache?.data.existingUsers || [];
       const contact = contacts.find(c => c.user_id === userId);
       if (contact) {
         contact.isFavorite = false;
+        console.log('✅ Contact removed from favorites locally');
       }
     } catch (error) {
       console.error('Error removing from favorites:', error);
@@ -273,14 +275,13 @@ class ContactService {
   // Block contact
   async blockContact(userId: string): Promise<void> {
     try {
-      await this.makeRequest(`/contacts/${userId}/block`, {
-        method: 'POST',
-      });
-      // Update local cache
+      // Since the contacts API endpoint doesn't exist, update local cache only
+      console.log('🚫 Blocking contact locally:', userId);
       const contacts = this.contactsCache?.data.existingUsers || [];
       const contact = contacts.find(c => c.user_id === userId);
       if (contact) {
         contact.isBlocked = true;
+        console.log('✅ Contact blocked locally');
       }
     } catch (error) {
       console.error('Error blocking contact:', error);
@@ -291,14 +292,13 @@ class ContactService {
   // Unblock contact
   async unblockContact(userId: string): Promise<void> {
     try {
-      await this.makeRequest(`/contacts/${userId}/block`, {
-        method: 'DELETE',
-      });
-      // Update local cache
+      // Since the contacts API endpoint doesn't exist, update local cache only
+      console.log('✅ Unblocking contact locally:', userId);
       const contacts = this.contactsCache?.data.existingUsers || [];
       const contact = contacts.find(c => c.user_id === userId);
       if (contact) {
         contact.isBlocked = false;
+        console.log('✅ Contact unblocked locally');
       }
     } catch (error) {
       console.error('Error unblocking contact:', error);
@@ -601,7 +601,13 @@ class ContactService {
         console.log('📱 Cache exists but is empty, will fetch fresh data');
       }
       // First get all device contacts
-      const deviceContacts = await permissionManager.syncContactsWithBackend();
+      let deviceContacts;
+      try {
+        deviceContacts = await permissionManager.syncContactsWithBackend();
+      } catch (permissionError) {
+        console.warn('⚠️ Contacts permission denied, using empty contacts list');
+        deviceContacts = [];
+      }
 
       // Check if deviceContacts is null or undefined
       if (!deviceContacts || !Array.isArray(deviceContacts)) {

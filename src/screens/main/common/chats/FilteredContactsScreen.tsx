@@ -4,6 +4,7 @@ import React, {
   useCallback,
   useMemo,
   startTransition,
+  useRef,
 } from 'react';
 import {
   View,
@@ -81,6 +82,7 @@ const FilteredContactsScreen: React.FC = () => {
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const [hasData, setHasData] = useState(false);
   const [isDataReady, setIsDataReady] = useState(false);
+  const hasLoadedRef = useRef(false);
 
   // Get user IDs for status monitoring
   const userIds = useMemo(() => {
@@ -276,8 +278,11 @@ const FilteredContactsScreen: React.FC = () => {
   );
 
   const onRefresh = useCallback(async () => {
+    console.log('🔄 [FilteredContactsScreen] onRefresh triggered');
     setRefreshing(true);
     setHasData(false);
+    hasLoadedRef.current = false; // Reset the ref to allow reloading
+    console.log('🔄 [FilteredContactsScreen] Reset hasLoadedRef to false for refresh');
     try {
       // Force refresh contacts (bypass cache)
       const { existingUsers: users, nonUsers: nonUsersList } =
@@ -295,17 +300,23 @@ const FilteredContactsScreen: React.FC = () => {
       console.error('Error refreshing contacts:', error);
     } finally {
       setRefreshing(false);
+      hasLoadedRef.current = true; // Set back to true after refresh completes
+      console.log('✅ [FilteredContactsScreen] Refresh completed, hasLoadedRef set to true');
     }
   }, [filterCurrentUser]);
 
   useEffect(() => {
-    // Add a small delay to prevent rapid re-execution
-    const timeoutId = setTimeout(() => {
+    // Only load contacts once when component mounts
+    console.log('🔄 [FilteredContactsScreen] useEffect triggered, hasLoadedRef:', hasLoadedRef.current);
+    if (!hasLoadedRef.current) {
+      console.log('✅ [FilteredContactsScreen] Loading contacts for the first time');
+      hasLoadedRef.current = true;
       loadContacts();
-    }, 100);
-
-    return () => clearTimeout(timeoutId);
-  }, [loadContacts]);
+    } else {
+      console.log('⏭️ [FilteredContactsScreen] Skipping loadContacts - already loaded');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Intentionally empty - we only want this to run once
 
   useEffect(() => {
     // Only process search/filtering if we have data and initial load is complete
