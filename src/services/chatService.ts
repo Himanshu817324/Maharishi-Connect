@@ -860,7 +860,7 @@ class ChatService {
   ): Promise<{ status: string; data: MessageData }> {
     try {
       console.log(`🔄 Updating message status for ${messageId} to ${status}`);
-      
+
       const response = await this.makeRequest<MessageResponse>(
         `/chat/messages/${messageId}/status`,
         {
@@ -917,7 +917,7 @@ class ChatService {
   async getMessageStatus(messageId: string): Promise<MessageData> {
     try {
       console.log(`🔍 Getting message status for: ${messageId}`);
-      
+
       const response = await this.makeRequest<MessageResponse>(
         `/chat/messages/${messageId}/status`
       );
@@ -933,7 +933,7 @@ class ChatService {
   async getMessageReadReceipts(messageId: string): Promise<Array<{ userId: string; readAt: string }>> {
     try {
       console.log(`🔍 Getting read receipts for message: ${messageId}`);
-      
+
       const response = await this.makeRequest<{ status: string; data: Array<{ userId: string; readAt: string }> }>(
         `/chat/messages/${messageId}/read-receipts`
       );
@@ -949,7 +949,7 @@ class ChatService {
   async getMessageDeliveryReceipts(messageId: string): Promise<Array<{ userId: string; deliveredAt: string }>> {
     try {
       console.log(`🔍 Getting delivery receipts for message: ${messageId}`);
-      
+
       const response = await this.makeRequest<{ status: string; data: Array<{ userId: string; deliveredAt: string }> }>(
         `/chat/messages/${messageId}/delivery-receipts`
       );

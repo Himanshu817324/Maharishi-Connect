@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { messageService, MessageQueueItem } from '@/services/messageService';
 import { MessageData } from '@/services/chatService';
+import { mapServerStatusToClient } from '@/services/messageStatusService';
 
 export interface MessageState {
   messages: { [chatId: string]: MessageData[] };
@@ -251,12 +252,18 @@ const messageSlice = createSlice({
         state.messages[chatId] = [];
       }
 
+      // Map server status to client status
+      const mappedMessage = {
+        ...message,
+        status: message.status ? mapServerStatusToClient(message.status) : 'sent'
+      };
+
       // Check if message already exists
       const existingIndex = state.messages[chatId].findIndex(m => m.id === message.id);
       if (existingIndex >= 0) {
-        state.messages[chatId][existingIndex] = message;
+        state.messages[chatId][existingIndex] = mappedMessage;
       } else {
-        state.messages[chatId].push(message);
+        state.messages[chatId].push(mappedMessage);
         // Sort messages by created_at
         state.messages[chatId].sort((a, b) =>
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
@@ -278,11 +285,17 @@ const messageSlice = createSlice({
         state.messages[chatId] = [];
       }
 
+      // Map server status to client status
+      const mappedMessage = {
+        ...message,
+        status: message.status ? mapServerStatusToClient(message.status) : 'sent'
+      };
+
       const existingIndex = state.messages[chatId].findIndex(m => m.id === message.id);
       if (existingIndex >= 0) {
-        state.messages[chatId][existingIndex] = message;
+        state.messages[chatId][existingIndex] = mappedMessage;
       } else {
-        state.messages[chatId].push(message);
+        state.messages[chatId].push(mappedMessage);
         state.messages[chatId].sort((a, b) =>
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         );
@@ -298,10 +311,16 @@ const messageSlice = createSlice({
       const message = action.payload;
       const chatId = message.chat_id;
 
+      // Map server status to client status
+      const mappedMessage = {
+        ...message,
+        status: message.status ? mapServerStatusToClient(message.status) : 'sent'
+      };
+
       if (state.messages[chatId]) {
         const index = state.messages[chatId].findIndex(m => m.id === message.id);
         if (index >= 0) {
-          state.messages[chatId][index] = message;
+          state.messages[chatId][index] = mappedMessage;
         }
       }
 
@@ -309,7 +328,7 @@ const messageSlice = createSlice({
       if (state.currentChatId === chatId) {
         const index = state.currentChatMessages.findIndex(m => m.id === message.id);
         if (index >= 0) {
-          state.currentChatMessages[index] = message;
+          state.currentChatMessages[index] = mappedMessage;
           console.log('🔄 Updated message in current chat:', chatId, 'Message ID:', message.id);
         }
       }
@@ -402,7 +421,7 @@ const messageSlice = createSlice({
       if (state.messages[chatId]) {
         const messageIndex = state.messages[chatId].findIndex(m => m.id === messageId);
         console.log('📊 [Redux] Message index found:', messageIndex);
-        
+
         if (messageIndex >= 0) {
           const message = state.messages[chatId][messageIndex];
           console.log('📊 [Redux] Found message:', { id: message.id, currentStatus: message.status });

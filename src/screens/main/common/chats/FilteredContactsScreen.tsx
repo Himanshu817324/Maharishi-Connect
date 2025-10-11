@@ -561,7 +561,9 @@ const FilteredContactsScreen: React.FC = () => {
           </View>
           {/* Online status indicator */}
           {isOnline && (
-            <View style={[styles.onlineIndicator, { backgroundColor: '#4CAF50' }]} />
+            <View
+              style={[styles.onlineIndicator, { backgroundColor: '#4CAF50' }]}
+            />
           )}
         </View>
 

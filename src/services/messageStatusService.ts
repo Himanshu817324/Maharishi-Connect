@@ -2,6 +2,23 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'seen' | 'failed';
 
+// Server status mapping - server sends 'read' but client expects 'seen'
+export const mapServerStatusToClient = (serverStatus: string): MessageStatus => {
+  switch (serverStatus) {
+    case 'read':
+      return 'seen';
+    case 'sending':
+    case 'sent':
+    case 'delivered':
+    case 'seen':
+    case 'failed':
+      return serverStatus as MessageStatus;
+    default:
+      console.warn(`Unknown server status: ${serverStatus}, defaulting to 'sent'`);
+      return 'sent';
+  }
+};
+
 export interface MessageStatusUpdate {
   messageId: string;
   status: MessageStatus;
@@ -48,7 +65,7 @@ class MessageStatusService {
     options: RequestInit = {}
   ): Promise<T> {
     const headers = await this.getAuthHeaders();
-    
+
     const response = await fetch(`${this.baseURL}${endpoint}`, {
       ...options,
       headers: {
@@ -69,7 +86,7 @@ class MessageStatusService {
   async getMessageStatus(messageId: string): Promise<MessageStatusData> {
     try {
       console.log(`🔍 Getting message status for: ${messageId}`);
-      
+
       // Check cache first
       const cached = this.statusCache.get(messageId);
       if (cached && Date.now() - new Date(cached.sentAt || '').getTime() < this.CACHE_DURATION) {
@@ -82,14 +99,14 @@ class MessageStatusService {
       );
 
       console.log(`✅ Message status response for ${messageId}:`, response);
-      
+
       // Cache the result
       this.statusCache.set(messageId, response.data);
-      
+
       return response.data;
     } catch (error) {
       console.error(`❌ Error getting message status for ${messageId}:`, error);
-      
+
       // Return cached data if available
       const cached = this.statusCache.get(messageId);
       if (cached) {
@@ -109,13 +126,13 @@ class MessageStatusService {
 
   // Update message status
   async updateMessageStatus(
-    messageId: string, 
-    status: MessageStatus, 
+    messageId: string,
+    status: MessageStatus,
     error?: string
   ): Promise<{ status: string; data: MessageStatusData }> {
     try {
       console.log(`🔄 Updating message status for ${messageId} to ${status}`);
-      
+
       const response = await this.makeRequest<{ status: string; data: MessageStatusData }>(
         `/chat/messages/${messageId}/status`,
         {
@@ -129,10 +146,10 @@ class MessageStatusService {
       );
 
       console.log(`✅ Message status updated for ${messageId}:`, response);
-      
+
       // Update cache
       this.statusCache.set(messageId, response.data);
-      
+
       return response;
     } catch (error) {
       console.error(`❌ Error updating message status for ${messageId}:`, error);
@@ -176,10 +193,10 @@ class MessageStatusService {
   // Get multiple messages status
   async getMultipleMessagesStatus(messageIds: string[]): Promise<Map<string, MessageStatusData>> {
     const statusMap = new Map<string, MessageStatusData>();
-    
+
     try {
       console.log(`🔍 Getting status for ${messageIds.length} messages`);
-      
+
       const response = await this.makeRequest<{ status: string; data: MessageStatusData[] }>(
         `/chat/messages/status/batch`,
         {
@@ -205,7 +222,7 @@ class MessageStatusService {
   async getMessageReadReceipts(messageId: string): Promise<{ userId: string; readAt: string }[]> {
     try {
       console.log(`🔍 Getting read receipts for message: ${messageId}`);
-      
+
       const response = await this.makeRequest<{ status: string; data: { userId: string; readAt: string }[] }>(
         `/chat/messages/${messageId}/read-receipts`
       );
@@ -222,7 +239,7 @@ class MessageStatusService {
   async getMessageDeliveryReceipts(messageId: string): Promise<{ userId: string; deliveredAt: string }[]> {
     try {
       console.log(`🔍 Getting delivery receipts for message: ${messageId}`);
-      
+
       const response = await this.makeRequest<{ status: string; data: { userId: string; deliveredAt: string }[] }>(
         `/chat/messages/${messageId}/delivery-receipts`
       );

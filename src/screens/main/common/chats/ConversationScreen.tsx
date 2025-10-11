@@ -185,7 +185,6 @@ const ConversationScreen: React.FC = () => {
     }
   }, [currentChatMessages.length]);
 
-
   const setupSocketListeners = useCallback(() => {
     // Listener for sent messages (confirmation)
     socketService.addMessageSentListener((message: MessageData) => {
@@ -235,10 +234,16 @@ const ConversationScreen: React.FC = () => {
 
           // Mark message as delivered when received
           try {
-            console.log('📬 [ConversationScreen] Marking message as delivered:', message.id);
+            console.log(
+              '📬 [ConversationScreen] Marking message as delivered:',
+              message.id,
+            );
             socketService.markMessageAsDelivered(message.id);
           } catch (error) {
-            console.error('❌ [ConversationScreen] Error marking message as delivered:', error);
+            console.error(
+              '❌ [ConversationScreen] Error marking message as delivered:',
+              error,
+            );
           }
 
           // Update the chat's last message in the chat list
@@ -308,13 +313,22 @@ const ConversationScreen: React.FC = () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const _removeMessageStatusListener = socketService.addMessageStatusListener(
       data => {
-        console.log('📊 [ConversationScreen] Message status update received:', data);
+        console.log(
+          '📊 [ConversationScreen] Message status update received:',
+          data,
+        );
         console.log('📊 [ConversationScreen] Current chat ID:', chat?.id);
         console.log('📊 [ConversationScreen] Data chat ID:', data.chatId);
-        console.log('📊 [ConversationScreen] Chat IDs match:', data.chatId === chat?.id);
-        
+        console.log(
+          '📊 [ConversationScreen] Chat IDs match:',
+          data.chatId === chat?.id,
+        );
+
         if (data.chatId === chat?.id) {
-          console.log('📊 [ConversationScreen] Processing message status update:', data);
+          console.log(
+            '📊 [ConversationScreen] Processing message status update:',
+            data,
+          );
           // Update message status in Redux store
           dispatch(
             updateMessageStatus({
@@ -325,9 +339,13 @@ const ConversationScreen: React.FC = () => {
               timestamp: data.timestamp,
             }),
           );
-          console.log('📊 [ConversationScreen] Message status update dispatched to Redux');
+          console.log(
+            '📊 [ConversationScreen] Message status update dispatched to Redux',
+          );
         } else {
-          console.log('📊 [ConversationScreen] Ignoring status update for different chat');
+          console.log(
+            '📊 [ConversationScreen] Ignoring status update for different chat',
+          );
         }
       },
     );
@@ -336,20 +354,32 @@ const ConversationScreen: React.FC = () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const _removeMessageDeliveredListener =
       socketService.addMessageDeliveredListener(data => {
-        console.log('📬 [ConversationScreen] Message delivered event received:', data);
+        console.log(
+          '📬 [ConversationScreen] Message delivered event received:',
+          data,
+        );
         console.log('📬 [ConversationScreen] Current chat ID:', chat?.id);
         console.log('📬 [ConversationScreen] Data chat ID:', data.chatId);
-        console.log('📬 [ConversationScreen] Chat IDs match:', data.chatId === chat?.id);
-        
+        console.log(
+          '📬 [ConversationScreen] Chat IDs match:',
+          data.chatId === chat?.id,
+        );
+
         if (data.chatId === chat?.id) {
-          console.log('📬 [ConversationScreen] Processing message delivered:', data);
-          console.log('📬 [ConversationScreen] Dispatching updateMessageStatus:', {
-            messageId: data.messageId,
-            chatId: data.chatId,
-            status: 'delivered',
-            userId: data.userId,
-            timestamp: data.timestamp,
-          });
+          console.log(
+            '📬 [ConversationScreen] Processing message delivered:',
+            data,
+          );
+          console.log(
+            '📬 [ConversationScreen] Dispatching updateMessageStatus:',
+            {
+              messageId: data.messageId,
+              chatId: data.chatId,
+              status: 'delivered',
+              userId: data.userId,
+              timestamp: data.timestamp,
+            },
+          );
           // Update message status to 'delivered'
           dispatch(
             updateMessageStatus({
@@ -360,12 +390,15 @@ const ConversationScreen: React.FC = () => {
               timestamp: data.timestamp,
             }),
           );
-          console.log('📬 [ConversationScreen] Message delivered status dispatched to Redux');
+          console.log(
+            '📬 [ConversationScreen] Message delivered status dispatched to Redux',
+          );
         } else {
-          console.log('📬 [ConversationScreen] Ignoring delivered event for different chat');
+          console.log(
+            '📬 [ConversationScreen] Ignoring delivered event for different chat',
+          );
         }
       });
-
 
     // Online status listeners
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -635,22 +668,32 @@ const ConversationScreen: React.FC = () => {
     if (chat && socketService.isSocketConnected()) {
       socketService.markChatAsRead(chat.id);
       dispatch(clearUnreadCount(chat.id));
-      
+
       // Mark all unread messages in this chat as seen
       const unreadMessages = currentChatMessages.filter(
-        message => message.sender_id !== user?.id && 
-        message.sender_id !== user?.firebaseUid && 
-        message.status !== 'seen'
+        message =>
+          message.sender_id !== user?.id &&
+          message.sender_id !== user?.firebaseUid &&
+          message.status !== 'seen',
       );
-      
-      console.log('👁️ [ConversationScreen] Marking messages as seen:', unreadMessages.length);
-      
+
+      console.log(
+        '👁️ [ConversationScreen] Marking messages as seen:',
+        unreadMessages.length,
+      );
+
       unreadMessages.forEach(message => {
         try {
-          console.log('👁️ [ConversationScreen] Marking message as seen:', message.id);
+          console.log(
+            '👁️ [ConversationScreen] Marking message as seen:',
+            message.id,
+          );
           socketService.markMessageAsSeen(message.id);
         } catch (error) {
-          console.error('❌ [ConversationScreen] Error marking message as seen:', error);
+          console.error(
+            '❌ [ConversationScreen] Error marking message as seen:',
+            error,
+          );
         }
       });
     }
@@ -1200,7 +1243,6 @@ const ConversationScreen: React.FC = () => {
             onInfo={handleInfo}
             onMore={handleMore}
           />
-          
 
           <View style={styles.messageListContainer}>
             {pagination[chat?.id || '']?.isLoadingOlder && (

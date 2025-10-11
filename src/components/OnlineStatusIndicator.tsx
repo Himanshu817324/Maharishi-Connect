@@ -73,7 +73,12 @@ const OnlineStatusIndicator: React.FC<OnlineStatusIndicatorProps> = ({
 
   if (variant === 'compact') {
     return (
-      <View style={[styles.compactContainer, { padding: sizeStyles.containerPadding }]}>
+      <View
+        style={[
+          styles.compactContainer,
+          { padding: sizeStyles.containerPadding },
+        ]}
+      >
         {showIcon && (
           <View
             style={[
@@ -92,7 +97,12 @@ const OnlineStatusIndicator: React.FC<OnlineStatusIndicatorProps> = ({
 
   if (variant === 'detailed') {
     return (
-      <View style={[styles.detailedContainer, { padding: sizeStyles.containerPadding }]}>
+      <View
+        style={[
+          styles.detailedContainer,
+          { padding: sizeStyles.containerPadding },
+        ]}
+      >
         {showIcon && (
           <Icon
             name={getStatusIcon()}
@@ -135,7 +145,12 @@ const OnlineStatusIndicator: React.FC<OnlineStatusIndicatorProps> = ({
 
   // Default variant
   return (
-    <View style={[styles.defaultContainer, { padding: sizeStyles.containerPadding }]}>
+    <View
+      style={[
+        styles.defaultContainer,
+        { padding: sizeStyles.containerPadding },
+      ]}
+    >
       {showIcon && (
         <Icon
           name={getStatusIcon()}
@@ -194,4 +209,3 @@ const styles = StyleSheet.create({
 });
 
 export default OnlineStatusIndicator;
-
