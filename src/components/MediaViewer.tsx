@@ -10,8 +10,8 @@ import {
   Linking,
   ActivityIndicator,
 } from 'react-native';
-import { Video, ResizeMode } from 'react-native-video';
-import Icon from 'react-native-vector-icons/Ionicons';
+import LightweightVideo from '@/components/atoms/ui/LightweightVideo';
+import OptimizedIcon from '@/components/atoms/ui/OptimizedIcon';
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 import { MediaFile } from '@/services/mediaService';
@@ -90,7 +90,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
   const [isDownloading, setIsDownloading] = useState(false);
   const [_downloadProgress, setDownloadProgress] = useState(0);
 
-  const videoRef = useRef<any>(null);
+  // const videoRef = useRef<any>(null); // Removed - using LightweightVideo now
   const controlsTimeoutRef = useRef<any>(null);
 
   const currentFile = filesArray[currentIndex];
@@ -146,13 +146,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
     setShowControls(true);
   };
 
-  const handleVideoProgress = (data: any) => {
-    setVideoProgress(data.currentTime);
-  };
-
-  const handleVideoLoad = (data: any) => {
-    setVideoDuration(data.duration);
-  };
+  // Removed video progress and load handlers - using LightweightVideo now
 
 
   const handleFileOpen = async () => {
@@ -277,19 +271,11 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
         onPress={() => setShowControls(!showControls)}
         activeOpacity={1}
       >
-        <Video
-          ref={videoRef}
-          source={{ uri: currentFile.uri }}
+        <LightweightVideo
+          uri={currentFile.uri}
+          thumbnail={currentFile.uri}
+          onPress={handlePlayPause}
           style={styles.mediaVideo}
-          resizeMode={ResizeMode.CONTAIN}
-          paused={!isPlaying}
-          onProgress={handleVideoProgress}
-          onLoad={handleVideoLoad}
-          onLoadStart={() => setIsLoading(true)}
-          onError={(error) => {
-            console.error('Video error:', error);
-            Alert.alert('Error', 'Failed to load video');
-          }}
         />
         
         {isLoading && (
@@ -304,7 +290,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
               style={styles.playButton}
               onPress={handlePlayPause}
             >
-              <Icon
+              <OptimizedIcon
                 name={isPlaying ? 'pause' : 'play'}
                 size={moderateScale(40)}
                 color="#FFFFFF"
@@ -339,7 +325,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
     <View style={styles.mediaContainer}>
       <View style={styles.audioContainer}>
         <View style={styles.audioIcon}>
-          <Icon name="musical-notes" size={moderateScale(60)} color={safeColors.accent} />
+          <OptimizedIcon name="musical-notes" size={moderateScale(60)} color={safeColors.accent} />
         </View>
         
         <Text style={[styles.audioTitle, { color: safeColors.text }]}>
@@ -367,7 +353,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
     <View style={styles.mediaContainer}>
       <View style={styles.fileContainer}>
         <View style={[styles.fileIcon, { backgroundColor: safeColors.accent + '20' }]}>
-          <Icon
+          <OptimizedIcon
             name={fileService?.getFileIcon?.(currentFile.type) || 'document'}
             size={moderateScale(60)}
             color={safeColors.accent}
@@ -386,7 +372,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
           style={[styles.openFileButton, { backgroundColor: safeColors.accent }]}
           onPress={handleFileOpen}
         >
-          <Icon name="open-outline" size={moderateScale(20)} color="#FFFFFF" />
+          <OptimizedIcon name="open-outline" size={moderateScale(20)} color="#FFFFFF" />
           <Text style={styles.openFileText}>Open File</Text>
         </TouchableOpacity>
       </View>
@@ -427,7 +413,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleClose} style={styles.headerButton}>
-            <Icon name="close" size={moderateScale(24)} color="#FFFFFF" />
+            <OptimizedIcon name="close" size={moderateScale(24)} color="#FFFFFF" />
           </TouchableOpacity>
           
           <View style={styles.headerInfo}>
@@ -448,12 +434,12 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
               {isDownloading ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Icon name="download-outline" size={moderateScale(24)} color="#FFFFFF" />
+                <OptimizedIcon name="download-outline" size={moderateScale(24)} color="#FFFFFF" />
               )}
             </TouchableOpacity>
             
             <TouchableOpacity onPress={handleFileOpen} style={styles.headerButton}>
-              <Icon name="open-outline" size={moderateScale(24)} color="#FFFFFF" />
+              <OptimizedIcon name="open-outline" size={moderateScale(24)} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         </View>
@@ -471,7 +457,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
               onPress={handlePrevious}
               disabled={currentIndex === 0}
             >
-              <Icon
+              <OptimizedIcon
                 name="chevron-back"
                 size={moderateScale(30)}
                 color={currentIndex === 0 ? '#666666' : '#FFFFFF'}
@@ -483,7 +469,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({
               onPress={handleNext}
               disabled={currentIndex === filesArray.length - 1}
             >
-              <Icon
+              <OptimizedIcon
                 name="chevron-forward"
                 size={moderateScale(30)}
                 color={currentIndex === filesArray.length - 1 ? '#666666' : '#FFFFFF'}

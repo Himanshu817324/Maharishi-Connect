@@ -15,12 +15,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import {
-  launchCamera,
-  launchImageLibrary,
-  ImagePickerResponse,
-  MediaType,
-} from 'react-native-image-picker';
+import { lightweightImagePicker } from '@/services/lightweightImagePicker';
 import Toast from 'react-native-toast-message';
 import { useDispatch, useSelector } from 'react-redux';
 import { apiService } from '../../services/apiService';
@@ -121,72 +116,52 @@ const ProfileScreen = () => {
     );
   };
 
-  const openCamera = () => {
-    const options = {
-      mediaType: 'photo' as MediaType,
-      includeBase64: false,
-      maxHeight: 2048,
-      maxWidth: 2048,
-      quality: 0.8 as const,
-      cameraType: 'back' as const,
-    };
-
-    launchCamera(options, (response: ImagePickerResponse) => {
-      if (response.didCancel) {
-        return;
-      }
-
-      if (response.errorMessage) {
-        console.error('Camera error:', response.errorMessage);
+  const openCamera = async () => {
+    try {
+      const result = await lightweightImagePicker.takePhoto();
+      
+      if (result.success && result.files.length > 0) {
+        const file = result.files[0];
+        uploadImage(file.uri);
+      } else if (result.error) {
         Toast.show({
           type: 'error',
           text1: 'Camera Error',
-          text2: response.errorMessage,
+          text2: result.error,
         });
-        return;
       }
-
-      if (response.assets && response.assets[0]) {
-        const asset = response.assets[0];
-        if (asset.uri) {
-          uploadImage(asset.uri);
-        }
-      }
-    });
+    } catch (error) {
+      console.error('Camera error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Camera Error',
+        text2: 'Failed to access camera',
+      });
+    }
   };
 
-  const openImageLibrary = () => {
-    const options = {
-      mediaType: 'photo' as MediaType,
-      includeBase64: false,
-      maxHeight: 2048,
-      maxWidth: 2048,
-      quality: 0.8 as const,
-      selectionLimit: 1,
-    };
-
-    launchImageLibrary(options, (response: ImagePickerResponse) => {
-      if (response.didCancel) {
-        return;
-      }
-
-      if (response.errorMessage) {
-        console.error('Gallery error:', response.errorMessage);
+  const openImageLibrary = async () => {
+    try {
+      const result = await lightweightImagePicker.pickImages(1);
+      
+      if (result.success && result.files.length > 0) {
+        const file = result.files[0];
+        uploadImage(file.uri);
+      } else if (result.error) {
         Toast.show({
           type: 'error',
           text1: 'Gallery Error',
-          text2: response.errorMessage,
+          text2: result.error,
         });
-        return;
       }
-
-      if (response.assets && response.assets[0]) {
-        const asset = response.assets[0];
-        if (asset.uri) {
-          uploadImage(asset.uri);
-        }
-      }
-    });
+    } catch (error) {
+      console.error('Gallery error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Gallery Error',
+        text2: 'Failed to access gallery',
+      });
+    }
   };
 
   const uploadImage = async (imageUri: string) => {

@@ -10,8 +10,8 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
-import { launchImageLibrary, launchCamera, MediaType } from 'react-native-image-picker';
+import OptimizedIcon from '@/components/atoms/ui/OptimizedIcon';
+import { lightweightImagePicker } from '@/services/lightweightImagePicker';
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 import { fileService, FileData } from '@/services/fileService';
@@ -134,29 +134,24 @@ const FilePicker: React.FC<FilePickerProps> = ({
         return;
       }
 
-      const result = await launchImageLibrary({
-        mediaType: 'mixed' as MediaType,
-        quality: 0.8,
-        includeBase64: false,
-        selectionLimit: 1,
-      });
+      const result = await lightweightImagePicker.pickImages(1);
 
-      if (result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
+      if (result.success && result.files.length > 0) {
+        const file = result.files[0];
         
-        if (asset.uri && asset.fileName && asset.type) {
-          // Validate file size
-          if (asset.fileSize && asset.fileSize > maxFileSize) {
-            Alert.alert(
-              'File Too Large',
-              `File size ${fileService.formatFileSize(asset.fileSize)} exceeds maximum allowed size ${fileService.formatFileSize(maxFileSize)}`
-            );
-            return;
-          }
-
-          setSelectedFile(asset);
-          await handleFileUpload(asset.uri, asset.fileName, asset.type);
+        // Validate file size
+        if (file.size > maxFileSize) {
+          Alert.alert(
+            'File Too Large',
+            `File size ${fileService.formatFileSize(file.size)} exceeds maximum allowed size ${fileService.formatFileSize(maxFileSize)}`
+          );
+          return;
         }
+
+        setSelectedFile(file);
+        await handleFileUpload(file.uri, file.name, file.type);
+      } else if (result.error) {
+        Alert.alert('Error', result.error);
       }
     } catch (error) {
       console.error('Error picking image from gallery:', error);
@@ -173,30 +168,24 @@ const FilePicker: React.FC<FilePickerProps> = ({
         return;
       }
 
-      const result = await launchCamera({
-        mediaType: 'photo',
-        quality: 0.8,
-        includeBase64: false,
-        cameraType: 'back',
-        saveToPhotos: true,
-      });
+      const result = await lightweightImagePicker.takePhoto();
 
-      if (result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
+      if (result.success && result.files.length > 0) {
+        const file = result.files[0];
         
-        if (asset.uri && asset.fileName && asset.type) {
-          // Validate file size
-          if (asset.fileSize && asset.fileSize > maxFileSize) {
-            Alert.alert(
-              'File Too Large',
-              `File size ${fileService.formatFileSize(asset.fileSize)} exceeds maximum allowed size ${fileService.formatFileSize(maxFileSize)}`
-            );
-            return;
-          }
-
-          setSelectedFile(asset);
-          await handleFileUpload(asset.uri, asset.fileName, asset.type);
+        // Validate file size
+        if (file.size > maxFileSize) {
+          Alert.alert(
+            'File Too Large',
+            `File size ${fileService.formatFileSize(file.size)} exceeds maximum allowed size ${fileService.formatFileSize(maxFileSize)}`
+          );
+          return;
         }
+
+        setSelectedFile(file);
+        await handleFileUpload(file.uri, file.name, file.type);
+      } else if (result.error) {
+        Alert.alert('Error', result.error);
       }
     } catch (error) {
       console.error('Error taking photo:', error);
@@ -290,7 +279,7 @@ const FilePicker: React.FC<FilePickerProps> = ({
       disabled={isUploading}
     >
       <View style={[styles.optionIcon, { backgroundColor: option.color + '20' }]}>
-        <Icon name={option.icon} size={moderateScale(24)} color={option.color} />
+        <OptimizedIcon name={option.icon} size={moderateScale(24)} color={option.color} />
       </View>
       <View style={styles.optionText}>
         <Text style={[styles.optionTitle, { color: colors.text }]}>
@@ -300,7 +289,7 @@ const FilePicker: React.FC<FilePickerProps> = ({
           {option.subtitle}
         </Text>
       </View>
-      <Icon name="chevron-forward" size={moderateScale(20)} color={colors.textSecondary} />
+      <OptimizedIcon name="chevron-forward" size={moderateScale(20)} color={colors.textSecondary} />
     </TouchableOpacity>
   );
 
@@ -315,7 +304,7 @@ const FilePicker: React.FC<FilePickerProps> = ({
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <TouchableOpacity onPress={onClose} disabled={isUploading}>
-            <Icon name="close" size={moderateScale(24)} color={colors.text} />
+            <OptimizedIcon name="close" size={moderateScale(24)} color={colors.text} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: colors.text }]}>
             Add File
@@ -361,7 +350,7 @@ const FilePicker: React.FC<FilePickerProps> = ({
 
           {/* File Size Info */}
           <View style={[styles.infoContainer, { backgroundColor: colors.surface }]}>
-            <Icon name="information-circle-outline" size={moderateScale(20)} color={colors.accent} />
+            <OptimizedIcon name="information-circle-outline" size={moderateScale(20)} color={colors.accent} />
             <Text style={[styles.infoText, { color: colors.textSecondary }]}>
               Maximum file size: {fileService.formatFileSize(maxFileSize)}
             </Text>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,7 @@ import {
   Image,
   Alert,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import OptimizedIcon from '@/components/atoms/ui/OptimizedIcon';
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 import { MessageData } from '@/services/chatService';
@@ -27,7 +27,7 @@ interface MessageBubbleProps {
   onMediaPress?: (message: MessageData) => void;
 }
 
-const MessageBubble: React.FC<MessageBubbleProps> = ({
+const MessageBubble: React.FC<MessageBubbleProps> = memo(({
   message,
   isOwn,
   showAvatar = false,
@@ -134,7 +134,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               activeOpacity={0.8}
             >
               <View style={styles.mediaPlaceholder}>
-                <Icon name="play-circle" size={moderateScale(40)} color={isOwn ? colors.textOnPrimary : colors.accent} />
+                <OptimizedIcon name="play-circle" size={moderateScale(40)} color={isOwn ? colors.textOnPrimary : colors.accent} />
                 <Text
                   style={[
                     styles.mediaText,
@@ -174,7 +174,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               activeOpacity={0.8}
             >
               <View style={styles.mediaPlaceholder}>
-                <Icon name="musical-notes" size={moderateScale(40)} color={isOwn ? colors.textOnPrimary : colors.accent} />
+                <OptimizedIcon name="musical-notes" size={moderateScale(40)} color={isOwn ? colors.textOnPrimary : colors.accent} />
                 <Text
                   style={[
                     styles.mediaText,
@@ -342,7 +342,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

@@ -7,7 +7,14 @@
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
-    "test": "jest"
+    "test": "jest",
+    "analyze-bundle": "node scripts/analyze-bundle.js",
+    "optimize-bundle": "node scripts/optimize-bundle.js",
+    "migrate-lightweight": "node scripts/migrate-to-lightweight.js",
+    "bundle-android": "react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle",
+    "bundle-ios": "react-native bundle --platform ios --dev false --entry-file index.js --bundle-output ios/main.jsbundle",
+    "clean": "react-native clean",
+    "reset-cache": "react-native start --reset-cache"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^1.24.0",

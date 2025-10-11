@@ -1,4 +1,4 @@
-import { launchImageLibrary, launchCamera, ImagePickerResponse, MediaType as RNMediaType, ImageLibraryOptions, CameraOptions, PhotoQuality, CameraType } from 'react-native-image-picker';
+import { lightweightImagePicker } from './lightweightImagePicker';
 import { Platform, Alert, PermissionsAndroid } from 'react-native';
 import { permissionService } from './permissionService';
 import { permissionHelper } from './permissionHelper';
@@ -177,46 +177,8 @@ class MediaService {
       
       console.log('✅ Permissions granted for image picking');
 
-      const options: ImageLibraryOptions = {
-        mediaType: 'photo' as RNMediaType,
-        quality: 0.8 as PhotoQuality,
-        includeBase64: false,
-        selectionLimit: maxCount,
-        maxWidth: 2048,
-        maxHeight: 2048,
-      };
-
-      return new Promise((resolve) => {
-        launchImageLibrary(options, (response: ImagePickerResponse) => {
-          if (response.didCancel) {
-            resolve({ success: false, files: [], error: 'User cancelled' });
-            return;
-          }
-
-          if (response.errorMessage) {
-            resolve({ success: false, files: [], error: response.errorMessage });
-            return;
-          }
-
-          if (response.assets && response.assets.length > 0) {
-            const files: MediaFile[] = response.assets
-              .filter(asset => asset.uri && asset.fileName && asset.type)
-              .map(asset => ({
-                uri: asset.uri!,
-                name: asset.fileName!,
-                type: asset.type!,
-                size: asset.fileSize || 0,
-                width: asset.width,
-                height: asset.height,
-              }))
-              .filter(file => this.validateFile(file, 'image'));
-
-            resolve({ success: true, files });
-          } else {
-            resolve({ success: false, files: [], error: 'No images selected' });
-          }
-        });
-      });
+      // Use lightweight image picker instead of react-native-image-picker
+      return await lightweightImagePicker.pickImages(maxCount);
     } catch (error) {
       return {
         success: false,
@@ -240,46 +202,8 @@ class MediaService {
         };
       }
 
-      const options: ImageLibraryOptions = {
-        mediaType: 'video' as RNMediaType,
-        quality: 0.8 as PhotoQuality,
-        includeBase64: false,
-        selectionLimit: maxCount,
-        videoQuality: 'high',
-      };
-
-      return new Promise((resolve) => {
-        launchImageLibrary(options, (response: ImagePickerResponse) => {
-          if (response.didCancel) {
-            resolve({ success: false, files: [], error: 'User cancelled' });
-            return;
-          }
-
-          if (response.errorMessage) {
-            resolve({ success: false, files: [], error: response.errorMessage });
-            return;
-          }
-
-          if (response.assets && response.assets.length > 0) {
-            const files: MediaFile[] = response.assets
-              .filter(asset => asset.uri && asset.fileName && asset.type)
-              .map(asset => ({
-                uri: asset.uri!,
-                name: asset.fileName!,
-                type: asset.type!,
-                size: asset.fileSize || 0,
-                duration: asset.duration,
-                width: asset.width,
-                height: asset.height,
-              }))
-              .filter(file => this.validateFile(file, 'video'));
-
-            resolve({ success: true, files });
-          } else {
-            resolve({ success: false, files: [], error: 'No videos selected' });
-          }
-        });
-      });
+      // Use lightweight image picker instead of react-native-image-picker
+      return await lightweightImagePicker.pickVideos(maxCount);
     } catch (error) {
       return {
         success: false,
@@ -510,53 +434,9 @@ class MediaService {
         };
       }
 
-      const options: CameraOptions = {
-        mediaType: 'photo' as RNMediaType,
-        quality: 0.8 as PhotoQuality,
-        includeBase64: false,
-        cameraType: 'back' as CameraType,
-        saveToPhotos: true,
-        maxWidth: 2048,
-        maxHeight: 2048,
-      };
+      // Use lightweight image picker instead of react-native-image-picker
+      return await lightweightImagePicker.takePhoto();
 
-      return new Promise((resolve) => {
-        launchCamera(options, (response: ImagePickerResponse) => {
-          if (response.didCancel) {
-            resolve({ success: false, files: [], error: 'User cancelled' });
-            return;
-          }
-
-          if (response.errorMessage) {
-            resolve({ success: false, files: [], error: response.errorMessage });
-            return;
-          }
-
-          if (response.assets && response.assets.length > 0) {
-            const asset = response.assets[0];
-            if (asset.uri && asset.fileName && asset.type) {
-              const file: MediaFile = {
-                uri: asset.uri,
-                name: asset.fileName,
-                type: asset.type,
-                size: asset.fileSize || 0,
-                width: asset.width,
-                height: asset.height,
-              };
-
-              if (this.validateFile(file, 'image')) {
-                resolve({ success: true, files: [file] });
-              } else {
-                resolve({ success: false, files: [], error: 'Invalid image file' });
-              }
-            } else {
-              resolve({ success: false, files: [], error: 'Invalid image data' });
-            }
-          } else {
-            resolve({ success: false, files: [], error: 'No image captured' });
-          }
-        });
-      });
     } catch (error) {
       return {
         success: false,

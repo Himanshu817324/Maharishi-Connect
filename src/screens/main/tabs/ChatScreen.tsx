@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useCallback, useState, useMemo } from 'react';
 import {
   View,
   FlatList,
@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
-import Icon from 'react-native-vector-icons/Ionicons';
+import OptimizedIcon from '@/components/atoms/ui/OptimizedIcon';
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 import { RootState, AppDispatch } from '@/store';
@@ -36,7 +36,7 @@ const ChatScreen: React.FC = () => {
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [searchText, setSearchText] = useState('');
 
-  const getChatTitle = (chat: ChatData) => {
+  const getChatTitle = useCallback((chat: ChatData) => {
     if (chat.type === 'group') {
       return chat.name || 'Group Chat';
     } else {
@@ -48,18 +48,20 @@ const ChatScreen: React.FC = () => {
              otherParticipant?.userDetails?.phoneNumber || 
              'Unknown User';
     }
-  };
+  }, [user?.id, user?.firebaseUid]);
 
-  // Filter chats based on search text
-  const filteredChats = chats.filter(chat => {
-    if (!searchText.trim()) return true;
+  // Filter chats based on search text - memoized for performance
+  const filteredChats = useMemo(() => {
+    if (!searchText.trim()) return chats;
     
     const searchLower = searchText.toLowerCase();
-    const chatTitle = getChatTitle(chat).toLowerCase();
-    const lastMessage = chat.last_message?.content?.toLowerCase() || '';
-    
-    return chatTitle.includes(searchLower) || lastMessage.includes(searchLower);
-  });
+    return chats.filter(chat => {
+      const chatTitle = getChatTitle(chat).toLowerCase();
+      const lastMessage = chat.last_message?.content?.toLowerCase() || '';
+      
+      return chatTitle.includes(searchLower) || lastMessage.includes(searchLower);
+    });
+  }, [chats, searchText, getChatTitle]);
 
   const toggleSearch = useCallback(() => {
     setIsSearchVisible(!isSearchVisible);
@@ -104,27 +106,23 @@ const ChatScreen: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
-      console.log('🔄 ChatScreen focused, refreshing chats...');
       loadChats(true); // Force refresh on focus
     }, [loadChats])
   );
 
-  const handleChatPress = (chat: ChatData) => {
-    console.log('💬 Opening chat:', chat.id, 'with unread count:', chat.unread_count);
-    
+  const handleChatPress = useCallback((chat: ChatData) => {
     // Clear unread count immediately when chat is opened
     if (chat.unread_count && chat.unread_count > 0) {
-      console.log('🔔 Clearing unread count immediately for chat:', chat.id);
       dispatch(clearUnreadCount(chat.id));
     }
     
     dispatch(setCurrentChat(chat));
     (navigation as any).navigate('ConversationScreen', { chat });
-  };
+  }, [dispatch, navigation]);
 
-  const handleCreateChat = () => {
+  const handleCreateChat = useCallback(() => {
     (navigation as any).navigate('FilteredContactsScreen');
-  };
+  }, [navigation]);
 
   const handleFabLongPress = () => {
     setIsPermissionDebuggerVisible(true);
@@ -134,16 +132,8 @@ const ChatScreen: React.FC = () => {
     setIsSimpleTestVisible(true);
   };
 
-  const getChatSubtitle = (chat: ChatData) => {
+  const getChatSubtitle = useCallback((chat: ChatData) => {
     if (chat.last_message) {
-      console.log(`📱 [ChatScreen] Last message for chat ${chat.id}:`, {
-        content: chat.last_message.content,
-        sender_id: chat.last_message.sender_id,
-        created_at: chat.last_message.created_at,
-        currentUserId: user?.id,
-        firebaseUid: user?.firebaseUid
-      });
-      
       const isFromCurrentUser = chat.last_message.sender_id === user?.id || chat.last_message.sender_id === user?.firebaseUid;
       
       // Get message type indicator
@@ -177,7 +167,7 @@ const ChatScreen: React.FC = () => {
     return chat.type === 'group' 
       ? `${chat.participants.length} members`
       : 'No messages yet';
-  };
+  }, [user?.id, user?.firebaseUid]);
 
   const getMediaTypeText = (messageType: string) => {
     switch (messageType) {
@@ -194,7 +184,7 @@ const ChatScreen: React.FC = () => {
     }
   };
 
-  const getChatAvatarInitials = (chat: ChatData) => {
+  const getChatAvatarInitials = useCallback((chat: ChatData) => {
     if (chat.type === 'group') {
       return chat.name?.charAt(0).toUpperCase() || 'G';
     } else {
@@ -204,9 +194,9 @@ const ChatScreen: React.FC = () => {
       const name = otherParticipant?.userDetails?.localName || otherParticipant?.userDetails?.fullName;
       return name?.charAt(0).toUpperCase() || 'U';
     }
-  };
+  }, [user?.id, user?.firebaseUid]);
 
-  const getAvatarColor = (chat: ChatData) => {
+  const getAvatarColor = useCallback((chat: ChatData) => {
     const avatarColors = [
       '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', 
       '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2',
@@ -215,7 +205,7 @@ const ChatScreen: React.FC = () => {
     const title = getChatTitle(chat);
     const index = title.charCodeAt(0) % avatarColors.length;
     return avatarColors[index];
-  };
+  }, [getChatTitle]);
 
   const formatLastMessageTime = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -238,14 +228,10 @@ const ChatScreen: React.FC = () => {
     }
   };
 
-  const renderChatItem = ({ item }: { item: ChatData }) => {
+  const renderChatItem = useCallback(({ item }: { item: ChatData }) => {
     const avatarColor = getAvatarColor(item);
     const hasUnread = item.unread_count && item.unread_count > 0;
     
-    // Debug logging for unread count
-    if (item.unread_count && item.unread_count > 0) {
-      console.log('🔔 Chat item has unread count:', item.id, item.unread_count);
-    }
 
     const chatItemStyle = [
       styles.chatItem,
@@ -269,7 +255,7 @@ const ChatScreen: React.FC = () => {
                     {getChatAvatarInitials(item)}
                   </Text>
                   <View style={styles.groupBadge}>
-                    <Icon name="people" size={moderateScale(10)} color="#FFFFFF" />
+                    <OptimizedIcon name="people" size={moderateScale(10)} color="#FFFFFF" />
                   </View>
                 </View>
               );
@@ -342,12 +328,12 @@ const ChatScreen: React.FC = () => {
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [user, colors, getAvatarColor, getChatAvatarInitials, getChatSubtitle, getChatTitle, handleChatPress]);
 
-  const renderEmptyState = () => (
+  const renderEmptyState = useCallback(() => (
     <View style={styles.emptyContainer}>
       <View style={[styles.emptyIconContainer, { backgroundColor: colors.surface }]}>
-        <Icon name="chatbubbles-outline" size={moderateScale(56)} color={colors.textSecondary} />
+        <OptimizedIcon name="chatbubbles-outline" size={moderateScale(56)} color={colors.textSecondary} />
       </View>
       <Text style={[styles.emptyTitle, { color: colors.text }]}>
         No Chats Yet
@@ -359,11 +345,11 @@ const ChatScreen: React.FC = () => {
         style={[styles.emptyButton, { backgroundColor: colors.accent }]}
         onPress={handleCreateChat}
       >
-        <Icon name="add-circle-outline" size={moderateScale(20)} color="#FFFFFF" />
+        <OptimizedIcon name="add-circle-outline" size={moderateScale(20)} color="#FFFFFF" />
         <Text style={styles.emptyButtonText}>Start Chatting</Text>
       </TouchableOpacity>
     </View>
-  );
+  ), [colors, handleCreateChat]);
 
 
   if (loading && chats.length === 0) {
@@ -388,7 +374,7 @@ const ChatScreen: React.FC = () => {
           style={styles.headerButton}
           onPress={openDrawer}
         >
-          <Icon name="menu-outline" size={moderateScale(24)} color={colors.text} />
+          <OptimizedIcon name="menu-outline" size={moderateScale(24)} color={colors.text} />
         </TouchableOpacity>
         
         <Text style={[styles.headerTitle, { color: colors.text }]}>
@@ -399,7 +385,7 @@ const ChatScreen: React.FC = () => {
           style={styles.headerButton}
           onPress={toggleSearch}
         >
-          <Icon name="search-outline" size={moderateScale(24)} color={colors.text} />
+          <OptimizedIcon name="search-outline" size={moderateScale(24)} color={colors.text} />
         </TouchableOpacity>
       </View>
       
@@ -407,7 +393,7 @@ const ChatScreen: React.FC = () => {
       {isSearchVisible && (
         <View style={[styles.searchContainer, { backgroundColor: colors.surface }]}>
           <View style={[styles.searchInputContainer, { backgroundColor: colors.background }]}>
-            <Icon name="search-outline" size={moderateScale(20)} color={colors.textSecondary} style={styles.searchIcon} />
+            <OptimizedIcon name="search-outline" size={moderateScale(20)} color={colors.textSecondary} style={styles.searchIcon} />
             <TextInput
               style={[styles.searchInput, { color: colors.text }]}
               placeholder="Search chats..."
@@ -419,7 +405,7 @@ const ChatScreen: React.FC = () => {
             />
             {searchText.length > 0 && (
               <TouchableOpacity onPress={() => setSearchText('')} style={styles.clearButton}>
-                <Icon name="close-circle" size={moderateScale(20)} color={colors.textSecondary} />
+                <OptimizedIcon name="close-circle" size={moderateScale(20)} color={colors.textSecondary} />
               </TouchableOpacity>
             )}
           </View>
@@ -441,7 +427,7 @@ const ChatScreen: React.FC = () => {
         onLongPress={handleFabLongPress}
         activeOpacity={0.85}
       >
-        <Icon name="create-outline" size={moderateScale(28)} color="#FFFFFF" />
+        <OptimizedIcon name="create-outline" size={moderateScale(28)} color="#FFFFFF" />
       </TouchableOpacity>
 
       {/* Permission Debugger */}

@@ -228,12 +228,10 @@ const messageSlice = createSlice({
   reducers: {
     setCurrentChatMessages: (state, action: PayloadAction<string>) => {
       const chatId = action.payload;
-      console.log('🔄 Setting current chat messages for:', chatId, 'Messages count:', state.messages[chatId]?.length || 0);
       state.currentChatId = chatId;
       state.currentChatMessages = state.messages[chatId] || [];
     },
     clearCurrentChatMessages: (state) => {
-      console.log('🧹 Clearing current chat messages');
       state.currentChatId = null;
       state.currentChatMessages = [];
     },
@@ -273,11 +271,10 @@ const messageSlice = createSlice({
       // Update current chat messages if this is the current chat
       if (state.currentChatId === chatId) {
         state.currentChatMessages = state.messages[chatId];
-        console.log('🔄 Updated currentChatMessages for current chat:', chatId, 'Message count:', state.messages[chatId].length);
       }
     },
     addMessageAndCreateChat: (state, action: PayloadAction<{ message: MessageData; chat: any }>) => {
-      const { message, chat } = action.payload;
+      const { message } = action.payload;
       const chatId = message.chat_id;
 
       // Add message
@@ -304,7 +301,6 @@ const messageSlice = createSlice({
       // Update current chat messages if this is the current chat
       if (state.currentChatId === chatId) {
         state.currentChatMessages = state.messages[chatId];
-        console.log('🔄 Updated currentChatMessages for current chat:', chatId, 'Message count:', state.messages[chatId].length);
       }
     },
     updateMessage: (state, action: PayloadAction<MessageData>) => {
@@ -329,7 +325,6 @@ const messageSlice = createSlice({
         const index = state.currentChatMessages.findIndex(m => m.id === message.id);
         if (index >= 0) {
           state.currentChatMessages[index] = mappedMessage;
-          console.log('🔄 Updated message in current chat:', chatId, 'Message ID:', message.id);
         }
       }
     },
@@ -343,7 +338,6 @@ const messageSlice = createSlice({
       // Update current chat messages if this is the current chat
       if (state.currentChatId === chatId) {
         state.currentChatMessages = state.currentChatMessages.filter(m => m.id !== messageId);
-        console.log('🔄 Removed message from current chat:', chatId, 'Message ID:', messageId);
       }
     },
     clearChatMessages: (state, action: PayloadAction<string>) => {
@@ -351,7 +345,6 @@ const messageSlice = createSlice({
       state.messages[chatId] = [];
       if (state.currentChatId === chatId) {
         state.currentChatMessages = [];
-        console.log('🔄 Cleared messages for current chat:', chatId);
       }
     },
     addToQueue: (state, action: PayloadAction<MessageQueueItem>) => {
@@ -413,23 +406,16 @@ const messageSlice = createSlice({
       timestamp?: string;
     }>) => {
       const { messageId, chatId, status, userId, timestamp } = action.payload;
-      console.log('📊 [Redux] updateMessageStatus called:', { messageId, chatId, status, userId, timestamp });
-      console.log('📊 [Redux] Available chats:', Object.keys(state.messages));
-      console.log('📊 [Redux] Messages in chat:', state.messages[chatId]?.length || 0);
 
       // Update message in the messages object
       if (state.messages[chatId]) {
         const messageIndex = state.messages[chatId].findIndex(m => m.id === messageId);
-        console.log('📊 [Redux] Message index found:', messageIndex);
 
         if (messageIndex >= 0) {
           const message = state.messages[chatId][messageIndex];
-          console.log('📊 [Redux] Found message:', { id: message.id, currentStatus: message.status });
 
           // Update status
-          const oldStatus = message.status;
           message.status = status;
-          console.log('📊 [Redux] Updated message status:', { messageId, oldStatus, newStatus: status });
 
           // Update read_by or delivered_to arrays
           if (status === 'seen' && userId && timestamp) {
@@ -458,13 +444,6 @@ const messageSlice = createSlice({
             }
           }
 
-          console.log('📊 [Redux] Updated message status:', {
-            messageId,
-            chatId,
-            status,
-            userId,
-            timestamp
-          });
         }
       }
 
@@ -475,9 +454,7 @@ const messageSlice = createSlice({
           const message = state.currentChatMessages[messageIndex];
 
           // Update status
-          const oldCurrentStatus = message.status;
           message.status = status;
-          console.log('📊 [Redux] Updated current chat message status:', { messageId, oldStatus: oldCurrentStatus, newStatus: status });
 
           // Update read_by or delivered_to arrays
           if (status === 'seen' && userId && timestamp) {
@@ -504,13 +481,6 @@ const messageSlice = createSlice({
             }
           }
 
-          console.log('📊 [Redux] Updated current chat message status:', {
-            messageId,
-            chatId,
-            status,
-            userId,
-            timestamp
-          });
         }
       }
     },
@@ -535,9 +505,14 @@ const messageSlice = createSlice({
         const existingMessageIds = new Set(state.messages[chatId].map(m => m.id));
         const newMessages = messages.filter(msg => !existingMessageIds.has(msg.id));
         
-        // Add new messages and sort by created_at
-        state.messages[chatId] = [...state.messages[chatId], ...newMessages]
-          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        // Add new messages and sort by created_at (only if needed)
+        if (newMessages.length > 0) {
+          state.messages[chatId] = [...state.messages[chatId], ...newMessages];
+          // Only sort if we have more than 1 message
+          if (state.messages[chatId].length > 1) {
+            state.messages[chatId].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+          }
+        }
         
         // Update pagination state
         state.pagination[chatId] = {
@@ -548,12 +523,6 @@ const messageSlice = createSlice({
         state.lastFetch[chatId] = Date.now();
         state.error = null;
         
-        console.log(`📱 [Redux] Messages loaded for chat ${chatId}:`, {
-          existingCount: state.messages[chatId].length - newMessages.length,
-          newCount: newMessages.length,
-          totalCount: state.messages[chatId].length,
-          hasMore: pagination.hasMore
-        });
       })
       .addCase(fetchChatMessages.rejected, (state, action) => {
         state.loading = false;
@@ -565,7 +534,7 @@ const messageSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(sendMessage.fulfilled, (state, action) => {
+      .addCase(sendMessage.fulfilled, (state, _action) => {
         state.loading = false;
         state.error = null;
       })
@@ -624,7 +593,7 @@ const messageSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(markMessageAsRead.fulfilled, (state, action) => {
+      .addCase(markMessageAsRead.fulfilled, (state, _action) => {
         state.loading = false;
         state.error = null;
       })
@@ -638,7 +607,7 @@ const messageSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(searchMessages.fulfilled, (state, action) => {
+      .addCase(searchMessages.fulfilled, (state, _action) => {
         state.loading = false;
         state.error = null;
       })
@@ -652,7 +621,7 @@ const messageSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(addReaction.fulfilled, (state, action) => {
+      .addCase(addReaction.fulfilled, (state, _action) => {
         state.loading = false;
         state.error = null;
       })
@@ -666,7 +635,7 @@ const messageSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(removeReaction.fulfilled, (state, action) => {
+      .addCase(removeReaction.fulfilled, (state, _action) => {
         state.loading = false;
         state.error = null;
       })
@@ -680,7 +649,7 @@ const messageSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(pinMessage.fulfilled, (state, action) => {
+      .addCase(pinMessage.fulfilled, (state, _action) => {
         state.loading = false;
         state.error = null;
       })
@@ -694,7 +663,7 @@ const messageSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(unpinMessage.fulfilled, (state, action) => {
+      .addCase(unpinMessage.fulfilled, (state, _action) => {
         state.loading = false;
         state.error = null;
       })
@@ -708,7 +677,7 @@ const messageSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(getPinnedMessages.fulfilled, (state, action) => {
+      .addCase(getPinnedMessages.fulfilled, (state, _action) => {
         state.loading = false;
         state.error = null;
       })

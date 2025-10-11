@@ -53,7 +53,7 @@ class ChatInitializationService {
 
       // Initialize Socket.IO connection
       console.log('🔌 Connecting to Socket.IO...');
-      await socketService.connect();
+      await socketService.initialize('https://api.maharishiconnect.com', token);
 
       // Initialize services
       console.log('📱 Initializing services...');

@@ -1,7 +1,7 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import React from 'react';
 import { Platform, View, StyleSheet } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import OptimizedIcon from '@/components/atoms/ui/OptimizedIcon';
 import { useTheme } from '@/theme';
 import { moderateScale } from '@/theme/responsive';
 import { TabStackParamList } from '@/types/navigation';
@@ -37,7 +37,7 @@ const TabBarIcon = ({ route, color, focused }: { route: any; color: string; focu
   }
 
   return (
-    <Icon 
+    <OptimizedIcon 
       name={iconName} 
       size={moderateScale(focused ? 26 : 24)} 
       color={color} 

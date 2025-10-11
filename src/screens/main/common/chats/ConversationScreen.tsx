@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   FlatList,
@@ -46,6 +46,8 @@ import ChatInput from '@/components/atoms/chats/ChatInput';
 import TypingIndicator from '@/components/atoms/chats/TypingIndicator';
 import CustomSafeAreaView from '@/components/atoms/ui/CustomSafeAreaView';
 import FileMessageBubble from '@/components/FileMessageBubble';
+import PerformanceFlatList from '@/components/atoms/ui/PerformanceFlatList';
+import { logger } from '@/utils/logger';
 
 // Utility function to format date for day separators
 const formatDateForSeparator = (dateString: string): string => {
@@ -787,35 +789,23 @@ const ConversationScreen: React.FC = () => {
   const [mediaViewerFiles, setMediaViewerFiles] = useState<MediaFile[]>([]);
   const [mediaViewerIndex, setMediaViewerIndex] = useState(0);
 
-  // Function to group messages with day separators
-  const groupMessagesWithSeparators = (messages: MessageData[]): GroupedMessageItem[] => {
+  // Function to group messages with day separators - memoized for performance
+  const groupMessagesWithSeparators = useCallback((messages: MessageData[]): GroupedMessageItem[] => {
     if (messages.length === 0) return [];
     
     const groupedItems: GroupedMessageItem[] = [];
     let lastDate = '';
     
-    console.log('📅 Grouping messages:', messages.length, 'messages');
-    
-    messages.forEach((message, _index) => {
+    messages.forEach((message) => {
       const messageDate = new Date(message.created_at);
       // Get local date string in YYYY-MM-DD format
       const currentDate = messageDate.getFullYear() + '-' + 
         String(messageDate.getMonth() + 1).padStart(2, '0') + '-' + 
         String(messageDate.getDate()).padStart(2, '0');
       
-      console.log('📅 Processing message:', {
-        messageId: message.id,
-        created_at: message.created_at,
-        currentDate,
-        lastDate,
-        isNewDay: currentDate !== lastDate,
-        messageDateLocal: messageDate.toLocaleDateString()
-      });
-      
       // Add separator if this is a new day
       if (currentDate !== lastDate) {
         const formattedDate = formatDateForSeparator(message.created_at);
-        console.log('📅 Adding separator:', formattedDate);
         
         groupedItems.push({
           type: 'separator',
@@ -834,12 +824,14 @@ const ConversationScreen: React.FC = () => {
       });
     });
     
-    console.log('📅 Final grouped items:', groupedItems.length, 'items');
     return groupedItems;
-  };
+  }, []);
 
-  // Get grouped messages for rendering
-  const groupedMessages = groupMessagesWithSeparators(currentChatMessages);
+  // Get grouped messages for rendering - memoized for performance
+  const groupedMessages = useMemo(() => 
+    groupMessagesWithSeparators(currentChatMessages), 
+    [groupMessagesWithSeparators, currentChatMessages]
+  );
 
 
   const handleMediaSelected = async (type: string, files: MediaFile[]) => {
@@ -1252,7 +1244,7 @@ const ConversationScreen: React.FC = () => {
                 </Text>
               </View>
             )}
-            <FlatList
+            <PerformanceFlatList
               ref={flatListRef}
               data={groupedMessages}
               keyExtractor={(item, _index) => 
