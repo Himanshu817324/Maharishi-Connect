@@ -282,7 +282,20 @@ class ApiService {
   }
 
   async uploadProfileImage(formData: FormData): Promise<ApiResponse> {
-    return this.makeFormDataRequest("/upload/profile-image", formData);
+    try {
+      // Try the primary endpoint first
+      return await this.makeFormDataRequest("/upload/profile-image", formData);
+    } catch (error) {
+      console.log('🔄 Primary upload endpoint failed, trying alternative...');
+      try {
+        // Try alternative endpoint
+        return await this.makeFormDataRequest("/upload/image", formData);
+      } catch (fallbackError) {
+        console.log('🔄 Alternative upload endpoint also failed, trying cloud upload...');
+        // Try cloud upload as last resort
+        return await this.makeFormDataRequest("/upload/cloud", formData);
+      }
+    }
   }
 
   async uploadImageToCloud(formData: FormData): Promise<ApiResponse> {

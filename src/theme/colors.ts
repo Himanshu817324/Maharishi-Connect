@@ -137,7 +137,7 @@ export const LightColors = {
   ...(Platform.OS === 'android' ? platformColors.android : {}),
   
   // Chat specific
-  chatBubble: BaseColors.primary,
+  chatBubble: "#90EE90", // Light green for my chat bubble color
   chatBubbleOther: BaseColors.gray200,
   chatBubbleText: BaseColors.white,
   chatBubbleTextOther: BaseColors.gray800,

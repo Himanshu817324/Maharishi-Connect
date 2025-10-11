@@ -26,8 +26,8 @@ class OptimizedSocketIO {
   private socket: Socket | null = null;
   private options: SocketIOOptions;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectInterval = 1000; // Faster reconnection for real-time
+  private maxReconnectAttempts = 10; // Increased from 5 to 10
+  private reconnectInterval = 2000; // Increased from 1000 to 2000 for better stability
   private reconnectTimer: NodeJS.Timeout | null = null;
   private messageQueue: Array<{ event: string; data: any; timestamp: number }> = [];
 
@@ -40,10 +40,10 @@ class OptimizedSocketIO {
         timeout: 10000, // Faster timeout for real-time delivery
         forceNew: false, // Don't force new connections unnecessarily
         reconnection: true, // Enable automatic reconnection
-        reconnectionAttempts: 5, // Reasonable reconnection attempts
-        reconnectionDelay: 1000, // Very fast reconnection
-        reconnectionDelayMax: 5000, // Max delay between attempts
-        maxReconnectionAttempts: 5,
+        reconnectionAttempts: 10, // Increased from 5 to 10
+        reconnectionDelay: 2000, // Increased from 1000 to 2000
+        reconnectionDelayMax: 10000, // Increased from 5000 to 10000
+        maxReconnectionAttempts: 10,
         // Optimize for real-time performance
         pingTimeout: 60000,
         pingInterval: 25000,
@@ -154,12 +154,17 @@ class OptimizedSocketIO {
 
   private handleReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      logger.error('Max reconnection attempts reached');
+      logger.error('Max reconnection attempts reached. Resetting attempts and trying again...');
+      // Reset attempts and try again after a longer delay
+      this.reconnectAttempts = 0;
+      setTimeout(() => {
+        this.handleReconnect();
+      }, 30000); // Wait 30 seconds before trying again
       return;
     }
 
     this.reconnectAttempts++;
-    const delay = Math.min(this.reconnectInterval * this.reconnectAttempts, 5000); // Max 5 seconds for real-time
+    const delay = Math.min(this.reconnectInterval * this.reconnectAttempts, 10000); // Max 10 seconds
     
     this.reconnectTimer = setTimeout(() => {
       logger.info(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);

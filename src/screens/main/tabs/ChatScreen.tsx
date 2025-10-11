@@ -456,7 +456,7 @@ const ChatScreen: React.FC = () => {
       
       {/* Search Bar */}
       {isSearchVisible && (
-        <View style={[styles.searchContainer, { backgroundColor: colors.surface }]}>
+        <View style={[styles.searchContainer, { backgroundColor: colors.background }]}>
           <View style={[styles.searchInputContainer, { backgroundColor: colors.background }]}>
             <OptimizedIcon name="search-outline" size={moderateScale(20)} color={colors.textSecondary} style={styles.searchIcon} />
             <TextInput
