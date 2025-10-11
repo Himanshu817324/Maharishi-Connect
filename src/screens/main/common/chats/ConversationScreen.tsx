@@ -31,6 +31,7 @@ import {
   setLoadingOlderMessages,
   updateMessage,
   updateMessageStatus,
+  removeMessage,
 } from '@/store/slices/messageSlice';
 import { socketService } from '@/services/socketService';
 import { MessageData } from '@/services/chatService';
@@ -222,17 +223,79 @@ const ConversationScreen: React.FC = () => {
     // Listener for incoming messages from other users
     const removeMessageListener = socketService.addMessageListener(
       (message: MessageData) => {
+        console.log('📨 [ConversationScreen] Socket message received:', {
+          messageId: message.id,
+          chatId: message.chat_id,
+          senderId: message.sender_id,
+          currentUserId: user?.id || user?.firebaseUid,
+          content: message.content,
+        });
+        
         if (message.chat_id === chat?.id) {
           console.log(
             '📨 [ConversationScreen] Incoming message received:',
             message.id,
           );
-          // Ensure incoming messages have 'sent' status
-          const messageWithStatus = {
-            ...message,
-            status: 'sent' as const,
-          };
-          dispatch(addMessage(messageWithStatus));
+          
+          // Check if this is a message we sent (replace optimistic message)
+          const isFromCurrentUser = message.sender_id === user?.id || message.sender_id === user?.firebaseUid;
+          console.log('🔍 Is from current user:', isFromCurrentUser);
+          
+          if (isFromCurrentUser) {
+            // This is our message coming back from server
+            console.log('🔄 Socket message received from current user:', message.id);
+            
+            // Check if we already have this message (from REST API)
+            const currentMessages = currentChatMessagesRef.current;
+            const existingMessage = currentMessages.find(m => 
+              m.id === message.id || 
+              (m.content === message.content && 
+               m.sender_id === message.sender_id &&
+               Math.abs(new Date(m.created_at).getTime() - new Date(message.created_at).getTime()) < 2000) // Within 2 seconds
+            );
+            
+            if (existingMessage) {
+              console.log('🔄 Message already exists, updating status:', existingMessage.id);
+              // Just update the status if needed
+              if (existingMessage.status === 'sending') {
+                dispatch(updateMessage({
+                  ...existingMessage,
+                  status: 'sent',
+                }));
+              }
+            } else {
+              // Find optimistic message to replace
+              const optimisticMessage = currentMessages.find(m => 
+                m.content === message.content && 
+                m.sender_id === message.sender_id &&
+                m.id.startsWith('temp_') &&
+                Math.abs(new Date(m.created_at).getTime() - new Date(message.created_at).getTime()) < 5000 // Within 5 seconds
+              );
+              
+              if (optimisticMessage) {
+                console.log('🔄 Replacing optimistic message with socket message:', optimisticMessage.id);
+                dispatch(removeMessage({ messageId: optimisticMessage.id, chatId: message.chat_id }));
+                dispatch(addMessage({
+                  ...message,
+                  status: 'sent' as const,
+                }));
+              } else {
+                console.log('🔄 Adding new socket message:', message.id);
+                dispatch(addMessage({
+                  ...message,
+                  status: 'sent' as const,
+                }));
+              }
+            }
+          } else {
+            // This is a message from another user - add it normally
+            console.log('🔄 Adding message from other user:', message.id);
+            const messageWithStatus = {
+              ...message,
+              status: 'sent' as const,
+            };
+            dispatch(addMessage(messageWithStatus));
+          }
 
           // Mark message as delivered when received
           try {
@@ -449,7 +512,7 @@ const ConversationScreen: React.FC = () => {
       // Note: Some socket listeners don't return cleanup functions
       // They will be cleaned up when the component unmounts
     };
-  }, [chat?.id, dispatch]);
+  }, [chat?.id, dispatch, user?.id, user?.firebaseUid]);
 
   const joinChatRoom = useCallback(() => {
     if (chat && socketService.isSocketConnected()) {
@@ -616,9 +679,113 @@ const ConversationScreen: React.FC = () => {
       });
 
       if (isConnected) {
-        messageService.sendMessageImmediate(chat.id, content, messageType, {
-          replyToMessageId: replyToMessage?.id,
-        });
+        console.log('🔌 Socket is connected, sending via socket');
+        // Create optimistic message for immediate display
+        const optimisticMessage: MessageData = {
+          id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          chat_id: chat.id,
+          sender_id: user?.id || user?.firebaseUid || '',
+          content,
+          message_type: messageType,
+          created_at: new Date().toISOString(),
+          sender: {
+            user_id: user?.id || user?.firebaseUid || '',
+            fullName: user?.fullName || user?.name || 'You',
+            profilePicture: user?.avatar,
+          },
+          status: 'sending',
+          reply_to_message_id: replyToMessage?.id,
+        };
+
+        // Add optimistic message to Redux store immediately
+        console.log('🔄 Adding optimistic message to Redux store:', optimisticMessage.id);
+        dispatch(addMessage(optimisticMessage));
+
+        // Update the chat's last message optimistically
+        dispatch(
+          updateChatLastMessage({
+            chatId: chat.id,
+            lastMessage: {
+              id: optimisticMessage.id,
+              content: optimisticMessage.content,
+              sender_id: optimisticMessage.sender_id,
+              created_at: optimisticMessage.created_at,
+            },
+          }),
+        );
+
+        // Send via socket for real-time delivery
+        try {
+          messageService.sendMessageImmediate(chat.id, content, messageType, {
+            replyToMessageId: replyToMessage?.id,
+          });
+          console.log('📤 Message sent via socket successfully');
+        } catch (error) {
+          console.error('❌ Error sending via socket:', error);
+        }
+
+        // ALWAYS send via REST API for persistence (dual-send approach)
+        console.log('💾 Sending message via REST API for persistence');
+        try {
+          const response = await chatService.sendMessage(chat.id, {
+            content,
+            messageType,
+            replyToMessageId: replyToMessage?.id,
+          });
+
+          if (response && response.data) {
+            console.log('💾 Message persisted to server:', response.data.id);
+            
+            // Check if we already have this message (from socket)
+            const currentMessages = currentChatMessagesRef.current;
+            const existingMessage = currentMessages.find(m => 
+              m.id === response.data.id || 
+              (m.content === response.data.content && 
+               m.sender_id === response.data.sender_id &&
+               Math.abs(new Date(m.created_at).getTime() - new Date(response.data.created_at).getTime()) < 2000) // Within 2 seconds
+            );
+            
+            if (existingMessage) {
+              console.log('🔄 Message already exists from socket, updating status:', existingMessage.id);
+              // Just update the status if needed
+              if (existingMessage.status === 'sending') {
+                dispatch(updateMessage({
+                  ...existingMessage,
+                  status: 'sent',
+                }));
+              }
+            } else {
+              // Remove optimistic message and add real one from server
+              dispatch(removeMessage({ messageId: optimisticMessage.id, chatId: chat.id }));
+              dispatch(addMessage({
+                ...response.data,
+                status: 'sent' as const,
+              }));
+            }
+
+            // Update the chat's last message with server data
+            dispatch(
+              updateChatLastMessage({
+                chatId: response.data.chat_id,
+                lastMessage: {
+                  id: response.data.id,
+                  content: response.data.content,
+                  sender_id: response.data.sender_id,
+                  created_at: response.data.created_at,
+                },
+              }),
+            );
+            
+            console.log('✅ Message successfully persisted and updated');
+          }
+        } catch (restError) {
+          console.error('❌ REST API persistence failed:', restError);
+          // Update optimistic message to failed status
+          dispatch(updateMessage({
+            ...optimisticMessage,
+            status: 'failed',
+          }));
+        }
       } else {
         console.log('📤 Sending message via REST API (socket not connected)');
         try {

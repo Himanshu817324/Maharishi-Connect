@@ -512,8 +512,8 @@ const createStyles = (screenInfo?: ChatInputProps['screenInfo']) => StyleSheet.c
     minHeight: Platform.OS === 'android' 
       ? (screenInfo?.isSmall ? hp(4) : screenInfo?.isTablet ? hp(5.5) : hp(4.5)) 
       : hp(5), // ✅ FIX: Screen-aware Android min height
-    justifyContent: 'center', // Center content vertically
-    alignItems: 'center', // ✅ FIX: Better centering for Android
+    justifyContent: 'flex-start', // Start from top instead of center
+    alignItems: 'stretch', // Stretch to full width instead of center
   },
   textInput: {
     fontSize: screenInfo?.isSmall ? responsiveFont(15) : responsiveFont(16), // ✅ FIX: Screen-aware font size
@@ -523,11 +523,12 @@ const createStyles = (screenInfo?: ChatInputProps['screenInfo']) => StyleSheet.c
     minHeight: Platform.OS === 'android' 
       ? (screenInfo?.isSmall ? hp(2) : screenInfo?.isTablet ? hp(3.5) : hp(2.5)) 
       : hp(3), // ✅ FIX: Screen-aware Android min height
-    textAlignVertical: 'center', // Center text vertically on Android
-    paddingVertical: 0, // Remove default padding to allow proper centering
+    textAlignVertical: 'top', // Start text from top instead of center
+    paddingVertical: 0, // Remove default padding to allow proper alignment
     // ✅ FIX: Better Android text input styling
     includeFontPadding: false, // Remove extra padding on Android
-    textAlign: 'left',
+    textAlign: 'left', // Ensure text starts from left
+    flex: 1, // Take full width of container
   },
   sendButton: {
     width: moderateScale(40),
