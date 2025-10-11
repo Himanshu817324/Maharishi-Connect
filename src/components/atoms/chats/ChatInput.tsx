@@ -32,6 +32,14 @@ interface ChatInputProps {
   isKeyboardVisible?: boolean;
   onStartTyping?: () => void;
   onStopTyping?: () => void;
+  screenInfo?: {
+    width: number;
+    height: number;
+    isSmall: boolean;
+    isMedium: boolean;
+    isLarge: boolean;
+    isTablet: boolean;
+  };
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
@@ -45,12 +53,16 @@ const ChatInput: React.FC<ChatInputProps> = ({
   isKeyboardVisible = false,
   onStartTyping,
   onStopTyping,
+  screenInfo,
 }) => {
   const { colors } = useTheme();
   const [message, setMessage] = useState('');
   const [showMediaMenu, setShowMediaMenu] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // ✅ FIX: Create dynamic styles based on screen info
+  const styles = createStyles(screenInfo);
 
   const handleSend = () => {
     if (message.trim()) {
@@ -429,12 +441,17 @@ const ChatInput: React.FC<ChatInputProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (screenInfo?: ChatInputProps['screenInfo']) => StyleSheet.create({
   container: {
     borderTopWidth: 1,
-    minHeight: hp(8), // Ensure minimum height
+    minHeight: screenInfo?.isSmall ? hp(7) : screenInfo?.isTablet ? hp(9) : hp(8), // ✅ FIX: Screen-aware height
     backgroundColor: 'transparent', // Ensure background is transparent
-    paddingBottom: hp(2), // Consistent bottom padding
+    paddingBottom: Platform.OS === 'android' 
+      ? (screenInfo?.isSmall ? hp(1) : screenInfo?.isTablet ? hp(2) : hp(1.5)) 
+      : hp(2), // ✅ FIX: Screen-aware Android padding
+    // ✅ FIX: Ensure proper positioning on Android
+    position: 'relative',
+    zIndex: 1000,
   },
   replyContainer: {
     flexDirection: 'row',
@@ -460,9 +477,15 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center', // Center all items vertically
-    paddingHorizontal: wp(4),
-    paddingVertical: hp(1.5), // Add vertical padding for better centering
-    minHeight: hp(8), // Increase minimum height for better centering
+    paddingHorizontal: screenInfo?.isSmall ? wp(3) : wp(4), // ✅ FIX: Screen-aware horizontal padding
+    paddingVertical: Platform.OS === 'android' 
+      ? (screenInfo?.isSmall ? hp(1) : screenInfo?.isTablet ? hp(1.5) : hp(1.2)) 
+      : hp(1.5), // ✅ FIX: Screen-aware Android padding
+    minHeight: Platform.OS === 'android' 
+      ? (screenInfo?.isSmall ? hp(6) : screenInfo?.isTablet ? hp(8) : hp(7)) 
+      : hp(8), // ✅ FIX: Screen-aware Android height
+    // ✅ FIX: Ensure proper alignment on Android
+    justifyContent: 'space-between',
   },
   mediaButton: {
     width: moderateScale(40),
@@ -479,18 +502,32 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 1,
     borderRadius: moderateScale(20),
-    paddingHorizontal: wp(3),
-    paddingVertical: hp(1.2), // Increase vertical padding for better centering
-    maxHeight: hp(12), // Use responsive height
-    minHeight: hp(5), // Increase minimum height for better centering
+    paddingHorizontal: screenInfo?.isSmall ? wp(2.5) : wp(3), // ✅ FIX: Screen-aware horizontal padding
+    paddingVertical: Platform.OS === 'android' 
+      ? (screenInfo?.isSmall ? hp(0.8) : screenInfo?.isTablet ? hp(1.2) : hp(1)) 
+      : hp(1.2), // ✅ FIX: Screen-aware Android padding
+    maxHeight: Platform.OS === 'android' 
+      ? (screenInfo?.isSmall ? hp(8) : screenInfo?.isTablet ? hp(12) : hp(10)) 
+      : hp(12), // ✅ FIX: Screen-aware Android max height
+    minHeight: Platform.OS === 'android' 
+      ? (screenInfo?.isSmall ? hp(4) : screenInfo?.isTablet ? hp(5.5) : hp(4.5)) 
+      : hp(5), // ✅ FIX: Screen-aware Android min height
     justifyContent: 'center', // Center content vertically
+    alignItems: 'center', // ✅ FIX: Better centering for Android
   },
   textInput: {
-    fontSize: responsiveFont(16),
-    lineHeight: responsiveFont(22), // Increase line height for better centering
-    minHeight: hp(3), // Increase minimum height for better centering
+    fontSize: screenInfo?.isSmall ? responsiveFont(15) : responsiveFont(16), // ✅ FIX: Screen-aware font size
+    lineHeight: Platform.OS === 'android' 
+      ? (screenInfo?.isSmall ? responsiveFont(18) : screenInfo?.isTablet ? responsiveFont(22) : responsiveFont(20)) 
+      : responsiveFont(22), // ✅ FIX: Screen-aware Android line height
+    minHeight: Platform.OS === 'android' 
+      ? (screenInfo?.isSmall ? hp(2) : screenInfo?.isTablet ? hp(3.5) : hp(2.5)) 
+      : hp(3), // ✅ FIX: Screen-aware Android min height
     textAlignVertical: 'center', // Center text vertically on Android
     paddingVertical: 0, // Remove default padding to allow proper centering
+    // ✅ FIX: Better Android text input styling
+    includeFontPadding: false, // Remove extra padding on Android
+    textAlign: 'left',
   },
   sendButton: {
     width: moderateScale(40),

@@ -7,7 +7,6 @@ import {
   Platform,
   Alert,
   Text,
-  Keyboard,
   LayoutAnimation,
 } from 'react-native';
 import {
@@ -34,7 +33,8 @@ import {
   updateMessage,
   updateMessageStatus,
 } from '@/store/slices/messageSlice';
-import { socketService, MessageData } from '@/services/socketService';
+import { socketService } from '@/services/socketService';
+import { MessageData } from '@/services/socketService';
 import { messageService } from '@/services/messageService';
 import { chatService } from '@/services/chatService';
 import { ChatData } from '@/services/chatService';
@@ -47,7 +47,8 @@ import TypingIndicator from '@/components/atoms/chats/TypingIndicator';
 import CustomSafeAreaView from '@/components/atoms/ui/CustomSafeAreaView';
 import FileMessageBubble from '@/components/FileMessageBubble';
 import PerformanceFlatList from '@/components/atoms/ui/PerformanceFlatList';
-import { logger } from '@/utils/logger';
+// import { logger } from '@/utils/logger';
+import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
 
 // Utility function to format date for day separators
 const formatDateForSeparator = (dateString: string): string => {
@@ -133,8 +134,8 @@ const ConversationScreen: React.FC = () => {
     sender: string;
   } | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  // ✅ FIX: Use enhanced keyboard hook with dynamic calculations
+  const { keyboardHeight, isKeyboardVisible, adjustedKeyboardHeight, screenInfo } = useKeyboardHeight();
 
   // Typing indicators
   const [localTypingUsers, setLocalTypingUsers] = useState<
@@ -535,37 +536,66 @@ const ConversationScreen: React.FC = () => {
     setupSocketListeners,
   ]);
 
-  // Keyboard event listeners with smooth animations
+  // ✅ FIX: Enhanced keyboard animation handling with screen-aware adjustments
   useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      e => {
-        setKeyboardHeight(e.endCoordinates.height);
-        setIsKeyboardVisible(true);
-        // Smooth animation for keyboard appearance
+    if (isKeyboardVisible) {
+      // ✅ FIX: Screen-aware animation duration and type
+      const animationDuration = screenInfo.isSmall ? 200 : screenInfo.isTablet ? 300 : 250;
+      
+      if (Platform.OS === 'android') {
+        LayoutAnimation.configureNext({
+          duration: animationDuration,
+          create: { 
+            type: 'easeInEaseOut', 
+            property: 'opacity',
+            springDamping: screenInfo.isSmall ? 0.8 : 0.9,
+          },
+          update: { 
+            type: 'easeInEaseOut',
+            springDamping: screenInfo.isSmall ? 0.8 : 0.9,
+          },
+          delete: { 
+            type: 'easeInEaseOut', 
+            property: 'opacity',
+            springDamping: screenInfo.isSmall ? 0.8 : 0.9,
+          },
+        });
+      } else {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        // Scroll to bottom when keyboard appears
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
-      },
-    );
-
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-        setIsKeyboardVisible(false);
-        // Smooth animation for keyboard disappearance
+      }
+      
+      // ✅ FIX: Screen-aware scroll timing
+      const scrollDelay = screenInfo.isSmall ? 100 : screenInfo.isTablet ? 200 : 150;
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, Platform.OS === 'android' ? scrollDelay : 100);
+    } else {
+      // ✅ FIX: Screen-aware animation for keyboard hide
+      const animationDuration = screenInfo.isSmall ? 200 : screenInfo.isTablet ? 300 : 250;
+      
+      if (Platform.OS === 'android') {
+        LayoutAnimation.configureNext({
+          duration: animationDuration,
+          create: { 
+            type: 'easeInEaseOut', 
+            property: 'opacity',
+            springDamping: screenInfo.isSmall ? 0.8 : 0.9,
+          },
+          update: { 
+            type: 'easeInEaseOut',
+            springDamping: screenInfo.isSmall ? 0.8 : 0.9,
+          },
+          delete: { 
+            type: 'easeInEaseOut', 
+            property: 'opacity',
+            springDamping: screenInfo.isSmall ? 0.8 : 0.9,
+          },
+        });
+      } else {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      },
-    );
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
-  }, []);
+      }
+    }
+  }, [isKeyboardVisible, screenInfo]);
 
   const scrollToBottom = () => {
     setTimeout(() => {
@@ -1272,7 +1302,10 @@ const ConversationScreen: React.FC = () => {
           <View
             style={[
               styles.inputContainer,
-              Platform.OS === 'android' && { marginBottom: keyboardHeight },
+              Platform.OS === 'android' && { 
+                marginBottom: adjustedKeyboardHeight,
+                paddingBottom: adjustedKeyboardHeight > 0 ? 10 : 0,
+              },
             ]}
           >
             <ChatInput
@@ -1285,6 +1318,7 @@ const ConversationScreen: React.FC = () => {
               isKeyboardVisible={isKeyboardVisible}
               onStartTyping={handleStartTyping}
               onStopTyping={handleStopTyping}
+              screenInfo={screenInfo}
             />
           </View>
         </View>
@@ -1331,7 +1365,13 @@ const styles = StyleSheet.create({
     paddingBottom: hp(2),
   },
   inputContainer: {
-    // Additional styling as needed (padding, border, etc.)
+    // ✅ FIX: Better input container styling for Android
+    backgroundColor: 'transparent',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    // Ensure proper positioning
+    position: 'relative',
+    zIndex: 1000,
   },
   centerContainer: {
     justifyContent: 'center',
