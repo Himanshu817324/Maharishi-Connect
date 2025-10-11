@@ -7,11 +7,18 @@ import ConversationScreen from '../../screens/main/common/chats/ConversationScre
 import FilteredContactsScreen from '../../screens/main/common/chats/FilteredContactsScreen';
 import SideDrawer from '../../components/SideDrawer';
 import { DrawerProvider, useDrawer } from '../../contexts/DrawerContext';
+import { FilterProvider, useFilter } from '../../contexts/FilterContext';
 
 const Stack = createStackNavigator();
 
 const MainStackContent: React.FC = () => {
   const { isDrawerVisible, closeDrawer } = useDrawer();
+  const { activeFilter, setActiveFilter } = useFilter();
+
+  const handleCameraPress = () => {
+    // Handle camera press - you can add navigation or other logic here
+    console.log('Camera pressed from drawer');
+  };
 
   return (
     <>
@@ -27,6 +34,9 @@ const MainStackContent: React.FC = () => {
       <SideDrawer
         visible={isDrawerVisible}
         onClose={closeDrawer}
+        activeFilter={activeFilter}
+        onFilterChange={setActiveFilter}
+        onCameraPress={handleCameraPress}
       />
     </>
   );
@@ -35,7 +45,9 @@ const MainStackContent: React.FC = () => {
 export default function MainStack() {
   return (
     <DrawerProvider>
-      <MainStackContent />
+      <FilterProvider>
+        <MainStackContent />
+      </FilterProvider>
     </DrawerProvider>
   );
 }

@@ -9,6 +9,7 @@ import {
   Image,
   TextInput,
   TouchableWithoutFeedback,
+  ScrollView,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
@@ -22,6 +23,7 @@ import { ChatData } from '@/services/chatService';
 import PermissionDebugger from '@/components/PermissionDebugger';
 import SimplePermissionTest from '@/components/SimplePermissionTest';
 import { useDrawer } from '@/contexts/DrawerContext';
+import { useFilter } from '@/contexts/FilterContext';
 
 const ChatScreen: React.FC = () => {
   const { colors } = useTheme();
@@ -35,6 +37,7 @@ const ChatScreen: React.FC = () => {
   const [isSimpleTestVisible, setIsSimpleTestVisible] = useState(false);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [searchText, setSearchText] = useState('');
+  const { activeFilter, setActiveFilter } = useFilter();
 
   const getChatTitle = useCallback((chat: ChatData) => {
     if (chat.type === 'group') {
@@ -50,18 +53,51 @@ const ChatScreen: React.FC = () => {
     }
   }, [user?.id, user?.firebaseUid]);
 
-  // Filter chats based on search text - memoized for performance
+  // Filter chats based on active filter and search text - memoized for performance
   const filteredChats = useMemo(() => {
-    if (!searchText.trim()) return chats;
+    let filtered = chats;
     
-    const searchLower = searchText.toLowerCase();
-    return chats.filter(chat => {
-      const chatTitle = getChatTitle(chat).toLowerCase();
-      const lastMessage = chat.last_message?.content?.toLowerCase() || '';
-      
-      return chatTitle.includes(searchLower) || lastMessage.includes(searchLower);
-    });
-  }, [chats, searchText, getChatTitle]);
+    // Apply filter based on active filter
+    switch (activeFilter) {
+      case 'direct':
+        filtered = chats.filter(chat => chat.type === 'direct');
+        break;
+      case 'groups':
+        filtered = chats.filter(chat => chat.type === 'group');
+        break;
+      case 'unread':
+        filtered = chats.filter(chat => chat.unread_count && chat.unread_count > 0);
+        break;
+      case 'archived':
+        // For now, we'll show chats that haven't been active recently
+        // In a real app, you'd have an archived field
+        filtered = chats.filter(chat => {
+          if (!chat.last_message) return true;
+          const lastMessageTime = new Date(chat.last_message.created_at);
+          const weekAgo = new Date();
+          weekAgo.setDate(weekAgo.getDate() - 7);
+          return lastMessageTime < weekAgo;
+        });
+        break;
+      case 'all':
+      default:
+        filtered = chats;
+        break;
+    }
+    
+    // Apply search filter if search text exists
+    if (searchText.trim()) {
+      const searchLower = searchText.toLowerCase();
+      filtered = filtered.filter(chat => {
+        const chatTitle = getChatTitle(chat).toLowerCase();
+        const lastMessage = chat.last_message?.content?.toLowerCase() || '';
+        
+        return chatTitle.includes(searchLower) || lastMessage.includes(searchLower);
+      });
+    }
+    
+    return filtered;
+  }, [chats, activeFilter, searchText, getChatTitle]);
 
   const toggleSearch = useCallback(() => {
     setIsSearchVisible(!isSearchVisible);
@@ -330,26 +366,67 @@ const ChatScreen: React.FC = () => {
     );
   }, [user, colors, getAvatarColor, getChatAvatarInitials, getChatSubtitle, getChatTitle, handleChatPress]);
 
-  const renderEmptyState = useCallback(() => (
-    <View style={styles.emptyContainer}>
-      <View style={[styles.emptyIconContainer, { backgroundColor: colors.surface }]}>
-        <OptimizedIcon name="chatbubbles-outline" size={moderateScale(56)} color={colors.textSecondary} />
+  const renderEmptyState = useCallback(() => {
+    const getEmptyStateContent = () => {
+      switch (activeFilter) {
+        case 'direct':
+          return {
+            icon: 'person-outline',
+            title: 'No Direct Messages',
+            subtitle: 'Start a conversation with someone',
+          };
+        case 'groups':
+          return {
+            icon: 'people-outline',
+            title: 'No Group Chats',
+            subtitle: 'Create or join a group chat',
+          };
+        case 'unread':
+          return {
+            icon: 'mail-unread-outline',
+            title: 'No Unread Messages',
+            subtitle: 'All caught up! No new messages',
+          };
+        case 'archived':
+          return {
+            icon: 'archive-outline',
+            title: 'No Archived Chats',
+            subtitle: 'Chats older than a week will appear here',
+          };
+        default:
+          return {
+            icon: 'chatbubbles-outline',
+            title: 'No Chats Yet',
+            subtitle: 'Start a conversation by creating a new chat',
+          };
+      }
+    };
+
+    const emptyContent = getEmptyStateContent();
+
+    return (
+      <View style={styles.emptyContainer}>
+        <View style={[styles.emptyIconContainer, { backgroundColor: colors.surface }]}>
+          <OptimizedIcon name={emptyContent.icon} size={moderateScale(56)} color={colors.textSecondary} />
+        </View>
+        <Text style={[styles.emptyTitle, { color: colors.text }]}>
+          {emptyContent.title}
+        </Text>
+        <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+          {emptyContent.subtitle}
+        </Text>
+        {activeFilter !== 'unread' && activeFilter !== 'archived' && (
+          <TouchableOpacity
+            style={[styles.emptyButton, { backgroundColor: colors.accent }]}
+            onPress={handleCreateChat}
+          >
+            <OptimizedIcon name="add-circle-outline" size={moderateScale(20)} color="#FFFFFF" />
+            <Text style={styles.emptyButtonText}>Start Chatting</Text>
+          </TouchableOpacity>
+        )}
       </View>
-      <Text style={[styles.emptyTitle, { color: colors.text }]}>
-        No Chats Yet
-      </Text>
-      <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-        Start a conversation by creating a new chat
-      </Text>
-      <TouchableOpacity
-        style={[styles.emptyButton, { backgroundColor: colors.accent }]}
-        onPress={handleCreateChat}
-      >
-        <OptimizedIcon name="add-circle-outline" size={moderateScale(20)} color="#FFFFFF" />
-        <Text style={styles.emptyButtonText}>Start Chatting</Text>
-      </TouchableOpacity>
-    </View>
-  ), [colors, handleCreateChat]);
+    );
+  }, [colors, handleCreateChat, activeFilter]);
 
 
   if (loading && chats.length === 0) {
@@ -411,6 +488,135 @@ const ChatScreen: React.FC = () => {
           </View>
         </View>
       )}
+      
+      {/* Filter Buttons */}
+      <View style={[styles.filterContainer, { backgroundColor: colors.background }]}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterScrollContent}
+        >
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              { 
+                backgroundColor: activeFilter === 'all' ? colors.accent : colors.surface,
+                borderColor: activeFilter === 'all' ? colors.accent : colors.border,
+              }
+            ]}
+            onPress={() => setActiveFilter('all')}
+            activeOpacity={0.7}
+          >
+            <OptimizedIcon 
+              name="chatbubbles-outline" 
+              size={moderateScale(16)} 
+              color={activeFilter === 'all' ? '#FFFFFF' : colors.textSecondary} 
+            />
+            <Text style={[
+              styles.filterButtonText,
+              { color: activeFilter === 'all' ? '#FFFFFF' : colors.text }
+            ]}>
+              All
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              { 
+                backgroundColor: activeFilter === 'direct' ? colors.accent : colors.surface,
+                borderColor: activeFilter === 'direct' ? colors.accent : colors.border,
+              }
+            ]}
+            onPress={() => setActiveFilter('direct')}
+            activeOpacity={0.7}
+          >
+            <OptimizedIcon 
+              name="person-outline" 
+              size={moderateScale(16)} 
+              color={activeFilter === 'direct' ? '#FFFFFF' : colors.textSecondary} 
+            />
+            <Text style={[
+              styles.filterButtonText,
+              { color: activeFilter === 'direct' ? '#FFFFFF' : colors.text }
+            ]}>
+              Direct
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              { 
+                backgroundColor: activeFilter === 'groups' ? colors.accent : colors.surface,
+                borderColor: activeFilter === 'groups' ? colors.accent : colors.border,
+              }
+            ]}
+            onPress={() => setActiveFilter('groups')}
+            activeOpacity={0.7}
+          >
+            <OptimizedIcon 
+              name="people-outline" 
+              size={moderateScale(16)} 
+              color={activeFilter === 'groups' ? '#FFFFFF' : colors.textSecondary} 
+            />
+            <Text style={[
+              styles.filterButtonText,
+              { color: activeFilter === 'groups' ? '#FFFFFF' : colors.text }
+            ]}>
+              Groups
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              { 
+                backgroundColor: activeFilter === 'unread' ? colors.accent : colors.surface,
+                borderColor: activeFilter === 'unread' ? colors.accent : colors.border,
+              }
+            ]}
+            onPress={() => setActiveFilter('unread')}
+            activeOpacity={0.7}
+          >
+            <OptimizedIcon 
+              name="mail-unread-outline" 
+              size={moderateScale(16)} 
+              color={activeFilter === 'unread' ? '#FFFFFF' : colors.textSecondary} 
+            />
+            <Text style={[
+              styles.filterButtonText,
+              { color: activeFilter === 'unread' ? '#FFFFFF' : colors.text }
+            ]}>
+              Unread
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              { 
+                backgroundColor: activeFilter === 'archived' ? colors.accent : colors.surface,
+                borderColor: activeFilter === 'archived' ? colors.accent : colors.border,
+              }
+            ]}
+            onPress={() => setActiveFilter('archived')}
+            activeOpacity={0.7}
+          >
+            <OptimizedIcon 
+              name="archive-outline" 
+              size={moderateScale(16)} 
+              color={activeFilter === 'archived' ? '#FFFFFF' : colors.textSecondary} 
+            />
+            <Text style={[
+              styles.filterButtonText,
+              { color: activeFilter === 'archived' ? '#FFFFFF' : colors.text }
+            ]}>
+              Archived
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
       
       <FlatList
         data={filteredChats}
@@ -505,6 +711,32 @@ const styles = StyleSheet.create({
   clearButton: {
     marginLeft: wp(2),
     padding: wp(1),
+  },
+  filterContainer: {
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  filterScrollContent: {
+    paddingHorizontal: wp(1),
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: wp(3),
+    paddingVertical: hp(1),
+    marginHorizontal: wp(1),
+    borderRadius: moderateScale(20),
+    borderWidth: 1,
+    minWidth: moderateScale(80),
+    justifyContent: 'center',
+  },
+  filterButtonText: {
+    fontSize: responsiveFont(14),
+    fontWeight: '600',
+    marginLeft: wp(1.5),
+    letterSpacing: 0.2,
   },
   centerContainer: {
     justifyContent: 'center',
