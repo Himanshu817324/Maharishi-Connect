@@ -592,6 +592,14 @@ class ContactService {
         console.log('📱 Using cached contacts data');
         return this.contactsCache.data;
       }
+      
+      // If cache exists but is empty, log it for debugging
+      if (this.contactsCache && 
+          Date.now() - this.contactsCache.timestamp < this.CACHE_DURATION &&
+          this.contactsCache.data.existingUsers.length === 0 && 
+          this.contactsCache.data.nonUsers.length === 0) {
+        console.log('📱 Cache exists but is empty, will fetch fresh data');
+      }
       // First get all device contacts
       const deviceContacts = await permissionManager.syncContactsWithBackend();
 

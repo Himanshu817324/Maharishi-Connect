@@ -80,6 +80,7 @@ const FilteredContactsScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const [hasData, setHasData] = useState(false);
+  const [isDataReady, setIsDataReady] = useState(false);
 
   // Get user IDs for status monitoring
   const userIds = useMemo(() => {
@@ -124,12 +125,16 @@ const FilteredContactsScreen: React.FC = () => {
 
   // Make UI interactive as soon as contacts are available
   const isLoading = loading || permissionLoading;
+  
+  // ✅ FIX: More robust loading state that prevents any blinking
+  const shouldShowLoading = isLoading || !isDataReady;
 
   const loadContacts = useCallback(async () => {
     try {
       setLoading(true);
       setInitialLoadComplete(false);
       setHasData(false);
+      setIsDataReady(false);
       setLoadingPhase('Checking permissions...');
 
       if (!hasPermission && !permissionRequested) {
@@ -180,14 +185,33 @@ const FilteredContactsScreen: React.FC = () => {
       const hasActualData = filteredUsers.length > 0 || nonUsersList.length > 0;
 
       // ✅ OPTIMIZED: Batch all state updates to prevent multiple re-renders
-      startTransition(() => {
+      // ✅ FIX: Use a single state update to prevent any intermediate renders
+      const updateState = () => {
         setExistingUsers(filteredUsers);
         setNonUsers(nonUsersList);
         setFilteredExistingUsers(filteredUsers);
         setFilteredNonUsers(nonUsersList);
         setHasData(hasActualData);
         setInitialLoadComplete(true);
-      });
+        
+        // Group contacts immediately to prevent additional renders
+        const groupedExisting = contactService.groupContactsAlphabetically(filteredUsers);
+        const groupedNonUsersData = contactService.groupContactsAlphabetically(
+          nonUsersList.map(nonUser => ({
+            user_id: nonUser.phoneNumber,
+            fullName: nonUser.name || 'Unknown',
+            phoneNumber: nonUser.phoneNumber,
+          }))
+        );
+        setGroupedExistingUsers(groupedExisting);
+        setGroupedNonUsers(groupedNonUsersData);
+        
+        // Set data ready last to ensure everything is processed
+        setIsDataReady(true);
+      };
+      
+      // Use startTransition for non-blocking updates, but ensure atomicity
+      startTransition(updateState);
 
       console.log('✅ Contact loading complete:', {
         existingUsers: filteredUsers.length,
@@ -206,7 +230,10 @@ const FilteredContactsScreen: React.FC = () => {
           { text: 'Retry', onPress: loadContacts },
         ],
       );
+      // ✅ FIX: Set all states atomically for error case to prevent blinking
+      setHasData(false);
       setInitialLoadComplete(true);
+      setIsDataReady(true);
     } finally {
       setLoading(false);
     }
@@ -282,7 +309,8 @@ const FilteredContactsScreen: React.FC = () => {
 
   useEffect(() => {
     // Only process search/filtering if we have data and initial load is complete
-    if (!initialLoadComplete || !hasData) {
+    // ✅ FIX: Also check isDataReady to ensure we don't process during initial load
+    if (!initialLoadComplete || !hasData || !isDataReady) {
       return;
     }
 
@@ -292,41 +320,9 @@ const FilteredContactsScreen: React.FC = () => {
       setFilteredExistingUsers(existingUsers);
       setFilteredNonUsers(nonUsers);
     }
-  }, [searchQuery, existingUsers, nonUsers, searchContacts, initialLoadComplete, hasData]);
+  }, [searchQuery, existingUsers, nonUsers, searchContacts, initialLoadComplete, hasData, isDataReady]);
 
-  useEffect(() => {
-    // Only group if we have data, initial load is complete, and we have actual contacts to group
-    if (
-      !initialLoadComplete ||
-      !hasData ||
-      (filteredExistingUsers.length === 0 && filteredNonUsers.length === 0)
-    ) {
-      return;
-    }
-
-    // Group contacts silently without showing loading phase
-    // This prevents the annoying "Organizing contacts..." message
-    const groupContacts = () => {
-      // Group existing users
-      const groupedExisting = contactService.groupContactsAlphabetically(
-        filteredExistingUsers,
-      );
-      setGroupedExistingUsers(groupedExisting);
-
-      // Group non-users
-      const groupedNonUsersData = contactService.groupContactsAlphabetically(
-        filteredNonUsers.map(nonUser => ({
-          user_id: nonUser.phoneNumber,
-          fullName: nonUser.name || 'Unknown',
-          phoneNumber: nonUser.phoneNumber,
-        })),
-      );
-      setGroupedNonUsers(groupedNonUsersData);
-    };
-
-    // Use requestAnimationFrame to prevent blocking the UI
-    requestAnimationFrame(groupContacts);
-  }, [filteredExistingUsers, filteredNonUsers, initialLoadComplete, hasData]);
+  // ✅ FIX: Removed grouping useEffect since grouping now happens in the main data load
 
   const handleContactSelect = async (contact: Contact) => {
     console.log('📱 Contact selected:', {
@@ -683,9 +679,10 @@ const FilteredContactsScreen: React.FC = () => {
     );
   };
 
-  // Only show loading screen if we're still loading and don't have any data yet
+  // Only show loading screen if we're still loading and data isn't ready yet
   // This prevents showing empty state during initial load when cache is empty
-  if (isLoading && !hasData && !initialLoadComplete) {
+  // ✅ FIX: Use shouldShowLoading to ensure we never show empty state during loading
+  if (shouldShowLoading) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <CustomHeader
@@ -742,65 +739,7 @@ const FilteredContactsScreen: React.FC = () => {
     );
   }
 
-  // Show skeleton loading state while data is being processed
-  if (isLoading && hasData && !initialLoadComplete) {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <CustomHeader
-          title="New Chat"
-          showBackButton={true}
-          onBackPress={() => navigation.goBack()}
-        />
-
-        {/* Skeleton Search Bar */}
-        <View
-          style={[styles.searchWrapper, { backgroundColor: colors.background }]}
-        >
-          <View
-            style={[
-              styles.searchContainer,
-              { backgroundColor: colors.surface, opacity: 0.6 },
-            ]}
-          >
-            <View
-              style={[
-                styles.skeletonBar,
-                { backgroundColor: colors.border + '40' },
-              ]}
-            />
-          </View>
-        </View>
-
-        {/* Skeleton Contact Items */}
-        <ScrollView style={styles.contentContainer} showsVerticalScrollIndicator={false}>
-          {Array.from({ length: 8 }).map((_, index) => (
-            <View key={index} style={styles.skeletonContactItem}>
-              <View
-                style={[
-                  styles.skeletonAvatar,
-                  { backgroundColor: colors.border + '40' },
-                ]}
-              />
-              <View style={styles.skeletonContactInfo}>
-                <View
-                  style={[
-                    styles.skeletonText,
-                    { backgroundColor: colors.border + '40' },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.skeletonTextSmall,
-                    { backgroundColor: colors.border + '30' },
-                  ]}
-                />
-              </View>
-            </View>
-          ))}
-        </ScrollView>
-      </View>
-    );
-  }
+  // ✅ FIX: Removed skeleton loading state as it's redundant with the main loading state
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
