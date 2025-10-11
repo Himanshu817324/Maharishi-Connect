@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
-  FlatList,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
@@ -34,7 +33,7 @@ import {
   updateMessageStatus,
 } from '@/store/slices/messageSlice';
 import { socketService } from '@/services/socketService';
-import { MessageData } from '@/services/socketService';
+import { MessageData } from '@/services/chatService';
 import { messageService } from '@/services/messageService';
 import { chatService } from '@/services/chatService';
 import { ChatData } from '@/services/chatService';
@@ -46,7 +45,7 @@ import ChatInput from '@/components/atoms/chats/ChatInput';
 import TypingIndicator from '@/components/atoms/chats/TypingIndicator';
 import CustomSafeAreaView from '@/components/atoms/ui/CustomSafeAreaView';
 import FileMessageBubble from '@/components/FileMessageBubble';
-import PerformanceFlatList from '@/components/atoms/ui/PerformanceFlatList';
+import { FlatList } from 'react-native';
 // import { logger } from '@/utils/logger';
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
 
@@ -1239,19 +1238,16 @@ const ConversationScreen: React.FC = () => {
     );
   }
 
-  // Platform-specific container component
-  const Container = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
-
   return (
     <CustomSafeAreaView
       style={styles.container}
       topColor={colors.background}
       bottomColor={colors.background}
     >
-      <Container
+      <KeyboardAvoidingView
         style={styles.keyboardContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         enabled={Platform.OS === 'ios'}
       >
         <View style={styles.screen}>
@@ -1266,7 +1262,14 @@ const ConversationScreen: React.FC = () => {
             onMore={handleMore}
           />
 
-          <View style={styles.messageListContainer}>
+          <View 
+            style={[
+              styles.messageListContainer,
+              Platform.OS === 'android' && isKeyboardVisible && {
+                paddingBottom: 10, // Small padding to prevent messages from touching input
+              },
+            ]}
+          >
             {pagination[chat?.id || '']?.isLoadingOlder && (
               <View style={styles.loadingIndicator}>
                 <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
@@ -1274,7 +1277,7 @@ const ConversationScreen: React.FC = () => {
                 </Text>
               </View>
             )}
-            <PerformanceFlatList
+            <FlatList
               ref={flatListRef}
               data={groupedMessages}
               keyExtractor={(item, _index) => 
@@ -1294,17 +1297,21 @@ const ConversationScreen: React.FC = () => {
                 minIndexForVisible: 0,
                 autoscrollToTopThreshold: 10,
               }}
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={10}
+              updateCellsBatchingPeriod={50}
+              initialNumToRender={20}
+              windowSize={10}
             />
           </View>
 
           {renderTypingIndicator()}
 
-          <View
+          <View 
             style={[
               styles.inputContainer,
-              Platform.OS === 'android' && { 
-                marginBottom: adjustedKeyboardHeight,
-                paddingBottom: adjustedKeyboardHeight > 0 ? 10 : 0,
+              Platform.OS === 'android' && isKeyboardVisible && {
+                marginBottom: Math.max(adjustedKeyboardHeight + 20, 30), // Ensure minimum 30px clearance
               },
             ]}
           >
@@ -1322,7 +1329,7 @@ const ConversationScreen: React.FC = () => {
             />
           </View>
         </View>
-      </Container>
+      </KeyboardAvoidingView>
 
 
         <MediaViewer
@@ -1372,6 +1379,8 @@ const styles = StyleSheet.create({
     // Ensure proper positioning
     position: 'relative',
     zIndex: 1000,
+    // Ensure the input stays at the bottom
+    alignSelf: 'stretch',
   },
   centerContainer: {
     justifyContent: 'center',

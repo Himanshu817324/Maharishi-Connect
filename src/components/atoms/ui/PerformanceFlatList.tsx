@@ -1,4 +1,4 @@
-import React, { memo, useCallback } from 'react';
+import React, { memo, useCallback, forwardRef } from 'react';
 import { FlatList, FlatListProps, ListRenderItem } from 'react-native';
 
 interface PerformanceFlatListProps<T> extends Omit<FlatListProps<T>, 'renderItem'> {
@@ -8,18 +8,19 @@ interface PerformanceFlatListProps<T> extends Omit<FlatListProps<T>, 'renderItem
   getItemLayout?: (data: T[] | null | undefined, index: number) => { length: number; offset: number; index: number };
 }
 
-const PerformanceFlatList = memo(<T,>({
+const PerformanceFlatList = memo(forwardRef<FlatList<any>, PerformanceFlatListProps<any>>(({
   data,
   renderItem,
   keyExtractor,
   getItemLayout,
   ...props
-}: PerformanceFlatListProps<T>) => {
+}, ref) => {
   const memoizedRenderItem = useCallback(renderItem, [renderItem]);
   const memoizedKeyExtractor = useCallback(keyExtractor, [keyExtractor]);
 
   return (
     <FlatList
+      ref={ref}
       data={data}
       renderItem={memoizedRenderItem}
       keyExtractor={memoizedKeyExtractor}
@@ -32,6 +33,8 @@ const PerformanceFlatList = memo(<T,>({
       {...props}
     />
   );
-}) as <T>(props: PerformanceFlatListProps<T>) => JSX.Element;
+}));
+
+PerformanceFlatList.displayName = 'PerformanceFlatList';
 
 export default PerformanceFlatList;

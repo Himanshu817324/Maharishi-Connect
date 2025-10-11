@@ -46,29 +46,29 @@ export const getDeviceInfo = (): DeviceInfo => {
   
   if (Platform.OS === 'android') {
     if (isSmall) {
-      keyboardAdjustmentFactor = 0.8; // More aggressive adjustment for small screens
+      keyboardAdjustmentFactor = 0.95; // Minimal adjustment for small screens
     } else if (isTablet) {
-      keyboardAdjustmentFactor = 1.2; // Less adjustment for tablets
+      keyboardAdjustmentFactor = 1.0; // No adjustment for tablets
     } else if (isLarge) {
-      keyboardAdjustmentFactor = 0.9; // Moderate adjustment for large phones
+      keyboardAdjustmentFactor = 0.98; // Minimal adjustment for large phones
     }
     
     // Additional adjustments based on aspect ratio
     if (aspectRatio > 0.6) {
       // Wide screens (tablets, some phones)
-      keyboardAdjustmentFactor *= 1.1;
+      keyboardAdjustmentFactor *= 1.0;
     } else if (aspectRatio < 0.5) {
       // Tall screens (some phones)
-      keyboardAdjustmentFactor *= 0.9;
+      keyboardAdjustmentFactor *= 0.98;
     }
     
     // Pixel density adjustments
     if (pixelRatio > 3) {
       // High DPI screens
-      keyboardAdjustmentFactor *= 0.95;
+      keyboardAdjustmentFactor *= 0.99;
     } else if (pixelRatio < 2) {
       // Low DPI screens
-      keyboardAdjustmentFactor *= 1.05;
+      keyboardAdjustmentFactor *= 1.01;
     }
   }
   
@@ -98,15 +98,30 @@ export const getOptimalKeyboardHeight = (
     return rawKeyboardHeight;
   }
   
-  // Base adjustment
-  let adjustedHeight = rawKeyboardHeight - 20;
+  // Use the raw keyboard height with adaptive buffer to prevent cutting
+  let buffer = 15; // Base buffer
+  
+  // Increase buffer for devices that might have measurement issues
+  if (deviceInfo.isSmall) {
+    buffer = 20; // More buffer for small screens
+  } else if (deviceInfo.isTablet) {
+    buffer = 10; // Less buffer for tablets (usually more accurate)
+  } else if (deviceInfo.aspectRatio < 0.5) {
+    buffer = 25; // More buffer for very tall screens
+  }
+  
+  let adjustedHeight = rawKeyboardHeight + buffer;
   
   // Apply device-specific adjustments
   adjustedHeight *= deviceInfo.keyboardAdjustmentFactor;
   
-  // Ensure bounds
-  const minHeight = deviceInfo.isTablet ? 0 : 10;
-  const maxHeight = deviceInfo.height * 0.4; // Never exceed 40% of screen height
+  // Ensure bounds - allow up to 50% of screen height for keyboard
+  const minHeight = 0;
+  const maxHeight = deviceInfo.height * 0.5;
   
-  return Math.max(minHeight, Math.min(Math.round(adjustedHeight), maxHeight));
+  // Add extra safety margin for edge cases
+  const finalHeight = Math.max(minHeight, Math.min(Math.round(adjustedHeight), maxHeight));
+  
+  // Ensure minimum clearance of 20px above keyboard
+  return Math.max(finalHeight, 20);
 };
