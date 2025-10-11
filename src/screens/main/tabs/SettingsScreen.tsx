@@ -36,7 +36,7 @@ export default function SettingsScreen() {
   };
 
   const accountItems = [
-    { title: 'Account', icon: 'key-outline', onPress: () => navigation.navigate('ProfileScreen' as never) },
+    { title: 'Account', icon: 'key-outline', onPress: () => navigation.navigate('UserInfoScreen' as never) },
     { title: 'Privacy', icon: 'lock-closed-outline', onPress: () => {} },
     { title: 'Notifications', icon: 'notifications-outline', onPress: () => {} },
     { title: 'Backup', icon: 'cloud-outline', onPress: () => {} },
@@ -86,7 +86,7 @@ export default function SettingsScreen() {
         {/* User Profile Section */}
         <TouchableOpacity 
           style={styles.profileSection}
-          onPress={() => navigation.navigate('ProfileScreen' as never)}
+          onPress={() => navigation.navigate('UserInfoScreen' as never)}
           activeOpacity={0.7}
         >
           <View style={styles.avatarContainer}>

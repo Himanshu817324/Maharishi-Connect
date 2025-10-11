@@ -85,7 +85,7 @@ export default function UserInfoScreen() {
   ];
 
   const handleEditProfile = () => {
-    navigation.navigate('ProfileScreen' as never);
+    navigation.navigate('EditProfileScreen' as never);
   };
 
   const handleLogout = () => {

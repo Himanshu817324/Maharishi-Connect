@@ -15,6 +15,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/Ionicons';
 import { lightweightImagePicker } from '@/services/lightweightImagePicker';
 import Toast from 'react-native-toast-message';
 import { useDispatch, useSelector } from 'react-redux';
