@@ -18,6 +18,7 @@ import { MessageData } from '@/services/chatService';
 import MessageStatusIndicator from '@/components/MessageStatusIndicator';
 import MediaViewer from '@/components/MediaViewer';
 import { permissionService } from '@/services/permissionService';
+import PersistentImage from '@/components/atoms/ui/PersistentImage';
 
 interface FileMessageBubbleProps {
   message: MessageData;
@@ -171,10 +172,18 @@ const FileMessageBubble: React.FC<FileMessageBubbleProps> = ({
         {/* File Icon */}
         <View style={[styles.fileIcon, { backgroundColor: colors.background + '20' }]}>
           {fileCategory === 'image' && fileUrl ? (
-            <Image
+            <PersistentImage
               source={{ uri: fileUrl }}
               style={styles.fileImage}
               resizeMode="cover"
+              showLoadingIndicator={true}
+              onPersistenceResult={(result) => {
+                if (result.success) {
+                  console.log('🖼️ [FileMessageBubble] Image persisted successfully');
+                } else {
+                  console.log('🖼️ [FileMessageBubble] Image persistence failed, using original URL');
+                }
+              }}
             />
           ) : (
             <Icon name={fileIcon} size={moderateScale(24)} color={colors.text} />

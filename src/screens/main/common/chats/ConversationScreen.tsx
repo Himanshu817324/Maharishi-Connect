@@ -1100,150 +1100,182 @@ const ConversationScreen: React.FC = () => {
       // For now, we'll send each file as a separate message
       // In a real implementation, you might want to batch them or create a gallery message
       for (const file of files) {
-        // Determine message type based on file type
-        let messageType: 'text' | 'image' | 'video' | 'audio' | 'file' = 'file';
-        if (type === 'image') {
-          messageType = 'image';
-        } else if (type === 'video') {
-          messageType = 'video';
-        } else if (type === 'audio') {
-          messageType = 'audio';
-        }
-
-        // Create a message object for the media file
-        const messageId = `temp_${Date.now()}_${Math.random()}`;
-        const timestamp = new Date().toISOString();
-
-        // Add message to Redux store immediately for optimistic UI
-        dispatch(addMessage({
-          id: messageId,
-          chat_id: chat.id,
-          sender_id: user?.id || '',
-          content: file.name, // Use file name as content
-          message_type: messageType,
-          media_url: file.uri, // Store the local URI temporarily
-          media_metadata: {
-            filename: file.name,
-            size: file.size,
-            mimeType: file.type,
-            fileName: file.name,
-            fileSize: file.size,
-            fileType: file.type,
-            // Additional metadata for media files
-            duration: file.duration,
-            width: file.width,
-            height: file.height,
-          },
-          created_at: timestamp,
-          sender: {
-            user_id: user?.id || '',
-            fullName: user?.fullName || 'You',
-          },
-          status: 'sending',
-        }));
-
-        // Upload the file to server and update message with server URL
         try {
-          let uploadResult;
+          console.log('📤 [ConversationScreen] Processing file:', file.name);
           
-          if (messageType === 'image') {
-            // Use image upload service for images
-            const { imageUploadService } = await import('@/services/imageUploadService');
-            uploadResult = await imageUploadService.uploadChatImage(file.uri, chat.id);
-          } else {
-            // For other file types, use the general file service
-            const { fileService } = await import('@/services/fileService');
-            const result = await fileService.uploadFile(file.uri, file.name, file.type);
-            uploadResult = {
-              success: result.status === 'SUCCESS',
-              url: result.file?.mediaUrl,
-              s3Key: result.file?.s3Key,
-              fileId: result.file?.id,
-              error: result.error,
-            };
+          // Determine message type based on file type
+          let messageType: 'text' | 'image' | 'video' | 'audio' | 'file' = 'file';
+          if (type === 'image') {
+            messageType = 'image';
+          } else if (type === 'video') {
+            messageType = 'video';
+          } else if (type === 'audio') {
+            messageType = 'audio';
           }
 
-          if (uploadResult.success && uploadResult.url) {
-            // Update message with server URL
-            dispatch(updateMessage({
-              id: messageId,
-              chat_id: chat.id,
-              sender_id: user?.id || '',
-              content: file.name,
-              message_type: messageType,
-              media_url: uploadResult.url, // Update with server URL
-              media_metadata: {
-                filename: file.name,
-                size: file.size,
-                mimeType: file.type,
-                fileName: file.name,
-                fileSize: file.size,
-                fileType: file.type,
-                duration: file.duration,
-                width: file.width,
-                height: file.height,
-                // Add server metadata
-                s3Key: (uploadResult as any).s3Key,
-                fileId: (uploadResult as any).fileId,
-              },
-              created_at: timestamp,
-              sender: {
-                user_id: user?.id || '',
-                fullName: user?.fullName || 'You',
-              },
-              status: 'sent',
-            }));
+          // Create a message object for the media file
+          const messageId = `temp_${Date.now()}_${Math.random()}`;
+          const timestamp = new Date().toISOString();
 
-            // Send message to server via socket
-            messageService.sendMessageImmediate(
-              chat.id,
-              file.name,
-              messageType,
-              {
-                mediaUrl: uploadResult.url,
-                mediaMetadata: {
+          // Add message to Redux store immediately for optimistic UI
+          dispatch(addMessage({
+            id: messageId,
+            chat_id: chat.id,
+            sender_id: user?.id || '',
+            content: file.name, // Use file name as content
+            message_type: messageType,
+            media_url: file.uri, // Store the local URI temporarily
+            media_metadata: {
+              filename: file.name,
+              size: file.size,
+              mimeType: file.type,
+              fileName: file.name,
+              fileSize: file.size,
+              fileType: file.type,
+              // Additional metadata for media files
+              duration: file.duration,
+              width: file.width,
+              height: file.height,
+            },
+            created_at: timestamp,
+            sender: {
+              user_id: user?.id || '',
+              fullName: user?.fullName || 'You',
+            },
+            status: 'sending',
+          }));
+
+          // Upload the file to server and update message with server URL
+          try {
+            console.log('📤 [ConversationScreen] Starting file upload:', {
+              fileName: file.name,
+              fileType: file.type,
+              fileUri: file.uri,
+              messageType
+            });
+
+            let uploadResult;
+            
+            if (messageType === 'image') {
+              // Use image upload service for images
+              console.log('📤 [ConversationScreen] Uploading image via imageUploadService');
+              const { imageUploadService } = await import('@/services/imageUploadService');
+              uploadResult = await imageUploadService.uploadChatImage(file.uri, chat.id);
+              console.log('📤 [ConversationScreen] Image upload result:', uploadResult);
+            } else {
+              // For other file types, use the general file service
+              console.log('📤 [ConversationScreen] Uploading file via fileService');
+              const { fileService } = await import('@/services/fileService');
+              const result = await fileService.uploadFile(file.uri, file.name, file.type);
+              uploadResult = {
+                success: result.status === 'SUCCESS',
+                url: result.file?.mediaUrl,
+                s3Key: result.file?.s3Key,
+                fileId: result.file?.id,
+                error: result.error,
+              };
+              console.log('📤 [ConversationScreen] File upload result:', uploadResult);
+            }
+
+            if (uploadResult.success && uploadResult.url) {
+              // Update message with server URL
+              dispatch(updateMessage({
+                id: messageId,
+                chat_id: chat.id,
+                sender_id: user?.id || '',
+                content: file.name,
+                message_type: messageType,
+                media_url: uploadResult.url, // Update with server URL
+                media_metadata: {
                   filename: file.name,
                   size: file.size,
                   mimeType: file.type,
+                  fileName: file.name,
+                  fileSize: file.size,
+                  fileType: file.type,
+                  duration: file.duration,
+                  width: file.width,
+                  height: file.height,
+                  // Add server metadata
+                  s3Key: (uploadResult as any).s3Key,
+                  fileId: (uploadResult as any).fileId,
                 },
+                created_at: timestamp,
+                sender: {
+                  user_id: user?.id || '',
+                  fullName: user?.fullName || 'You',
+                },
+                status: 'sent',
+              }));
+
+              // Send message to server via socket
+              try {
+                console.log('📤 [ConversationScreen] Sending message via socket:', {
+                  chatId: chat.id,
+                  messageType,
+                  mediaUrl: uploadResult.url
+                });
+                
+                messageService.sendMessageImmediate(
+                  chat.id,
+                  file.name,
+                  messageType,
+                  {
+                    mediaUrl: uploadResult.url,
+                    mediaMetadata: {
+                      filename: file.name,
+                      size: file.size,
+                      mimeType: file.type,
+                    },
+                  }
+                );
+                
+                console.log('📤 [ConversationScreen] Message sent successfully via socket');
+              } catch (socketError) {
+                console.error('📤 [ConversationScreen] Socket send error:', socketError);
+                // Don't fail the entire upload if socket send fails
+                // The message is already uploaded to server
               }
-            );
-          } else {
-            // Upload failed, update message status
-            console.error('Upload failed:', uploadResult.error || 'Upload failed');
+            } else {
+              // Upload failed, update message status
+              console.error('Upload failed:', uploadResult.error || 'Upload failed');
+              dispatch(updateMessageStatus({
+                messageId: messageId,
+                chatId: chat.id,
+                status: 'failed',
+              }));
+            }
+          } catch (uploadError) {
+            console.error('Error uploading file:', uploadError);
+            
+            // Provide more detailed error information
+            let errorMessage = 'Upload failed';
+            if (uploadError instanceof Error) {
+              errorMessage = uploadError.message;
+              console.error('Upload error details:', {
+                message: uploadError.message,
+                name: uploadError.name,
+                stack: uploadError.stack?.substring(0, 200)
+              });
+            }
+            
+            // Update message status to failed
             dispatch(updateMessageStatus({
               messageId: messageId,
               chatId: chat.id,
               status: 'failed',
             }));
+            
+            // Show user-friendly error message
+            Alert.alert(
+              'Upload Failed',
+              `Failed to upload ${file.name}: ${errorMessage}`,
+              [{ text: 'OK' }]
+            );
           }
-        } catch (uploadError) {
-          console.error('Error uploading file:', uploadError);
-          
-          // Provide more detailed error information
-          let errorMessage = 'Upload failed';
-          if (uploadError instanceof Error) {
-            errorMessage = uploadError.message;
-            console.error('Upload error details:', {
-              message: uploadError.message,
-              name: uploadError.name,
-              stack: uploadError.stack?.substring(0, 200)
-            });
-          }
-          
-          // Update message status to failed
-          dispatch(updateMessageStatus({
-            messageId: messageId,
-            chatId: chat.id,
-            status: 'failed',
-          }));
-          
-          // Show user-friendly error message
-          Alert.alert(
-            'Upload Failed',
-            `Failed to upload ${file.name}: ${errorMessage}`,
-            [{ text: 'OK' }]
-          );
+        } catch (fileError) {
+          console.error('📤 [ConversationScreen] Error processing individual file:', fileError);
+          // Continue with next file even if this one fails
         }
       }
 

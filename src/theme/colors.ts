@@ -68,7 +68,7 @@ const platformColors = getPlatformColors();
 
 export const LightColors = {
   // Core colors
-  background: "#F5F1EB",
+  background: "#fffbeb",
   surface: "#FFFFFF",
   surfaceVariant: "#F7F7F7",
   
@@ -137,10 +137,10 @@ export const LightColors = {
   ...(Platform.OS === 'android' ? platformColors.android : {}),
   
   // Chat specific
-  chatBubble: "#90EE90", // Light green for my chat bubble color
-  chatBubbleOther: BaseColors.gray200,
-  chatBubbleText: BaseColors.white,
-  chatBubbleTextOther: BaseColors.gray800,
+  chatBubble: "#7f1d1d", // Bright yellow/gold for my chat bubble color
+  chatBubbleOther: "#ffffff", // Dark gray for other person's chat bubble color
+  chatBubbleText: "#ffffff",
+  chatBubbleTextOther: BaseColors.gray700,
   chatTime: BaseColors.gray500,
   chatTimeOther: BaseColors.gray500,
   
@@ -233,8 +233,8 @@ export const DarkColors = {
   ...(Platform.OS === 'android' ? platformColors.android : {}),
   
   // Chat specific
-  chatBubble: "#05c7c7", // My chat bubble color
-  chatBubbleOther: "#214a4a", // Other person's chat bubble color
+  chatBubble: "#7f1d1d", // Dark red for my chat bubble color in dark mode
+  chatBubbleOther: "#1E1E1E", // Dark gray for other person's chat bubble color
   chatBubbleText: BaseColors.white,
   chatBubbleTextOther: BaseColors.white,
   chatTime: BaseColors.gray400,

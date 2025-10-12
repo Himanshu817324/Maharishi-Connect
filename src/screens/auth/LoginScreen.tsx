@@ -15,6 +15,7 @@ import {
   StatusBar,
   Modal,
   Animated,
+  Image,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { RootStackParamList } from '../../types/navigation';
@@ -410,9 +411,13 @@ const LoginScreen = () => {
       <View style={styles.content}>
         {/* Main Content Area */}
         <View style={styles.mainContent}>
-          {/* Phone Icon */}
+          {/* Logo */}
           <View style={styles.iconContainer}>
-            <Icon name="phone-portrait-outline" size={40} color="#8B5CF6" />
+            <Image 
+              source={require('../../assets/logo.png')} 
+              style={styles.logo}
+              resizeMode="contain"
+            />
           </View>
 
           {/* Heading */}
@@ -653,6 +658,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
+  },
+  logo: {
+    width: 50,
+    height: 50,
   },
   heading: {
     fontSize: 24,

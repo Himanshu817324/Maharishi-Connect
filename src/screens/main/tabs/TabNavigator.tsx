@@ -65,17 +65,17 @@ export default function TabNavigator() {
           headerBackTitleStyle: {
             color: colors.textOnPrimary,
           },
-            tabBarActiveTintColor: colors.accentLight,
+            tabBarActiveTintColor: "#FFEB7A",
             tabBarInactiveTintColor: colors.textOnPrimary,
             tabBarStyle: {
-              backgroundColor: '#183535',
-              borderTopColor: '#183535',
+              backgroundColor: '#7f1d1d',
+              borderTopColor: '#7f1d1d',
               borderTopWidth: 0,
               height: Platform.OS === 'ios' ? moderateScale(85) : moderateScale(65),
               paddingBottom: Platform.OS === 'ios' ? moderateScale(25) : moderateScale(10),
               paddingTop: 0, // Removed extra top padding
               elevation: 8,
-              shadowColor: '#183535',
+              shadowColor: '#7f1d1d',
               shadowOffset: {
                 width: 0,
                 height: -2,

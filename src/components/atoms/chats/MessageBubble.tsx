@@ -4,10 +4,10 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
   Alert,
 } from 'react-native';
 import OptimizedIcon from '@/components/atoms/ui/OptimizedIcon';
+import PersistentImage from '@/components/atoms/ui/PersistentImage';
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 import { MessageData } from '@/services/chatService';
@@ -109,10 +109,18 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
               onPress={() => onMediaPress?.(message)}
               activeOpacity={0.8}
             >
-              <Image
-                source={{ uri: message.media_url }}
+              <PersistentImage
+                source={{ uri: message.media_url || '' }}
                 style={styles.mediaImage}
                 resizeMode="cover"
+                showLoadingIndicator={true}
+                onPersistenceResult={(result) => {
+                  if (result.success) {
+                    console.log('🖼️ [MessageBubble] Image persisted successfully');
+                  } else {
+                    console.log('🖼️ [MessageBubble] Image persistence failed, using original URL');
+                  }
+                }}
               />
               {message.content && (
                 <Text
@@ -460,6 +468,7 @@ const styles = StyleSheet.create({
   },
   timeAndStatusContainer: {
     flexDirection: 'row',
+    fontWeight: '800',
     alignItems: 'center',
     marginLeft: wp(1),
     flexShrink: 0,
@@ -467,10 +476,11 @@ const styles = StyleSheet.create({
   timeText: {
     fontSize: responsiveFont(11),
     opacity: 0.6, // More subtle for WhatsApp-like appearance
-    fontWeight: '400',
+    fontWeight: '900',
   },
   editedText: {
     fontSize: responsiveFont(9),
+    fontWeight: '800',
     opacity: 0.6,
     fontStyle: 'italic',
   },

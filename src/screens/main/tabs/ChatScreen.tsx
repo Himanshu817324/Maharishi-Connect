@@ -23,6 +23,12 @@ import { ChatData } from '@/services/chatService';
 import { useDrawer } from '@/contexts/DrawerContext';
 import { useFilter } from '@/contexts/FilterContext';
 
+// Chat item separator component
+const ChatItemSeparator: React.FC = () => {
+  const { colors } = useTheme();
+  return <View style={[styles.chatItemSeparator, { backgroundColor: colors.border }]} />;
+};
+
 const ChatScreen: React.FC = () => {
   const { colors } = useTheme();
   const navigation = useNavigation();
@@ -356,7 +362,7 @@ const ChatScreen: React.FC = () => {
               {getChatSubtitle(item)}
             </Text>
             {hasUnread && (
-              <View style={[styles.unreadBadge, { backgroundColor: colors.accent }]}>
+              <View style={[styles.unreadBadge, { backgroundColor: '#7f1d1d' }]}>
                 <Text style={styles.unreadText}>
                   {(item.unread_count || 0) > 99 ? '99+' : item.unread_count}
                 </Text>
@@ -502,8 +508,8 @@ const ChatScreen: React.FC = () => {
             style={[
               styles.filterButton,
               { 
-                backgroundColor: activeFilter === 'all' ? colors.accent : colors.surface,
-                borderColor: activeFilter === 'all' ? colors.accent : colors.border,
+                backgroundColor: activeFilter === 'all' ? '#7f1d1d' : colors.surface,
+                borderColor: activeFilter === 'all' ? '#7f1d1d' : colors.border,
               }
             ]}
             onPress={() => setActiveFilter('all')}
@@ -526,8 +532,8 @@ const ChatScreen: React.FC = () => {
             style={[
               styles.filterButton,
               { 
-                backgroundColor: activeFilter === 'direct' ? colors.accent : colors.surface,
-                borderColor: activeFilter === 'direct' ? colors.accent : colors.border,
+                backgroundColor: activeFilter === 'direct' ? '#7f1d1d' : colors.surface,
+                borderColor: activeFilter === 'direct' ? '#7f1d1d' : colors.border,
               }
             ]}
             onPress={() => setActiveFilter('direct')}
@@ -550,8 +556,8 @@ const ChatScreen: React.FC = () => {
             style={[
               styles.filterButton,
               { 
-                backgroundColor: activeFilter === 'groups' ? colors.accent : colors.surface,
-                borderColor: activeFilter === 'groups' ? colors.accent : colors.border,
+                backgroundColor: activeFilter === 'groups' ? '#7f1d1d' : colors.surface,
+                borderColor: activeFilter === 'groups' ? '#7f1d1d' : colors.border,
               }
             ]}
             onPress={() => setActiveFilter('groups')}
@@ -574,8 +580,8 @@ const ChatScreen: React.FC = () => {
             style={[
               styles.filterButton,
               { 
-                backgroundColor: activeFilter === 'unread' ? colors.accent : colors.surface,
-                borderColor: activeFilter === 'unread' ? colors.accent : colors.border,
+                backgroundColor: activeFilter === 'unread' ? '#7f1d1d' : colors.surface,
+                borderColor: activeFilter === 'unread' ? '#7f1d1d' : colors.border,
               }
             ]}
             onPress={() => setActiveFilter('unread')}
@@ -624,6 +630,7 @@ const ChatScreen: React.FC = () => {
         data={filteredChats}
         keyExtractor={(item) => item.id}
         renderItem={renderChatItem}
+        ItemSeparatorComponent={ChatItemSeparator}
         ListEmptyComponent={renderEmptyState}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={chats.length === 0 ? styles.emptyListContainer : styles.listContent}
@@ -741,6 +748,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: wp(4),
     paddingVertical: hp(1.5),
     borderRadius: moderateScale(8),
+  },
+  chatItemSeparator: {
+    height: 1,
+    marginHorizontal: wp(4),
+    opacity: 0.3,
   },
   avatar: {
     width: moderateScale(50),

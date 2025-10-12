@@ -10,7 +10,7 @@ const GestureNavigationBar: React.FC = () => {
     <View 
       style={[
         styles.container,
-        { backgroundColor: '#183535' }
+        { backgroundColor: '#7f1d1d' }
       ]} 
     />
   );
