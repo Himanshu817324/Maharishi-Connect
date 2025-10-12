@@ -400,6 +400,7 @@ const ConversationScreen: React.FC = () => {
           '📊 [ConversationScreen] Chat IDs match:',
           data.chatId === chat?.id,
         );
+        console.log('📊 [ConversationScreen] Socket connected:', socketService.isSocketConnected());
 
         if (data.chatId === chat?.id) {
           console.log(
@@ -441,6 +442,7 @@ const ConversationScreen: React.FC = () => {
           '📬 [ConversationScreen] Chat IDs match:',
           data.chatId === chat?.id,
         );
+        console.log('📬 [ConversationScreen] Socket connected:', socketService.isSocketConnected());
 
         if (data.chatId === chat?.id) {
           console.log(

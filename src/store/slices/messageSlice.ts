@@ -470,6 +470,7 @@ const messageSlice = createSlice({
       timestamp?: string;
     }>) => {
       const { messageId, chatId, status, userId, timestamp } = action.payload;
+      console.log('🔄 [MessageSlice] updateMessageStatus called:', { messageId, chatId, status, userId, timestamp });
 
       // Update message in the messages object
       if (state.messages[chatId]) {

@@ -19,15 +19,8 @@ const initialState: ChatState = {
 
 // Centralized chat sorting function to ensure consistency
 const sortChats = (chats: ChatData[]): ChatData[] => {
-  return [...chats].sort((a, b) => {
-    // First priority: Unread chats come first
-    const aHasUnread = (a.unread_count || 0) > 0;
-    const bHasUnread = (b.unread_count || 0) > 0;
-
-    if (aHasUnread && !bHasUnread) return -1; // a comes first
-    if (!aHasUnread && bHasUnread) return 1;  // b comes first
-
-    // If both have unread or both don't have unread, sort by activity
+  const sortedChats = [...chats].sort((a, b) => {
+    // Sort by activity only - most recent messages first
     const getLastActivity = (chat: ChatData) => {
       const updated = new Date(chat.updated_at || 0).getTime();
       const lastMessage = chat.last_message?.created_at ? new Date(chat.last_message.created_at).getTime() : 0;
@@ -45,6 +38,21 @@ const sortChats = (chats: ChatData[]): ChatData[] => {
 
     return bActivity - aActivity; // Most recent first
   });
+  
+  console.log('📱 [sortChats] Sorted chats by activity:', sortedChats.map(chat => ({
+    id: chat.id,
+    name: chat.name || 'Direct Chat',
+    unread_count: chat.unread_count || 0,
+    last_message_time: chat.last_message?.created_at,
+    updated_at: chat.updated_at,
+    activity_score: Math.max(
+      new Date(chat.updated_at || 0).getTime(),
+      chat.last_message?.created_at ? new Date(chat.last_message.created_at).getTime() : 0,
+      new Date(chat.created_at || 0).getTime()
+    )
+  })));
+  
+  return sortedChats;
 };
 
 // Helper function to check if chats need re-sorting
@@ -55,14 +63,7 @@ const needsResorting = (chats: ChatData[]): boolean => {
     const current = chats[i];
     const next = chats[i + 1];
     
-    // Check unread priority
-    const currentHasUnread = (current.unread_count || 0) > 0;
-    const nextHasUnread = (next.unread_count || 0) > 0;
-    
-    if (currentHasUnread && !nextHasUnread) continue; // Correct order
-    if (!currentHasUnread && nextHasUnread) return true; // Wrong order
-    
-    // Check activity order
+    // Check activity order only
     const getLastActivity = (chat: ChatData) => {
       const updated = new Date(chat.updated_at || 0).getTime();
       const lastMessage = chat.last_message?.created_at ? new Date(chat.last_message.created_at).getTime() : 0;
@@ -262,7 +263,7 @@ const chatSlice = createSlice({
         state.chats.push(action.payload);
       }
 
-      // Re-sort chats to maintain proper order (unread priority + activity)
+      // Re-sort chats to maintain proper order (activity-based)
       if (needsResorting(state.chats)) {
         state.chats = sortChats(state.chats);
       }
@@ -299,7 +300,7 @@ const chatSlice = createSlice({
         chat.last_message = action.payload.lastMessage;
         chat.updated_at = new Date().toISOString();
 
-        // Re-sort chats to maintain proper order (unread priority + activity)
+        // Re-sort chats to maintain proper order (activity-based)
         state.chats = sortChats(state.chats);
 
         console.log('📱 [Redux] Re-sorted chats after last message update');
@@ -316,6 +317,10 @@ const chatSlice = createSlice({
         const currentCount = chat.unread_count || 0;
         chat.unread_count = currentCount + 1;
         console.log('🔔 Incremented unread count for chat:', action.payload, 'from', currentCount, 'to', chat.unread_count);
+        
+        // Re-sort chats after unread count changes (activity-based)
+        state.chats = sortChats(state.chats);
+        console.log('📱 [Redux] Re-sorted chats after unread count increment');
       }
       if (state.currentChat?.id === action.payload) {
         const currentCount = state.currentChat.unread_count || 0;
@@ -329,6 +334,10 @@ const chatSlice = createSlice({
         console.log('🔔 Clearing unread count for chat:', action.payload, 'from', chat.unread_count, 'to 0');
         chat.unread_count = 0;
         // Don't update updated_at - this should only reflect actual message activity
+        
+        // Re-sort chats after clearing unread count (activity-based)
+        state.chats = sortChats(state.chats);
+        console.log('📱 [Redux] Re-sorted chats after clearing unread count');
       }
       if (state.currentChat?.id === action.payload) {
         console.log('🔔 Clearing unread count for current chat:', action.payload);
@@ -342,6 +351,10 @@ const chatSlice = createSlice({
         console.log('🔔 Setting unread count for chat:', action.payload.chatId, 'to', action.payload.count);
         chat.unread_count = action.payload.count;
         // Don't update updated_at - this should only reflect actual message activity
+        
+        // Re-sort chats after setting unread count (activity-based)
+        state.chats = sortChats(state.chats);
+        console.log('📱 [Redux] Re-sorted chats after setting unread count');
       }
       if (state.currentChat?.id === action.payload.chatId) {
         state.currentChat.unread_count = action.payload.count;
@@ -377,7 +390,7 @@ const chatSlice = createSlice({
           return;
         }
 
-        // Sort chats with unread priority, then by most recent activity
+        // Sort chats by most recent activity
         console.log('📱 [Redux] Updating chats - sorting before:', action.payload.map(c => ({
           id: c.id,
           name: c.name || 'Direct Chat',
@@ -434,7 +447,7 @@ const chatSlice = createSlice({
         // Add new chat and maintain proper sorting
         state.chats.push(action.payload);
 
-        // Re-sort chats to maintain proper order (unread priority + activity)
+        // Re-sort chats to maintain proper order (activity-based)
         state.chats = sortChats(state.chats);
 
         state.error = null;

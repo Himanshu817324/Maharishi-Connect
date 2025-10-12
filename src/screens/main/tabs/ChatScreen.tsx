@@ -92,6 +92,20 @@ const ChatScreen: React.FC = () => {
       });
     }
     
+    console.log('📱 [ChatScreen] Filtered chats updated:', {
+      totalChats: chats.length,
+      filteredCount: filtered.length,
+      activeFilter: activeFilter,
+      searchText: searchText,
+      chatOrder: filtered.map(chat => ({
+        id: chat.id,
+        name: getChatTitle(chat),
+        unread_count: chat.unread_count || 0,
+        last_message_time: chat.last_message?.created_at,
+        updated_at: chat.updated_at
+      }))
+    });
+    
     return filtered;
   }, [chats, activeFilter, searchText, getChatTitle]);
 

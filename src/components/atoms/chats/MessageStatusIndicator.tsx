@@ -5,7 +5,7 @@ import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont } from '@/theme/responsive';
 
 interface MessageStatusIndicatorProps {
-  status: 'sent' | 'delivered' | 'read';
+  status: 'sending' | 'sent' | 'delivered' | 'seen' | 'failed';
   readBy?: Array<{
     user_id: string;
     read_at: string;
@@ -31,12 +31,16 @@ const MessageStatusIndicator: React.FC<MessageStatusIndicatorProps> = ({
 
   const getStatusIcon = () => {
     switch (status) {
+      case 'sending':
+        return 'time';
       case 'sent':
         return 'checkmark';
       case 'delivered':
         return 'checkmark';
-      case 'read':
+      case 'seen':
         return 'checkmark';
+      case 'failed':
+        return 'close';
       default:
         return 'checkmark';
     }
@@ -44,12 +48,16 @@ const MessageStatusIndicator: React.FC<MessageStatusIndicatorProps> = ({
 
   const getStatusColor = () => {
     switch (status) {
+      case 'sending':
+        return colors.textSecondary; // Gray for sending
       case 'sent':
         return colors.textSecondary; // Gray for sent
       case 'delivered':
         return colors.textSecondary; // Gray for delivered
-      case 'read':
-        return colors.accent; // Blue for read
+      case 'seen':
+        return colors.accent; // Blue for seen
+      case 'failed':
+        return colors.error; // Red for failed
       default:
         return colors.textSecondary;
     }
@@ -57,12 +65,16 @@ const MessageStatusIndicator: React.FC<MessageStatusIndicatorProps> = ({
 
   const getStatusText = () => {
     switch (status) {
+      case 'sending':
+        return 'Sending';
       case 'sent':
         return 'Sent';
       case 'delivered':
         return 'Delivered';
-      case 'read':
-        return 'Read';
+      case 'seen':
+        return 'Seen';
+      case 'failed':
+        return 'Failed';
       default:
         return 'Sent';
     }
@@ -96,7 +108,7 @@ const MessageStatusIndicator: React.FC<MessageStatusIndicatorProps> = ({
             />
           </>
         )}
-        {status === 'read' && (
+        {status === 'seen' && (
           <>
             <Icon
               name="checkmark"

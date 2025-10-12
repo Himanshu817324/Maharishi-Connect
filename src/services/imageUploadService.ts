@@ -39,27 +39,19 @@ export class ImageUploadService {
         name: `profile_${userId}_${Date.now()}.jpg`,
       } as any);
 
-      // Use the profile image upload endpoint
-      const response = await apiService.uploadProfileImage(formData);
+      // Use the file service for profile image uploads (which uses the correct endpoint)
+      const { fileService } = await import('./fileService');
+      const result = await fileService.uploadFile(imageUri, `profile_${userId}_${Date.now()}.jpg`, 'image/jpeg');
       
-      // Handle the response structure from your backend
-      if (response.status === 'SUCCESS' && response.data?.imageUrl) {
+      if (result.status === 'SUCCESS' && result.file) {
         return {
           success: true,
-          url: response.data.imageUrl,
-          imageUrl: response.data.imageUrl,
-          tempId: response.data.tempId
-        };
-      } else if ((response as any).imageUrl) {
-        // Fallback for different response structure
-        return {
-          success: true,
-          url: (response as any).imageUrl,
-          imageUrl: (response as any).imageUrl,
-          tempId: (response as any).tempId
+          url: result.file.mediaUrl || result.file.s3Key,
+          imageUrl: result.file.mediaUrl || result.file.s3Key,
+          tempId: result.file.id || result.file.s3Key
         };
       } else {
-        throw new Error('No image URL returned from server');
+        throw new Error(result.error || 'Upload failed');
       }
     } catch (error) {
       console.error('Image upload error:', error);
@@ -105,16 +97,17 @@ export class ImageUploadService {
         name: `chat_${chatId}_${Date.now()}.jpg`,
       } as any);
 
-      // Use the existing API service to upload
-      const response = await apiService.uploadImageToCloud(formData);
+      // Use the file service for image uploads (which uses the correct endpoint)
+      const { fileService } = await import('./fileService');
+      const result = await fileService.uploadFile(imageUri, `chat_${chatId}_${Date.now()}.jpg`, 'image/jpeg');
       
-      if ((response as any).imageUrl) {
+      if (result.status === 'SUCCESS' && result.file) {
         return {
           success: true,
-          url: (response as any).imageUrl
+          url: result.file.mediaUrl || result.file.s3Key
         };
       } else {
-        throw new Error('No image URL returned from server');
+        throw new Error(result.error || 'Upload failed');
       }
     } catch (error) {
       console.error('Image upload error:', error);
@@ -159,27 +152,19 @@ export class ImageUploadService {
         name: `signup_${Date.now()}.jpg`,
       } as any);
 
-      // Use the profile image upload endpoint (same as regular upload)
-      const response = await apiService.uploadProfileImage(formData);
+      // Use the file service for signup image uploads (which uses the correct endpoint)
+      const { fileService } = await import('./fileService');
+      const result = await fileService.uploadFile(imageUri, `signup_${Date.now()}.jpg`, 'image/jpeg');
       
-      // Handle the response structure from your backend
-      if (response.status === 'SUCCESS' && response.data?.imageUrl) {
+      if (result.status === 'SUCCESS' && result.file) {
         return {
           success: true,
-          url: response.data.imageUrl,
-          imageUrl: response.data.imageUrl,
-          tempId: response.data.tempId
-        };
-      } else if ((response as any).imageUrl) {
-        // Fallback for different response structure
-        return {
-          success: true,
-          url: (response as any).imageUrl,
-          imageUrl: (response as any).imageUrl,
-          tempId: (response as any).tempId
+          url: result.file.mediaUrl || result.file.s3Key,
+          imageUrl: result.file.mediaUrl || result.file.s3Key,
+          tempId: result.file.id || result.file.s3Key
         };
       } else {
-        throw new Error('No image URL returned from server');
+        throw new Error(result.error || 'Upload failed');
       }
     } catch (error) {
       console.error('Image upload error:', error);

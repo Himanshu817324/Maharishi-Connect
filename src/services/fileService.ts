@@ -283,7 +283,7 @@ class FileService {
 
       console.log('📤 [FileService] Uploading file:', { fileName, mimeType, userId });
 
-      // Create form data
+      // Create form data according to API documentation
       const formData = new FormData();
       formData.append('file', {
         uri: fileUri,
@@ -291,10 +291,11 @@ class FileService {
         name: fileName,
       } as any);
       
-      // Try different approaches for user_id
-      formData.append('user_id', userId);
-      formData.append('userId', userId);
-      formData.append('user', userId);
+      // userId is optional and extracted from JWT token
+      // Only include it if needed for debugging
+      if (userId) {
+        formData.append('userId', userId);
+      }
       
       console.log('📤 [FileService] Form data created:', {
         fileName,
@@ -302,9 +303,6 @@ class FileService {
         userId,
         fileUri: fileUri.substring(0, 50) + '...'
       });
-      
-      // Debug: Check if user_id is actually in the form data
-      console.log('📤 [FileService] Form data user_id check:', 'FormData created');
 
       // Upload with progress tracking
       const xhr = new XMLHttpRequest();
@@ -328,11 +326,22 @@ class FileService {
             
             if (xhr.status === 200 || xhr.status === 201) {
               const response = JSON.parse(xhr.responseText);
-              resolve({
-                status: 'SUCCESS',
-                message: 'File uploaded successfully',
-                file: response.file || response.data?.file || response,
-              });
+              console.log('📤 [FileService] Upload response parsed:', response);
+              
+              // Handle response according to API documentation
+              if (response.status === 'SUCCESS' && response.file) {
+                resolve({
+                  status: 'SUCCESS',
+                  message: response.message || 'File uploaded successfully',
+                  file: response.file,
+                });
+              } else {
+                resolve({
+                  status: 'ERROR',
+                  message: response.message || 'Upload failed',
+                  error: 'Invalid response format from server',
+                });
+              }
             } else if (xhr.status === 413) {
               resolve({
                 status: 'ERROR',
@@ -409,20 +418,17 @@ class FileService {
           });
         });
 
-        // Set up request
-        const uploadUrl = `${this.baseURL}/user/upload-file?user_id=${encodeURIComponent(userId)}`;
+        // Set up request - userId is extracted from JWT token, no need for URL parameter
+        const uploadUrl = `${this.baseURL}/user/upload-file`;
         console.log('📤 [FileService] Upload URL:', uploadUrl);
         xhr.open('POST', uploadUrl);
         xhr.setRequestHeader('Authorization', headers.Authorization);
-        xhr.setRequestHeader('X-User-ID', userId);
         
         // Set timeout for upload (5 minutes for large files)
         xhr.timeout = 300000; // 5 minutes
         
         console.log('📤 [FileService] Sending file upload request...');
         console.log('📤 [FileService] Headers:', headers);
-        console.log('📤 [FileService] User ID in URL:', userId);
-        console.log('📤 [FileService] User ID in header:', userId);
         xhr.send(formData);
       });
     } catch (error) {

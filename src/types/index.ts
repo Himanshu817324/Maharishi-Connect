@@ -15,7 +15,7 @@ export interface Message {
     name: string;
     avatar?: string;
   };
-  status?: 'sent' | 'delivered' | 'read';
+  status?: 'sending' | 'sent' | 'delivered' | 'seen' | 'failed';
   chatId?: string;
   senderId?: string;
 }
