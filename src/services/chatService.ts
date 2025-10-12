@@ -155,6 +155,10 @@ class ChatService {
 
   private async getAuthHeaders(): Promise<Record<string, string>> {
     const token = await AsyncStorage.getItem('auth_token');
+    console.log('🔐 [getAuthHeaders] Token check:', token ? 'EXISTS' : 'NOT FOUND');
+    if (token) {
+      console.log('🔐 [getAuthHeaders] Token preview:', token.substring(0, 20) + '...');
+    }
     if (!token) {
       throw new Error('No authentication token found');
     }

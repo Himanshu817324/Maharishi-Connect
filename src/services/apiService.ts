@@ -216,8 +216,44 @@ class ApiService {
       }
 
       if (!response.ok) {
-        const errorMessage =
-          data.message || `HTTP ${response.status}: ${response.statusText}`;
+        let errorMessage = data.message || `HTTP ${response.status}: ${response.statusText}`;
+        
+        // Provide more specific error messages based on status codes
+        switch (response.status) {
+          case 400:
+            errorMessage = 'Invalid request. Please check your file and try again.';
+            break;
+          case 401:
+            errorMessage = 'Authentication failed. Please log in again.';
+            break;
+          case 403:
+            errorMessage = 'Permission denied. You may not have access to upload files.';
+            break;
+          case 413:
+            errorMessage = 'File too large. Please choose a smaller file.';
+            break;
+          case 415:
+            errorMessage = 'Unsupported file type. Please choose a different file format.';
+            break;
+          case 429:
+            errorMessage = 'Too many requests. Please wait a moment and try again.';
+            break;
+          case 500:
+            errorMessage = 'Server error. Please try again later.';
+            break;
+          case 502:
+          case 503:
+          case 504:
+            errorMessage = 'Service temporarily unavailable. Please try again later.';
+            break;
+          default:
+            if (response.status >= 500) {
+              errorMessage = 'Server error. Please try again later.';
+            } else if (response.status >= 400) {
+              errorMessage = 'Request failed. Please check your file and try again.';
+            }
+        }
+        
         throw new Error(errorMessage);
       }
 
@@ -282,20 +318,41 @@ class ApiService {
   }
 
   async uploadProfileImage(formData: FormData): Promise<ApiResponse> {
-    try {
-      // Try the primary endpoint first
-      return await this.makeFormDataRequest("/upload/profile-image", formData);
-    } catch (error) {
-      console.log('🔄 Primary upload endpoint failed, trying alternative...');
+    const endpoints = [
+      "/upload/profile-image",
+      "/upload/image", 
+      "/upload/cloud",
+      "/user/upload-profile-image",
+      "/api/upload/profile-image"
+    ];
+    
+    let lastError: Error | null = null;
+    
+    for (let i = 0; i < endpoints.length; i++) {
       try {
-        // Try alternative endpoint
-        return await this.makeFormDataRequest("/upload/image", formData);
-      } catch (fallbackError) {
-        console.log('🔄 Alternative upload endpoint also failed, trying cloud upload...');
-        // Try cloud upload as last resort
-        return await this.makeFormDataRequest("/upload/cloud", formData);
+        console.log(`🔄 Trying upload endpoint ${i + 1}/${endpoints.length}: ${endpoints[i]}`);
+        const result = await this.makeFormDataRequest(endpoints[i], formData);
+        console.log(`✅ Upload successful with endpoint: ${endpoints[i]}`);
+        return result;
+      } catch (error) {
+        lastError = error as Error;
+        console.log(`❌ Endpoint ${endpoints[i]} failed:`, error);
+        
+        // If it's a client error (4xx), don't try other endpoints
+        if (error instanceof Error && error.message.includes('4')) {
+          console.log('🛑 Client error detected, stopping endpoint attempts');
+          throw error;
+        }
+        
+        // Wait before trying next endpoint (except for last one)
+        if (i < endpoints.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       }
     }
+    
+    // If all endpoints failed, throw the last error with context
+    throw new Error(`All upload endpoints failed. Last error: ${lastError?.message || 'Unknown error'}`);
   }
 
   async uploadImageToCloud(formData: FormData): Promise<ApiResponse> {

@@ -14,6 +14,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { lightweightImagePicker } from '@/services/lightweightImagePicker';
 import Toast from 'react-native-toast-message';
 import { useDispatch, useSelector } from 'react-redux';
@@ -46,6 +47,7 @@ const ProfileScreen = () => {
   // Prefill fields if user data exists
   const [fullName, setFullName] = useState(user?.fullName || '');
   const [selectedCountry, setSelectedCountry] = useState(user?.country || 'India');
+  const [selectedState, setSelectedState] = useState(user?.state || '');
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
@@ -58,7 +60,9 @@ const ProfileScreen = () => {
 
   // Dynamic location data
   const [countries, setCountries] = useState<string[]>([]);
+  const [states, setStates] = useState<string[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(true);
+  const [loadingStates, setLoadingStates] = useState(false);
 
   // Generate initials from full name
   const getInitials = (name: string) => {
@@ -68,6 +72,16 @@ const ProfileScreen = () => {
       return words[0].charAt(0).toUpperCase();
     }
     return (words[0].charAt(0) + words[words.length - 1].charAt(0)).toUpperCase();
+  };
+
+  // Get default state for a country
+  const getDefaultState = (country: string): string => {
+    const defaultStates: Record<string, string> = {
+      'India': 'Uttar Pradesh',
+      'UK': 'England',
+      'USA': 'California',
+    };
+    return defaultStates[country] || '';
   };
 
   useEffect(() => {
@@ -95,6 +109,36 @@ const ProfileScreen = () => {
 
     loadLocations();
   }, []);
+
+  // Load states when country changes
+  useEffect(() => {
+    const loadStates = async () => {
+      if (!selectedCountry) return;
+      
+      try {
+        setLoadingStates(true);
+        const statesData = await locationsService.getStates(selectedCountry);
+        setStates(statesData);
+        
+        // Set default state if current state is not valid for the new country
+        if (!statesData.includes(selectedState)) {
+          const defaultState = getDefaultState(selectedCountry);
+          setSelectedState(defaultState);
+        }
+        
+        console.log('🏛️ States loaded for', selectedCountry, ':', statesData);
+      } catch (error) {
+        console.error('❌ Error loading states:', error);
+        setStates([]);
+        setSelectedState(getDefaultState(selectedCountry));
+      } finally {
+        setLoadingStates(false);
+      }
+    };
+
+    loadStates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCountry]); // Only depend on selectedCountry
 
   if (!user) {
     return null;
@@ -224,8 +268,12 @@ const ProfileScreen = () => {
       return;
     }
 
-    if (!fullName || !selectedCountry) {
-      Toast.show({ type: 'error', text1: 'Please fill all fields' });
+    if (!fullName || !selectedCountry || !selectedState) {
+      Toast.show({ 
+        type: 'error', 
+        text1: 'Please fill all fields',
+        text2: 'Name, country, and state are required'
+      });
       return;
     }
 
@@ -236,7 +284,7 @@ const ProfileScreen = () => {
       mobileNo: phone,
       location: {
         country: selectedCountry,
-        state: 'UP', // Dummy data
+        state: selectedState,
       },
       status: 'Working', // Dummy data
       // Send tempId if image was uploaded, otherwise use manual URL
@@ -256,10 +304,10 @@ const ProfileScreen = () => {
         // Handle location object structure from API response
         const location = response.user.location || {
           country: selectedCountry,
-          state: 'UP', // Dummy data
+          state: selectedState,
         };
         const country = location.country || selectedCountry;
-        const state = location.state || 'UP'; // Dummy data
+        const state = location.state || selectedState;
 
         // Prepare user data for Redux store
         const userData = {
@@ -274,9 +322,21 @@ const ProfileScreen = () => {
         };
 
         console.log('📝 Updating Redux with user data:', userData);
+        console.log('📝 Token from response:', response.token);
 
         // Use updateUserProfile to update existing user data
         dispatch(updateUserProfile(userData));
+        
+        // Verify token was saved to AsyncStorage
+        try {
+          const savedToken = await AsyncStorage.getItem('auth_token');
+          console.log('📝 Token verification - saved token:', savedToken ? 'EXISTS' : 'NOT FOUND');
+          if (savedToken) {
+            console.log('📝 Token verification - token preview:', savedToken.substring(0, 20) + '...');
+          }
+        } catch (error) {
+          console.error('📝 Token verification failed:', error);
+        }
       }
 
       Toast.show({ type: 'success', text1: 'Profile saved successfully!' });
@@ -421,6 +481,24 @@ const ProfileScreen = () => {
             placeholder="Country"
             loading={loadingLocations}
             disabled={loadingLocations}
+            style={styles.dropdownFullWidth}
+          />
+
+          {/* State Picker */}
+          <ModernDropdown
+            label=""
+            emoji=""
+            options={states.map(state => ({
+              label: state,
+              value: state,
+              emoji: '🏛️',
+            }))}
+            selectedValue={selectedState}
+            onValueChange={setSelectedState}
+            placeholder="State/Province"
+            loading={loadingStates}
+            disabled={loadingStates || !selectedCountry}
+            style={styles.dropdownFullWidth}
           />
         </View>
 
@@ -429,14 +507,14 @@ const ProfileScreen = () => {
           <TouchableOpacity
             style={[
               styles.saveButton,
-              (loading || loadingLocations) && styles.saveButtonDisabled,
+              (loading || loadingLocations || loadingStates) && styles.saveButtonDisabled,
             ]}
             onPress={onSubmit}
-            disabled={loading || loadingLocations}
+            disabled={loading || loadingLocations || loadingStates}
             activeOpacity={0.8}
           >
             <Text style={styles.saveButtonText}>
-              {loadingLocations
+              {loadingLocations || loadingStates
                 ? 'Loading locations...'
                 : loading
                 ? 'Setting up your profile...'
@@ -536,6 +614,9 @@ const styles = StyleSheet.create({
   },
   inputFocused: {
     borderColor: '#8B5CF6',
+  },
+  dropdownFullWidth: {
+    width: '100%',
   },
   bottomSection: {
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,

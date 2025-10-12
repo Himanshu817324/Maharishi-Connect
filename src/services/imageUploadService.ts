@@ -63,9 +63,28 @@ export class ImageUploadService {
       }
     } catch (error) {
       console.error('Image upload error:', error);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Upload failed';
+      if (error instanceof Error) {
+        if (error.message.includes('timeout')) {
+          errorMessage = 'Upload timed out. Please try again with a smaller image.';
+        } else if (error.message.includes('Network')) {
+          errorMessage = 'Network error. Please check your internet connection.';
+        } else if (error.message.includes('413')) {
+          errorMessage = 'Image too large. Please choose a smaller image.';
+        } else if (error.message.includes('415')) {
+          errorMessage = 'Unsupported image format. Please choose a different image.';
+        } else if (error.message.includes('401')) {
+          errorMessage = 'Authentication failed. Please log in again.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Upload failed'
+        error: errorMessage
       };
     }
   }
@@ -99,9 +118,28 @@ export class ImageUploadService {
       }
     } catch (error) {
       console.error('Image upload error:', error);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Upload failed';
+      if (error instanceof Error) {
+        if (error.message.includes('timeout')) {
+          errorMessage = 'Upload timed out. Please try again with a smaller image.';
+        } else if (error.message.includes('Network')) {
+          errorMessage = 'Network error. Please check your internet connection.';
+        } else if (error.message.includes('413')) {
+          errorMessage = 'Image too large. Please choose a smaller image.';
+        } else if (error.message.includes('415')) {
+          errorMessage = 'Unsupported image format. Please choose a different image.';
+        } else if (error.message.includes('401')) {
+          errorMessage = 'Authentication failed. Please log in again.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Upload failed'
+        error: errorMessage
       };
     }
   }
@@ -145,9 +183,28 @@ export class ImageUploadService {
       }
     } catch (error) {
       console.error('Image upload error:', error);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Upload failed';
+      if (error instanceof Error) {
+        if (error.message.includes('timeout')) {
+          errorMessage = 'Upload timed out. Please try again with a smaller image.';
+        } else if (error.message.includes('Network')) {
+          errorMessage = 'Network error. Please check your internet connection.';
+        } else if (error.message.includes('413')) {
+          errorMessage = 'Image too large. Please choose a smaller image.';
+        } else if (error.message.includes('415')) {
+          errorMessage = 'Unsupported image format. Please choose a different image.';
+        } else if (error.message.includes('401')) {
+          errorMessage = 'Authentication failed. Please log in again.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Upload failed'
+        error: errorMessage
       };
     }
   }
