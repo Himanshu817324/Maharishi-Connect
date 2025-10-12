@@ -12,6 +12,7 @@ export interface MessageState {
   messageQueue: MessageQueueItem[];
   typingUsers: { [chatId: string]: string[] };
   lastFetch: { [chatId: string]: number };
+  pagination: { [chatId: string]: { hasMore: boolean; isLoadingOlder: boolean } };
 }
 
 const initialState: MessageState = {
@@ -23,6 +24,31 @@ const initialState: MessageState = {
   messageQueue: [],
   typingUsers: {},
   lastFetch: {},
+  pagination: {},
+};
+
+// Utility function for enhanced duplicate detection
+const findDuplicateMessage = (messages: MessageData[], message: MessageData): number => {
+  return messages.findIndex(m => {
+    // Primary check: exact ID match
+    if (m.id === message.id) return true;
+    
+    // Secondary check: same content, sender, and timestamp (within 1 second)
+    const timeDiff = Math.abs(new Date(m.created_at).getTime() - new Date(message.created_at).getTime());
+    return (
+      m.content === message.content &&
+      m.sender_id === message.sender_id &&
+      timeDiff < 1000 && // Within 1 second
+      m.message_type === message.message_type
+    );
+  });
+};
+
+// Utility function to remove duplicate messages by ID
+const removeDuplicateMessages = (messages: MessageData[]): MessageData[] => {
+  return messages.filter((message, index, array) => {
+    return array.findIndex(m => m.id === message.id) === index;
+  });
 };
 
 // Async thunks
@@ -35,7 +61,7 @@ export const fetchChatMessages = createAsyncThunk(
     beforeMessageId?: string;
   }, { rejectWithValue }) => {
     try {
-      const messages = await messageService.getChatMessages(
+      const response = await messageService.getChatMessages(
         params.chatId,
         {
           limit: params.limit,
@@ -43,7 +69,11 @@ export const fetchChatMessages = createAsyncThunk(
           beforeMessageId: params.beforeMessageId,
         }
       );
-      return { chatId: params.chatId, messages };
+      return { 
+        chatId: params.chatId, 
+        messages: response.messages,
+        pagination: response.pagination || { hasMore: false, limit: 0, offset: 0 }
+      };
     } catch (error: any) {
       return rejectWithValue(error.message || 'Failed to fetch messages');
     }
@@ -222,18 +252,38 @@ const messageSlice = createSlice({
   reducers: {
     setCurrentChatMessages: (state, action: PayloadAction<string>) => {
       const chatId = action.payload;
-      console.log('🔄 Setting current chat messages for:', chatId, 'Messages count:', state.messages[chatId]?.length || 0);
       state.currentChatId = chatId;
-      state.currentChatMessages = state.messages[chatId] || [];
+      
+      // Get messages for this chat and remove duplicates
+      const messages = state.messages[chatId] || [];
+      const uniqueMessages = removeDuplicateMessages(messages);
+      
+      console.log('🔄 [setCurrentChatMessages] Setting current chat messages:', {
+        chatId: chatId,
+        originalCount: messages.length,
+        uniqueCount: uniqueMessages.length,
+        removedDuplicates: messages.length - uniqueMessages.length
+      });
+      
+      state.currentChatMessages = uniqueMessages;
     },
     clearCurrentChatMessages: (state) => {
-      console.log('🧹 Clearing current chat messages');
       state.currentChatId = null;
       state.currentChatMessages = [];
+    },
+    setLoadingOlderMessages: (state, action: PayloadAction<{ chatId: string; isLoading: boolean }>) => {
+      const { chatId, isLoading } = action.payload;
+      if (!state.pagination[chatId]) {
+        state.pagination[chatId] = { hasMore: true, isLoadingOlder: false };
+      }
+      state.pagination[chatId].isLoadingOlder = isLoading;
     },
     addMessage: (state, action: PayloadAction<MessageData>) => {
       const message = action.payload;
       const chatId = message.chat_id;
+
+      // Add stack trace for debugging
+      console.log('🔄 [addMessage] Called from:', new Error().stack?.split('\n')[2]?.trim());
 
       if (!state.messages[chatId]) {
         state.messages[chatId] = [];
@@ -245,11 +295,34 @@ const messageSlice = createSlice({
         status: message.status ? mapServerStatusToClient(message.status) : 'sent'
       };
 
-      // Check if message already exists
-      const existingIndex = state.messages[chatId].findIndex(m => m.id === message.id);
+      // Enhanced duplicate detection - check by ID, content, sender, and timestamp
+      const existingIndex = findDuplicateMessage(state.messages[chatId], message);
+
       if (existingIndex >= 0) {
-        state.messages[chatId][existingIndex] = mappedMessage;
+        console.log('🔄 [addMessage] Updating existing message:', {
+          messageId: message.id,
+          chatId: chatId,
+          existingIndex: existingIndex,
+          content: message.content,
+          senderId: message.sender_id,
+          timestamp: message.created_at
+        });
+        // Update existing message with new data (preserve optimistic status if needed)
+        const existingMessage = state.messages[chatId][existingIndex];
+        state.messages[chatId][existingIndex] = {
+          ...mappedMessage,
+          // Keep optimistic status if the existing message is still sending
+          status: existingMessage.status === 'sending' ? existingMessage.status : mappedMessage.status
+        };
       } else {
+        console.log('🔄 [addMessage] Adding new message:', {
+          messageId: message.id,
+          chatId: chatId,
+          content: message.content,
+          senderId: message.sender_id,
+          timestamp: message.created_at,
+          totalMessagesInChat: state.messages[chatId].length
+        });
         state.messages[chatId].push(mappedMessage);
         // Sort messages by created_at
         state.messages[chatId].sort((a, b) =>
@@ -259,12 +332,13 @@ const messageSlice = createSlice({
 
       // Update current chat messages if this is the current chat
       if (state.currentChatId === chatId) {
-        state.currentChatMessages = state.messages[chatId];
-        console.log('🔄 Updated currentChatMessages for current chat:', chatId, 'Message count:', state.messages[chatId].length);
+        // Remove duplicates from current chat messages
+        const uniqueMessages = removeDuplicateMessages(state.messages[chatId]);
+        state.currentChatMessages = uniqueMessages;
       }
     },
     addMessageAndCreateChat: (state, action: PayloadAction<{ message: MessageData; chat: any }>) => {
-      const { message, chat } = action.payload;
+      const { message } = action.payload;
       const chatId = message.chat_id;
 
       // Add message
@@ -291,7 +365,6 @@ const messageSlice = createSlice({
       // Update current chat messages if this is the current chat
       if (state.currentChatId === chatId) {
         state.currentChatMessages = state.messages[chatId];
-        console.log('🔄 Updated currentChatMessages for current chat:', chatId, 'Message count:', state.messages[chatId].length);
       }
     },
     updateMessage: (state, action: PayloadAction<MessageData>) => {
@@ -316,7 +389,6 @@ const messageSlice = createSlice({
         const index = state.currentChatMessages.findIndex(m => m.id === message.id);
         if (index >= 0) {
           state.currentChatMessages[index] = mappedMessage;
-          console.log('🔄 Updated message in current chat:', chatId, 'Message ID:', message.id);
         }
       }
     },
@@ -330,7 +402,6 @@ const messageSlice = createSlice({
       // Update current chat messages if this is the current chat
       if (state.currentChatId === chatId) {
         state.currentChatMessages = state.currentChatMessages.filter(m => m.id !== messageId);
-        console.log('🔄 Removed message from current chat:', chatId, 'Message ID:', messageId);
       }
     },
     clearChatMessages: (state, action: PayloadAction<string>) => {
@@ -338,7 +409,6 @@ const messageSlice = createSlice({
       state.messages[chatId] = [];
       if (state.currentChatId === chatId) {
         state.currentChatMessages = [];
-        console.log('🔄 Cleared messages for current chat:', chatId);
       }
     },
     addToQueue: (state, action: PayloadAction<MessageQueueItem>) => {
@@ -400,23 +470,17 @@ const messageSlice = createSlice({
       timestamp?: string;
     }>) => {
       const { messageId, chatId, status, userId, timestamp } = action.payload;
-      console.log('📊 [Redux] updateMessageStatus called:', { messageId, chatId, status, userId, timestamp });
-      console.log('📊 [Redux] Available chats:', Object.keys(state.messages));
-      console.log('📊 [Redux] Messages in chat:', state.messages[chatId]?.length || 0);
+      console.log('🔄 [MessageSlice] updateMessageStatus called:', { messageId, chatId, status, userId, timestamp });
 
       // Update message in the messages object
       if (state.messages[chatId]) {
         const messageIndex = state.messages[chatId].findIndex(m => m.id === messageId);
-        console.log('📊 [Redux] Message index found:', messageIndex);
 
         if (messageIndex >= 0) {
           const message = state.messages[chatId][messageIndex];
-          console.log('📊 [Redux] Found message:', { id: message.id, currentStatus: message.status });
 
           // Update status
-          const oldStatus = message.status;
           message.status = status;
-          console.log('📊 [Redux] Updated message status:', { messageId, oldStatus, newStatus: status });
 
           // Update read_by or delivered_to arrays
           if (status === 'seen' && userId && timestamp) {
@@ -445,13 +509,6 @@ const messageSlice = createSlice({
             }
           }
 
-          console.log('📊 [Redux] Updated message status:', {
-            messageId,
-            chatId,
-            status,
-            userId,
-            timestamp
-          });
         }
       }
 
@@ -462,9 +519,7 @@ const messageSlice = createSlice({
           const message = state.currentChatMessages[messageIndex];
 
           // Update status
-          const oldCurrentStatus = message.status;
           message.status = status;
-          console.log('📊 [Redux] Updated current chat message status:', { messageId, oldStatus: oldCurrentStatus, newStatus: status });
 
           // Update read_by or delivered_to arrays
           if (status === 'seen' && userId && timestamp) {
@@ -491,13 +546,6 @@ const messageSlice = createSlice({
             }
           }
 
-          console.log('📊 [Redux] Updated current chat message status:', {
-            messageId,
-            chatId,
-            status,
-            userId,
-            timestamp
-          });
         }
       }
     },
@@ -511,17 +559,53 @@ const messageSlice = createSlice({
       })
       .addCase(fetchChatMessages.fulfilled, (state, action) => {
         state.loading = false;
-        const { chatId, messages } = action.payload;
-        // Map server status to client status and ensure consistent ascending order by created_at
-        const mappedMessages = (messages || []).map(message => ({
-          ...message,
-          status: message.status ? mapServerStatusToClient(message.status) : 'sent'
-        }));
-        state.messages[chatId] = mappedMessages.slice().sort((a, b) =>
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        );
+        const { chatId, messages, pagination } = action.payload;
+        
+        // Initialize messages array if it doesn't exist
+        if (!state.messages[chatId]) {
+          state.messages[chatId] = [];
+        }
+        
+        // Enhanced duplicate detection for fetched messages
+        const newMessages: MessageData[] = [];
+        
+        for (const message of messages) {
+          const mappedMessage = {
+            ...message,
+            status: message.status ? mapServerStatusToClient(message.status) : 'sent'
+          };
+          
+          // Check if message already exists using enhanced detection
+          const existingIndex = findDuplicateMessage(state.messages[chatId], message);
+          
+          if (existingIndex >= 0) {
+            console.log('🔄 [fetchChatMessages] Updating existing message:', message.id);
+            // Update existing message
+            state.messages[chatId][existingIndex] = mappedMessage;
+          } else {
+            console.log('🔄 [fetchChatMessages] Adding new message:', message.id);
+            newMessages.push(mappedMessage);
+          }
+        }
+        
+        // Add new messages and sort by created_at (only if needed)
+        if (newMessages.length > 0) {
+          state.messages[chatId] = [...state.messages[chatId], ...newMessages];
+          // Only sort if we have more than 1 message
+          if (state.messages[chatId].length > 1) {
+            state.messages[chatId].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+          }
+        }
+        
+        // Update pagination state
+        state.pagination[chatId] = {
+          hasMore: pagination.hasMore,
+          isLoadingOlder: false,
+        };
+        
         state.lastFetch[chatId] = Date.now();
         state.error = null;
+        
       })
       .addCase(fetchChatMessages.rejected, (state, action) => {
         state.loading = false;
@@ -533,7 +617,7 @@ const messageSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(sendMessage.fulfilled, (state, action) => {
+      .addCase(sendMessage.fulfilled, (state, _action) => {
         state.loading = false;
         state.error = null;
       })
@@ -592,7 +676,7 @@ const messageSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(markMessageAsRead.fulfilled, (state, action) => {
+      .addCase(markMessageAsRead.fulfilled, (state, _action) => {
         state.loading = false;
         state.error = null;
       })
@@ -606,7 +690,7 @@ const messageSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(searchMessages.fulfilled, (state, action) => {
+      .addCase(searchMessages.fulfilled, (state, _action) => {
         state.loading = false;
         state.error = null;
       })
@@ -620,7 +704,7 @@ const messageSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(addReaction.fulfilled, (state, action) => {
+      .addCase(addReaction.fulfilled, (state, _action) => {
         state.loading = false;
         state.error = null;
       })
@@ -634,7 +718,7 @@ const messageSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(removeReaction.fulfilled, (state, action) => {
+      .addCase(removeReaction.fulfilled, (state, _action) => {
         state.loading = false;
         state.error = null;
       })
@@ -648,7 +732,7 @@ const messageSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(pinMessage.fulfilled, (state, action) => {
+      .addCase(pinMessage.fulfilled, (state, _action) => {
         state.loading = false;
         state.error = null;
       })
@@ -662,7 +746,7 @@ const messageSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(unpinMessage.fulfilled, (state, action) => {
+      .addCase(unpinMessage.fulfilled, (state, _action) => {
         state.loading = false;
         state.error = null;
       })
@@ -676,7 +760,7 @@ const messageSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(getPinnedMessages.fulfilled, (state, action) => {
+      .addCase(getPinnedMessages.fulfilled, (state, _action) => {
         state.loading = false;
         state.error = null;
       })
@@ -690,6 +774,7 @@ const messageSlice = createSlice({
 export const {
   setCurrentChatMessages,
   clearCurrentChatMessages,
+  setLoadingOlderMessages,
   addMessage,
   addMessageAndCreateChat,
   updateMessage,

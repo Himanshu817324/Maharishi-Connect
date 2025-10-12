@@ -1,38 +1,18 @@
 import { useNavigation } from '@react-navigation/native';
 import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, Image, Switch } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '@/store/slices/authSlice';
-import CustomHeader from '@/components/atoms/ui/CustomHeader';
-import ThemeToggle from '@/components/atoms/ui/ThemeToggle';
+import { RootState } from '@/store';
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 
 export default function SettingsScreen() {
-  const { colors } = useTheme();
+  const { colors, isDark, toggleTheme, isSystemTheme, setIsSystemTheme } = useTheme();
   const navigation = useNavigation();
   const dispatch = useDispatch();
-  const [isSyncingContacts, setIsSyncingContacts] = useState(false);
-
-  const handleSyncContacts = async () => {
-    try {
-      setIsSyncingContacts(true);
-      console.log("🔄 Starting manual contacts sync...");
-      
-      navigation.navigate('FilteredContactsScreen' as never);
-      
-    } catch (error) {
-      console.error("❌ Error during contacts sync:", error);
-      Alert.alert(
-        "Sync Error",
-        "An error occurred while syncing contacts. Please try again.",
-        [{ text: "OK" }]
-      );
-    } finally {
-      setIsSyncingContacts(false);
-    }
-  };
+  const { user } = useSelector((state: RootState) => state.auth);
 
   const handleLogout = () => {
     Alert.alert(
@@ -55,117 +35,166 @@ export default function SettingsScreen() {
     );
   };
 
-  const settingsCategories = [
-    {
-      title: 'Account',
-      items: [
-        { title: 'Profile', icon: 'person-outline', onPress: () => navigation.navigate('UserInfoScreen' as never) },
-        { title: 'Sync Contacts', icon: 'sync-outline', onPress: handleSyncContacts, isLoading: isSyncingContacts },
-      ]
+  const themeItems = [
+    { 
+      title: 'Follow System', 
+      icon: 'phone-portrait-outline', 
+      isSwitch: true,
+      switchValue: isSystemTheme,
+      onSwitchChange: () => setIsSystemTheme(!isSystemTheme)
     },
-    {
-      title: 'Preferences',
-      items: [
-        { title: 'Privacy', icon: 'shield-checkmark-outline', onPress: () => {} },
-        { title: 'Notifications', icon: 'notifications-outline', onPress: () => {} },
-        { title: 'Storage & Data', icon: 'server-outline', onPress: () => {} },
-      ]
-    },
-    {
-      title: 'Support',
-      items: [
-        { title: 'Help Center', icon: 'help-circle-outline', onPress: () => {} },
-        { title: 'About', icon: 'information-circle-outline', onPress: () => {} },
-      ]
+    { 
+      title: 'Dark Mode', 
+      icon: isDark ? 'moon' : 'sunny-outline', 
+      isSwitch: true,
+      switchValue: isDark,
+      onSwitchChange: toggleTheme,
+      disabled: isSystemTheme
     },
   ];
 
-  const renderSettingItem = (item: any, isLast: boolean) => (
+  const accountItems = [
+    { title: 'Account', icon: 'key-outline', onPress: () => navigation.navigate('UserInfoScreen' as never) },
+    { title: 'Privacy', icon: 'lock-closed-outline', onPress: () => {} },
+    { title: 'Notifications', icon: 'notifications-outline', onPress: () => {} },
+    { title: 'Backup', icon: 'cloud-outline', onPress: () => {} },
+  ];
+
+  const helpItems = [
+    { title: 'Help', icon: 'help-circle-outline', onPress: () => {} },
+    { title: 'About', icon: 'information-circle-outline', onPress: () => {} },
+  ];
+
+  const renderMenuItem = (item: any) => (
     <TouchableOpacity
       key={item.title}
-      style={[
-        styles.settingItem,
-        { backgroundColor: colors.surface },
-        !isLast && { borderBottomWidth: 1, borderBottomColor: colors.border + '30' },
-        item.isLoading && { opacity: 0.7 }
-      ]}
+      style={[styles.menuItem, item.disabled && styles.disabledItem]}
       onPress={item.onPress}
-      disabled={item.isLoading}
       activeOpacity={0.7}
+      disabled={item.isSwitch}
     >
-      <View style={styles.settingLeft}>
-        <View style={[styles.iconContainer, { backgroundColor: colors.accent + '15' }]}>
-          <Icon 
-            name={item.isLoading ? "sync" : item.icon} 
-            size={moderateScale(22)} 
-            color={colors.accent}
-          />
-        </View>
-        <Text style={[styles.settingText, { color: colors.text }]}>
-          {item.title}
-        </Text>
-      </View>
-      <Icon name="chevron-forward" size={moderateScale(20)} color={colors.textSecondary} />
+      <Icon 
+        name={item.icon} 
+        size={moderateScale(24)} 
+        color={item.disabled ? colors.textSecondary : colors.text} 
+      />
+      <Text style={[
+        styles.menuText, 
+        { color: item.disabled ? colors.textSecondary : colors.text }
+      ]}>
+        {item.title}
+      </Text>
+      {item.isSwitch ? (
+        <Switch
+          value={item.switchValue}
+          onValueChange={item.onSwitchChange}
+          trackColor={{ false: colors.border, true: colors.accent }}
+          thumbColor={item.switchValue ? colors.accent : colors.textTertiary}
+          disabled={item.disabled}
+        />
+      ) : (
+        <Icon name="chevron-forward" size={moderateScale(20)} color={colors.textSecondary} style={styles.arrowIcon} />
+      )}
     </TouchableOpacity>
   );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <CustomHeader title="Settings" />
-      
+      {/* Custom Header */}
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Icon name="arrow-back" size={moderateScale(24)} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>
+          Settings
+        </Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
       >
-        {/* Header */}
-        <View style={styles.header}>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Manage your account and preferences
-        </Text>
-      </View>
-      
-      {/* Theme Toggle Section */}
-      <View style={styles.themeSection}>
-        <ThemeToggle />
-      </View>
-
-      {/* Settings Categories */}
-      {settingsCategories.map((category, _categoryIndex) => (
-        <View key={category.title} style={styles.categoryContainer}>
-          <Text style={[styles.categoryTitle, { color: colors.textSecondary }]}>
-            {category.title}
-          </Text>
-          <View style={[styles.categoryCard, { backgroundColor: colors.surface }]}>
-            {category.items.map((item, itemIndex) => 
-              renderSettingItem(item, itemIndex === category.items.length - 1)
+        {/* User Profile Section */}
+        <TouchableOpacity 
+          style={styles.profileSection}
+          onPress={() => navigation.navigate('UserInfoScreen' as never)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.avatarContainer}>
+            {user?.avatar ? (
+              <Image
+                source={{ uri: user.avatar }}
+                style={styles.avatar}
+              />
+            ) : (
+              <View style={[styles.avatarPlaceholder, { backgroundColor: colors.accent }]}>
+                <Text style={[styles.avatarText, { color: colors.textOnPrimary }]}>
+                  {user?.fullName ? user.fullName.charAt(0).toUpperCase() : user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                </Text>
+              </View>
             )}
           </View>
+          <View style={styles.profileInfo}>
+            <Text style={[styles.userName, { color: colors.text }]}>
+              {user?.fullName || user?.name || user?.phone || 'User'}
+            </Text>
+            <Text style={[styles.userStatus, { color: colors.accent }]}>
+              Available
+            </Text>
+            <TouchableOpacity style={styles.editButton}>
+              <Text style={[styles.editText, { color: colors.accent }]}>
+                Edit
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Icon name="chevron-forward" size={moderateScale(20)} color={colors.textSecondary} />
+        </TouchableOpacity>
+
+        {/* Theme Section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            Appearance
+          </Text>
+          <View style={styles.menuContainer}>
+            {themeItems.map(renderMenuItem)}
+          </View>
         </View>
-      ))}
 
-      {/* App Info */}
-      <View style={styles.appInfoSection}>
-        <Text style={[styles.appInfoText, { color: colors.textSecondary }]}>
-          Maharishi Connect
-        </Text>
-        <Text style={[styles.versionText, { color: colors.textSecondary }]}>
-          Version 1.0.0
-        </Text>
-      </View>
+        {/* Account Section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            Account
+          </Text>
+          <View style={styles.menuContainer}>
+            {accountItems.map(renderMenuItem)}
+          </View>
+        </View>
 
-      {/* Logout Section */}
-      <View style={styles.logoutSection}>
+        {/* Help Section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            Help
+          </Text>
+          <View style={styles.menuContainer}>
+            {helpItems.map(renderMenuItem)}
+          </View>
+        </View>
+
+        {/* Log Out Button */}
         <TouchableOpacity
-          style={[styles.logoutButton, { backgroundColor: '#FF4444' + '10', borderColor: '#FF4444' + '30' }]}
+          style={[styles.logoutButton, { backgroundColor: colors.accent }]}
           onPress={handleLogout}
           activeOpacity={0.8}
         >
-          <Icon name="log-out-outline" size={moderateScale(22)} color="#FF4444" />
-          <Text style={styles.logoutText}>
-            Logout
+          <Text style={[styles.logoutText, { color: colors.textOnPrimary }]}>
+            Log Out
           </Text>
         </TouchableOpacity>
-      </View>
       </ScrollView>
     </View>
   );
@@ -175,101 +204,118 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollView: {
-    flex: 1,
-  },
   header: {
-    paddingHorizontal: wp(5),
-    paddingTop: hp(3),
-    paddingBottom: hp(1),
-  },
-  title: {
-    fontSize: responsiveFont(32),
-    fontWeight: '800',
-    letterSpacing: 0.5,
-    marginBottom: hp(0.5),
-  },
-  subtitle: {
-    fontSize: responsiveFont(15),
-    fontWeight: '400',
-    lineHeight: responsiveFont(22),
-  },
-  themeSection: {
-    paddingHorizontal: wp(1.7),
-    paddingVertical: hp(2),
-  },
-  categoryContainer: {
-    marginBottom: hp(2.5),
-  },
-  categoryTitle: {
-    fontSize: responsiveFont(13),
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    paddingHorizontal: wp(5),
-    marginBottom: hp(1),
-  },
-  categoryCard: {
-    marginHorizontal: wp(4),
-    borderRadius: moderateScale(16),
-    overflow: 'hidden',
-  },
-  settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: hp(1.8),
     paddingHorizontal: wp(4),
+    paddingVertical: hp(2),
+    paddingTop: hp(4), // Extra padding for status bar
   },
-  settingLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  backButton: {
+    padding: wp(2),
+    borderRadius: moderateScale(8),
+  },
+  headerTitle: {
+    fontSize: responsiveFont(20),
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  headerSpacer: {
+    width: moderateScale(40), // Same width as back button for centering
+  },
+  scrollView: {
     flex: 1,
   },
-  iconContainer: {
-    width: moderateScale(44),
-    height: moderateScale(44),
-    borderRadius: moderateScale(22),
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: wp(3),
-  },
-  settingText: {
-    fontSize: responsiveFont(16),
-    fontWeight: '600',
-    letterSpacing: 0.2,
-  },
-  appInfoSection: {
-    alignItems: 'center',
-    paddingVertical: hp(3),
-  },
-  appInfoText: {
-    fontSize: responsiveFont(15),
-    fontWeight: '600',
-    letterSpacing: 0.3,
-    marginBottom: hp(0.5),
-  },
-  versionText: {
-    fontSize: responsiveFont(13),
-    fontWeight: '400',
-  },
-  logoutSection: {
-    paddingHorizontal: wp(5),
+  scrollContent: {
     paddingBottom: hp(4),
   },
-  logoutButton: {
+  profileSection: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: wp(5),
+    paddingVertical: hp(3),
+  },
+  avatarContainer: {
+    marginRight: wp(4),
+  },
+  avatar: {
+    width: moderateScale(80),
+    height: moderateScale(80),
+    borderRadius: moderateScale(40),
+  },
+  avatarPlaceholder: {
+    width: moderateScale(80),
+    height: moderateScale(80),
+    borderRadius: moderateScale(40),
     justifyContent: 'center',
-    paddingVertical: hp(1.8),
-    borderRadius: moderateScale(16),
-    borderWidth: 1,
+    alignItems: 'center',
+  },
+  avatarText: {
+    fontSize: responsiveFont(24),
+    fontWeight: '700',
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  userName: {
+    fontSize: responsiveFont(20),
+    fontWeight: '700',
+    marginBottom: hp(0.5),
+  },
+  userStatus: {
+    fontSize: responsiveFont(16),
+    fontWeight: '500',
+    marginBottom: hp(0.5),
+  },
+  editButton: {
+    alignSelf: 'flex-start',
+  },
+  editText: {
+    fontSize: responsiveFont(16),
+    fontWeight: '500',
+  },
+  section: {
+    marginBottom: hp(3),
+  },
+  sectionTitle: {
+    fontSize: responsiveFont(18),
+    fontWeight: '600',
+    paddingHorizontal: wp(5),
+    marginBottom: hp(2),
+  },
+  menuContainer: {
+    paddingHorizontal: wp(5),
+  },
+  disabledItem: {
+    opacity: 0.6,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: hp(2),
+    paddingHorizontal: wp(2),
+  },
+  menuText: {
+    fontSize: responsiveFont(16),
+    fontWeight: '500',
+    marginLeft: wp(3),
+    flex: 1,
+  },
+  arrowIcon: {
+    marginLeft: wp(2),
+  },
+  logoutButton: {
+    marginHorizontal: wp(5),
+    paddingVertical: hp(2),
+    borderRadius: moderateScale(12),
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: hp(2),
   },
   logoutText: {
     fontSize: responsiveFont(16),
-    fontWeight: '700',
-    marginLeft: wp(2),
-    color: '#FF4444',
-    letterSpacing: 0.3,
+    fontWeight: '600',
   },
 });

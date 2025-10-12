@@ -8,10 +8,6 @@ export type OnboardingStackParamList = {
 
 export type AuthStackParamList = {
   LoginScreen: undefined;
-  OTPScreen: {
-    verificationId: string;
-    phoneNumber: string;
-  };
   ProfileScreen: undefined;
 };
 
@@ -28,9 +24,9 @@ export type TabStackParamList = {
 export type MainStackParamList = {
   Tabs: NavigatorScreenParams<TabStackParamList>;
   UserInfoScreen: undefined;
+  EditProfileScreen: undefined;
   ConversationScreen: { chat: any };
   FilteredContactsScreen: undefined;
-  // EditProfileScreen: undefined;
 };
 
 // -------- Root Stack --------

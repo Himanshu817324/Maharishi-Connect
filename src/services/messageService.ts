@@ -208,10 +208,13 @@ class MessageService {
       offset?: number;
       beforeMessageId?: string;
     } = {}
-  ): Promise<MessageData[]> {
+  ): Promise<{ messages: MessageData[]; pagination?: { hasMore: boolean; limit: number; offset: number } }> {
     try {
       const response = await chatService.getChatMessages(chatId, options);
-      return response.messages || [];
+      return {
+        messages: response.messages || [],
+        pagination: response.pagination
+      };
     } catch (error) {
       console.error('Error fetching chat messages:', error);
       throw error;

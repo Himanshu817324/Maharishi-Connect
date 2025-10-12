@@ -129,6 +129,33 @@ class FileService {
     }, obj);
   }
 
+  private isValidS3Url(url: string): boolean {
+    try {
+      // Simple regex-based validation for S3 URLs
+      const s3Pattern = /^https:\/\/(.*\.)?(amazonaws\.com|s3\.amazonaws\.com|s3-.*\.amazonaws\.com)/i;
+      return s3Pattern.test(url) || url.startsWith('https://');
+    } catch {
+      return false;
+    }
+  }
+
+  private async validateS3Access(url: string): Promise<boolean> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      const response = await fetch(url, {
+        method: 'HEAD',
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
 
   private async makeRequest<T>(
     endpoint: string,
@@ -163,7 +190,11 @@ class FileService {
   }
 
   // Get file type category for UI display
-  getFileTypeCategory(mimeType: string): 'document' | 'image' | 'video' | 'audio' | 'archive' | 'other' {
+  getFileTypeCategory(mimeType: string | undefined): 'document' | 'image' | 'video' | 'audio' | 'archive' | 'other' {
+    if (!mimeType || typeof mimeType !== 'string') {
+      return 'other';
+    }
+    
     if (mimeType.startsWith('image/')) return 'image';
     if (mimeType.startsWith('video/')) return 'video';
     if (mimeType.startsWith('audio/')) return 'audio';
@@ -173,7 +204,7 @@ class FileService {
   }
 
   // Get file icon based on type
-  getFileIcon(mimeType: string): string {
+  getFileIcon(mimeType: string | undefined): string {
     const category = this.getFileTypeCategory(mimeType);
     
     switch (category) {
@@ -184,11 +215,11 @@ class FileService {
       case 'audio':
         return 'musical-notes-outline';
       case 'document':
-        if (mimeType.includes('pdf')) return 'document-text-outline';
-        if (mimeType.includes('word') || mimeType.includes('doc')) return 'document-outline';
-        if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return 'grid-outline';
-        if (mimeType.includes('powerpoint') || mimeType.includes('presentation')) return 'easel-outline';
-        if (mimeType.includes('text') || mimeType.includes('txt')) return 'document-text-outline';
+        if (mimeType && mimeType.includes('pdf')) return 'document-text-outline';
+        if (mimeType && mimeType.includes('word') || mimeType && mimeType.includes('doc')) return 'document-outline';
+        if (mimeType && mimeType.includes('excel') || mimeType && mimeType.includes('spreadsheet')) return 'grid-outline';
+        if (mimeType && mimeType.includes('powerpoint') || mimeType && mimeType.includes('presentation')) return 'easel-outline';
+        if (mimeType && mimeType.includes('text') || mimeType && mimeType.includes('txt')) return 'document-text-outline';
         return 'document-outline';
       case 'archive':
         return 'archive-outline';
@@ -252,7 +283,7 @@ class FileService {
 
       console.log('📤 [FileService] Uploading file:', { fileName, mimeType, userId });
 
-      // Create form data
+      // Create form data according to API documentation
       const formData = new FormData();
       formData.append('file', {
         uri: fileUri,
@@ -260,10 +291,11 @@ class FileService {
         name: fileName,
       } as any);
       
-      // Try different approaches for user_id
-      formData.append('user_id', userId);
-      formData.append('userId', userId);
-      formData.append('user', userId);
+      // userId is optional and extracted from JWT token
+      // Only include it if needed for debugging
+      if (userId) {
+        formData.append('userId', userId);
+      }
       
       console.log('📤 [FileService] Form data created:', {
         fileName,
@@ -271,9 +303,6 @@ class FileService {
         userId,
         fileUri: fileUri.substring(0, 50) + '...'
       });
-      
-      // Debug: Check if user_id is actually in the form data
-      console.log('📤 [FileService] Form data user_id check:', 'FormData created');
 
       // Upload with progress tracking
       const xhr = new XMLHttpRequest();
@@ -295,20 +324,61 @@ class FileService {
             console.log('📤 [FileService] Upload response status:', xhr.status);
             console.log('📤 [FileService] Upload response:', xhr.responseText);
             
-            if (xhr.status === 200) {
+            if (xhr.status === 200 || xhr.status === 201) {
               const response = JSON.parse(xhr.responseText);
+              console.log('📤 [FileService] Upload response parsed:', response);
+              
+              // Handle response according to API documentation
+              if (response.status === 'SUCCESS' && response.file) {
+                resolve({
+                  status: 'SUCCESS',
+                  message: response.message || 'File uploaded successfully',
+                  file: response.file,
+                });
+              } else {
+                resolve({
+                  status: 'ERROR',
+                  message: response.message || 'Upload failed',
+                  error: 'Invalid response format from server',
+                });
+              }
+            } else if (xhr.status === 413) {
               resolve({
-                status: 'SUCCESS',
-                message: 'File uploaded successfully',
-                file: response.file,
+                status: 'ERROR',
+                message: 'File too large',
+                error: 'File size exceeds the maximum allowed limit. Please choose a smaller file.',
+              });
+            } else if (xhr.status === 415) {
+              resolve({
+                status: 'ERROR',
+                message: 'Unsupported file type',
+                error: 'This file type is not supported. Please choose a different file.',
+              });
+            } else if (xhr.status === 401) {
+              resolve({
+                status: 'ERROR',
+                message: 'Authentication failed',
+                error: 'Please log in again to upload files.',
+              });
+            } else if (xhr.status >= 500) {
+              resolve({
+                status: 'ERROR',
+                message: 'Server error',
+                error: 'Server is temporarily unavailable. Please try again later.',
               });
             } else {
-              const errorResponse = JSON.parse(xhr.responseText);
-              console.error('📤 [FileService] Upload error:', errorResponse);
+              let errorMessage = 'Upload failed';
+              try {
+                const errorResponse = JSON.parse(xhr.responseText);
+                errorMessage = errorResponse.message || errorResponse.error || 'Unknown error';
+              } catch {
+                errorMessage = `Upload failed with status ${xhr.status}`;
+              }
+              console.error('📤 [FileService] Upload error:', errorMessage);
               resolve({
                 status: 'ERROR',
                 message: 'Upload failed',
-                error: errorResponse.message || 'Unknown error',
+                error: errorMessage,
               });
             }
           } catch (error) {
@@ -316,7 +386,7 @@ class FileService {
             resolve({
               status: 'ERROR',
               message: 'Upload failed',
-              error: 'Failed to parse response',
+              error: 'Failed to parse server response. Please try again.',
             });
           }
         });
@@ -325,22 +395,40 @@ class FileService {
           console.error('📤 [FileService] Upload network error:', error);
           resolve({
             status: 'ERROR',
-            message: 'Upload failed',
-            error: 'Network error',
+            message: 'Network error',
+            error: 'Network connection failed. Please check your internet connection and try again.',
           });
         });
 
-        // Set up request
-        const uploadUrl = `${this.baseURL}/user/upload-file?user_id=${encodeURIComponent(userId)}`;
+        xhr.addEventListener('timeout', () => {
+          console.error('📤 [FileService] Upload timeout');
+          resolve({
+            status: 'ERROR',
+            message: 'Upload timeout',
+            error: 'Upload timed out. Please try again with a smaller file or better connection.',
+          });
+        });
+
+        xhr.addEventListener('abort', () => {
+          console.error('📤 [FileService] Upload aborted');
+          resolve({
+            status: 'ERROR',
+            message: 'Upload cancelled',
+            error: 'Upload was cancelled. Please try again.',
+          });
+        });
+
+        // Set up request - userId is extracted from JWT token, no need for URL parameter
+        const uploadUrl = `${this.baseURL}/user/upload-file`;
         console.log('📤 [FileService] Upload URL:', uploadUrl);
         xhr.open('POST', uploadUrl);
         xhr.setRequestHeader('Authorization', headers.Authorization);
-        xhr.setRequestHeader('X-User-ID', userId);
+        
+        // Set timeout for upload (5 minutes for large files)
+        xhr.timeout = 300000; // 5 minutes
         
         console.log('📤 [FileService] Sending file upload request...');
         console.log('📤 [FileService] Headers:', headers);
-        console.log('📤 [FileService] User ID in URL:', userId);
-        console.log('📤 [FileService] User ID in header:', userId);
         xhr.send(formData);
       });
     } catch (error) {
@@ -420,14 +508,75 @@ class FileService {
               if (redirectUrl) {
                 console.log('📥 [FileService] Using redirect URL:', redirectUrl);
                 
+                // Validate S3 URL before attempting download
+                if (!this.isValidS3Url(redirectUrl)) {
+                  console.warn('📥 [FileService] Invalid S3 URL format:', redirectUrl);
+                  Alert.alert('Error', 'Invalid file URL format. Please contact support.');
+                  return {
+                    success: false,
+                    error: 'Invalid file URL format',
+                  };
+                }
+                
+                // Check S3 access before downloading
+                const hasAccess = await this.validateS3Access(redirectUrl);
+                if (!hasAccess) {
+                  console.warn('📥 [FileService] S3 URL not accessible:', redirectUrl);
+                  Alert.alert('Error', 'File is not accessible. It may have been deleted or moved.');
+                  return {
+                    success: false,
+                    error: 'File not accessible',
+                  };
+                }
+                
                 // Download the image from S3 and then save to gallery
                 try {
                   console.log('📥 [FileService] Downloading image from S3...');
                   
-                  // Download the image from the S3 URL
-                  const imageResponse = await fetch(redirectUrl);
-                  if (!imageResponse.ok) {
-                    throw new Error(`Failed to download image from S3: ${imageResponse.status}`);
+                  // Download the image from the S3 URL with retry logic
+                  let imageResponse;
+                  let retryCount = 0;
+                  const maxRetries = 3;
+                  
+                  while (retryCount < maxRetries) {
+                    try {
+                      const controller = new AbortController();
+                      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+                      
+                      imageResponse = await fetch(redirectUrl, {
+                        method: 'GET',
+                        headers: {
+                          'Accept': 'image/*',
+                        },
+                        signal: controller.signal,
+                      });
+                      
+                      clearTimeout(timeoutId);
+                      
+                      if (imageResponse.ok) {
+                        break; // Success, exit retry loop
+                      } else {
+                        console.warn(`📥 [FileService] S3 download attempt ${retryCount + 1} failed with status: ${imageResponse.status}`);
+                        retryCount++;
+                        
+                        if (retryCount < maxRetries) {
+                          // Wait before retry (exponential backoff)
+                          await new Promise<void>(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
+                        }
+                      }
+                    } catch (fetchError) {
+                      console.warn(`📥 [FileService] S3 download attempt ${retryCount + 1} failed:`, fetchError);
+                      retryCount++;
+                      
+                      if (retryCount < maxRetries) {
+                        // Wait before retry (exponential backoff)
+                        await new Promise<void>(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
+                      }
+                    }
+                  }
+                  
+                  if (!imageResponse || !imageResponse.ok) {
+                    throw new Error(`Failed to download image from S3 after ${maxRetries} attempts. Last status: ${imageResponse?.status || 'unknown'}`);
                   }
                   
                   // Try a simpler approach - just open the image in browser for now

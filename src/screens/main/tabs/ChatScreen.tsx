@@ -1,4 +1,5 @@
 import React, { useEffect, useCallback, useState, useMemo } from 'react';
+import React, { useEffect, useCallback, useState, useMemo } from 'react';
 import {
   View,
   FlatList,
@@ -10,10 +11,14 @@ import {
   TextInput,
   TouchableWithoutFeedback,
   ScrollView,
+  Image,
+  TextInput,
+  TouchableWithoutFeedback,
+  ScrollView,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
-import Icon from 'react-native-vector-icons/Ionicons';
+import OptimizedIcon from '@/components/atoms/ui/OptimizedIcon';
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 import { RootState, AppDispatch } from '@/store';
@@ -143,6 +148,7 @@ const ChatScreen: React.FC = () => {
   );
 
   const handleChatPress = useCallback((chat: ChatData) => {
+  const handleChatPress = useCallback((chat: ChatData) => {
     // Clear unread count immediately when chat is opened
     if (chat.unread_count && chat.unread_count > 0) {
       dispatch(clearUnreadCount(chat.id));
@@ -151,9 +157,14 @@ const ChatScreen: React.FC = () => {
     dispatch(setCurrentChat(chat));
     (navigation as any).navigate('ConversationScreen', { chat });
   }, [dispatch, navigation]);
+  }, [dispatch, navigation]);
 
   const handleCreateChat = useCallback(() => {
+  const handleCreateChat = useCallback(() => {
     (navigation as any).navigate('FilteredContactsScreen');
+  }, [navigation]);
+
+  const getChatSubtitle = useCallback((chat: ChatData) => {
   }, [navigation]);
 
   const getChatSubtitle = useCallback((chat: ChatData) => {
@@ -192,6 +203,7 @@ const ChatScreen: React.FC = () => {
       ? `${chat.participants.length} members`
       : 'No messages yet';
   }, [user?.id, user?.firebaseUid]);
+  }, [user?.id, user?.firebaseUid]);
 
   const getMediaTypeText = (messageType: string) => {
     switch (messageType) {
@@ -209,6 +221,7 @@ const ChatScreen: React.FC = () => {
   };
 
   const getChatAvatarInitials = useCallback((chat: ChatData) => {
+  const getChatAvatarInitials = useCallback((chat: ChatData) => {
     if (chat.type === 'group') {
       return chat.name?.charAt(0).toUpperCase() || 'G';
     } else {
@@ -219,7 +232,9 @@ const ChatScreen: React.FC = () => {
       return name?.charAt(0).toUpperCase() || 'U';
     }
   }, [user?.id, user?.firebaseUid]);
+  }, [user?.id, user?.firebaseUid]);
 
+  const getAvatarColor = useCallback((chat: ChatData) => {
   const getAvatarColor = useCallback((chat: ChatData) => {
     const avatarColors = [
       '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', 
@@ -229,6 +244,7 @@ const ChatScreen: React.FC = () => {
     const title = getChatTitle(chat);
     const index = title.charCodeAt(0) % avatarColors.length;
     return avatarColors[index];
+  }, [getChatTitle]);
   }, [getChatTitle]);
 
   const formatLastMessageTime = (timestamp: string) => {
@@ -252,6 +268,7 @@ const ChatScreen: React.FC = () => {
     }
   };
 
+  const renderChatItem = useCallback(({ item }: { item: ChatData }) => {
   const renderChatItem = useCallback(({ item }: { item: ChatData }) => {
     const avatarColor = getAvatarColor(item);
     const hasUnread = item.unread_count && item.unread_count > 0;
@@ -325,6 +342,7 @@ const ChatScreen: React.FC = () => {
             </Text>
             {item.last_message && (
               <Text style={styles.chatTime}>
+              <Text style={styles.chatTime}>
                 {formatLastMessageTime(item.last_message.created_at)}
               </Text>
             )}
@@ -342,7 +360,7 @@ const ChatScreen: React.FC = () => {
               {getChatSubtitle(item)}
             </Text>
             {hasUnread && (
-              <View style={[styles.unreadBadge, { backgroundColor: colors.accent }]}>
+              <View style={[styles.unreadBadge, { backgroundColor: '#7f1d1d' }]}>
                 <Text style={styles.unreadText}>
                   {(item.unread_count || 0) > 99 ? '99+' : item.unread_count}
                 </Text>
@@ -352,6 +370,7 @@ const ChatScreen: React.FC = () => {
         </View>
       </TouchableOpacity>
     );
+  }, [user, colors, getAvatarColor, getChatAvatarInitials, getChatSubtitle, getChatTitle, handleChatPress]);
   }, [user, colors, getAvatarColor, getChatAvatarInitials, getChatSubtitle, getChatTitle, handleChatPress]);
 
   const renderEmptyState = useCallback(() => {
@@ -608,8 +627,10 @@ const ChatScreen: React.FC = () => {
       
       <FlatList
         data={filteredChats}
+        data={filteredChats}
         keyExtractor={(item) => item.id}
         renderItem={renderChatItem}
+        ItemSeparatorComponent={ChatItemSeparator}
         ListEmptyComponent={renderEmptyState}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={chats.length === 0 ? styles.emptyListContainer : styles.listContent}
@@ -620,9 +641,10 @@ const ChatScreen: React.FC = () => {
         onPress={handleCreateChat}
         activeOpacity={0.85}
       >
-        <Icon name="create-outline" size={moderateScale(28)} color="#FFFFFF" />
+        <OptimizedIcon name="create-outline" size={moderateScale(28)} color="#FFFFFF" />
       </TouchableOpacity>
     </View>
+    </TouchableWithoutFeedback>
     </TouchableWithoutFeedback>
   );
 };
@@ -630,6 +652,79 @@ const ChatScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(2),
+    paddingTop: hp(4), // Extra padding for status bar
+  },
+  headerButton: {
+    padding: wp(2),
+    borderRadius: moderateScale(8),
+  },
+  headerTitle: {
+    fontSize: responsiveFont(20),
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  searchContainer: {
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: moderateScale(12),
+    paddingHorizontal: wp(3),
+    paddingVertical: hp(1),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  searchIcon: {
+    marginRight: wp(2),
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: responsiveFont(16),
+    paddingVertical: 0,
+  },
+  clearButton: {
+    marginLeft: wp(2),
+    padding: wp(1),
+  },
+  filterContainer: {
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  filterScrollContent: {
+    paddingHorizontal: wp(1),
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: wp(3),
+    paddingVertical: hp(1),
+    marginHorizontal: wp(1),
+    borderRadius: moderateScale(20),
+    borderWidth: 1,
+    minWidth: moderateScale(80),
+    justifyContent: 'center',
+  },
+  filterButtonText: {
+    fontSize: responsiveFont(14),
+    fontWeight: '600',
+    marginLeft: wp(1.5),
+    letterSpacing: 0.2,
   },
   header: {
     flexDirection: 'row',
@@ -747,11 +842,30 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderRadius: moderateScale(25),
+    width: moderateScale(50),
+    height: moderateScale(50),
+    borderRadius: moderateScale(25),
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: wp(3),
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: moderateScale(25),
+  },
+  avatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    borderRadius: moderateScale(25),
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
   },
   avatarText: {
+    fontSize: responsiveFont(20),
     fontSize: responsiveFont(20),
     fontWeight: '700',
     color: '#FFFFFF',
@@ -793,6 +907,7 @@ const styles = StyleSheet.create({
   chatTime: {
     fontSize: responsiveFont(13),
     fontWeight: '500',
+    color: '#AAAAAA',
     color: '#AAAAAA',
   },
   chatSubtitle: {

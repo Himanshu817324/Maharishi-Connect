@@ -17,7 +17,7 @@ interface MessageStatusIndicatorProps {
 
 const MessageStatusIndicator: React.FC<MessageStatusIndicatorProps> = ({
   status,
-  showText = true,
+  showText = false, // Changed default to false - no text by default
   showIcon = true,
   size = 'small',
   onRetry,
@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   icon: {
-    marginRight: wp(1),
+    marginLeft: wp(1), // Changed from marginRight to marginLeft for inline layout
   },
   textContainer: {
     flexDirection: 'row',

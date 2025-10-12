@@ -4,6 +4,7 @@ import React, {
   useCallback,
   useMemo,
   startTransition,
+  useRef,
 } from 'react';
 import {
   View,
@@ -17,7 +18,6 @@ import {
   RefreshControl,
   Linking,
   Image,
-  VirtualizedList,
   FlatList,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -81,6 +81,8 @@ const FilteredContactsScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const [hasData, setHasData] = useState(false);
+  const [isDataReady, setIsDataReady] = useState(false);
+  const hasLoadedRef = useRef(false);
 
   // Get user IDs for status monitoring
   const userIds = useMemo(() => {
@@ -123,15 +125,18 @@ const FilteredContactsScreen: React.FC = () => {
     [user],
   );
 
-  // Make UI interactive as soon as contacts are available, even if grouping is in progress
+  // Make UI interactive as soon as contacts are available
   const isLoading = loading || permissionLoading;
-  const isGrouping = !initialLoadComplete && !loading && !permissionLoading;
+  
+  // ✅ FIX: More robust loading state that prevents any blinking
+  const shouldShowLoading = isLoading || !isDataReady;
 
   const loadContacts = useCallback(async () => {
     try {
       setLoading(true);
       setInitialLoadComplete(false);
       setHasData(false);
+      setIsDataReady(false);
       setLoadingPhase('Checking permissions...');
 
       if (!hasPermission && !permissionRequested) {
@@ -153,7 +158,16 @@ const FilteredContactsScreen: React.FC = () => {
         return;
       }
 
-      setLoadingPhase('Loading device contacts...');
+      // Check cache status before loading
+      const cacheStatus = contactService.getCacheStatus();
+      console.log('📱 Cache status:', cacheStatus);
+
+      if (cacheStatus.hasCache && !cacheStatus.isEmpty && !cacheStatus.isExpired) {
+        setLoadingPhase('Loading cached contacts...');
+      } else {
+        setLoadingPhase('Syncing contacts...');
+      }
+
       console.log('🔍 Loading contacts with user status...');
 
       // Start loading contacts in background
@@ -169,17 +183,44 @@ const FilteredContactsScreen: React.FC = () => {
       // Filter out current user from existing users
       const filteredUsers = filterCurrentUser(users);
 
+      // Only set hasData to true if we actually have contacts
+      const hasActualData = filteredUsers.length > 0 || nonUsersList.length > 0;
+
       // ✅ OPTIMIZED: Batch all state updates to prevent multiple re-renders
-      startTransition(() => {
+      // ✅ FIX: Use a single state update to prevent any intermediate renders
+      const updateState = () => {
         setExistingUsers(filteredUsers);
         setNonUsers(nonUsersList);
         setFilteredExistingUsers(filteredUsers);
         setFilteredNonUsers(nonUsersList);
-        setHasData(true);
+        setHasData(hasActualData);
         setInitialLoadComplete(true);
+        
+        // Group contacts immediately to prevent additional renders
+        const groupedExisting = contactService.groupContactsAlphabetically(filteredUsers);
+        const groupedNonUsersData = contactService.groupContactsAlphabetically(
+          nonUsersList.map(nonUser => ({
+            user_id: nonUser.phoneNumber,
+            fullName: nonUser.name || 'Unknown',
+            phoneNumber: nonUser.phoneNumber,
+          }))
+        );
+        setGroupedExistingUsers(groupedExisting);
+        setGroupedNonUsers(groupedNonUsersData);
+        
+        // Set data ready last to ensure everything is processed
+        setIsDataReady(true);
+      };
+      
+      // Use startTransition for non-blocking updates, but ensure atomicity
+      startTransition(updateState);
+
+      console.log('✅ Contact loading complete:', {
+        existingUsers: filteredUsers.length,
+        nonUsers: nonUsersList.length,
+        hasData: hasActualData
       });
 
-      setLoadingPhase('Finalizing...');
     } catch (error) {
       console.error('Error loading contacts:', error);
       setLoadingPhase('Error loading contacts');
@@ -191,7 +232,10 @@ const FilteredContactsScreen: React.FC = () => {
           { text: 'Retry', onPress: loadContacts },
         ],
       );
+      // ✅ FIX: Set all states atomically for error case to prevent blinking
+      setHasData(false);
       setInitialLoadComplete(true);
+      setIsDataReady(true);
     } finally {
       setLoading(false);
     }
@@ -234,8 +278,11 @@ const FilteredContactsScreen: React.FC = () => {
   );
 
   const onRefresh = useCallback(async () => {
+    console.log('🔄 [FilteredContactsScreen] onRefresh triggered');
     setRefreshing(true);
     setHasData(false);
+    hasLoadedRef.current = false; // Reset the ref to allow reloading
+    console.log('🔄 [FilteredContactsScreen] Reset hasLoadedRef to false for refresh');
     try {
       // Force refresh contacts (bypass cache)
       const { existingUsers: users, nonUsers: nonUsersList } =
@@ -253,61 +300,40 @@ const FilteredContactsScreen: React.FC = () => {
       console.error('Error refreshing contacts:', error);
     } finally {
       setRefreshing(false);
+      hasLoadedRef.current = true; // Set back to true after refresh completes
+      console.log('✅ [FilteredContactsScreen] Refresh completed, hasLoadedRef set to true');
     }
   }, [filterCurrentUser]);
 
   useEffect(() => {
-    // Add a small delay to prevent rapid re-execution
-    const timeoutId = setTimeout(() => {
+    // Only load contacts once when component mounts
+    console.log('🔄 [FilteredContactsScreen] useEffect triggered, hasLoadedRef:', hasLoadedRef.current);
+    if (!hasLoadedRef.current) {
+      console.log('✅ [FilteredContactsScreen] Loading contacts for the first time');
+      hasLoadedRef.current = true;
       loadContacts();
-    }, 100);
-
-    return () => clearTimeout(timeoutId);
-  }, [loadContacts]);
+    } else {
+      console.log('⏭️ [FilteredContactsScreen] Skipping loadContacts - already loaded');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Intentionally empty - we only want this to run once
 
   useEffect(() => {
+    // Only process search/filtering if we have data and initial load is complete
+    // ✅ FIX: Also check isDataReady to ensure we don't process during initial load
+    if (!initialLoadComplete || !hasData || !isDataReady) {
+      return;
+    }
+
     if (searchQuery.trim()) {
       searchContacts(searchQuery);
     } else {
       setFilteredExistingUsers(existingUsers);
       setFilteredNonUsers(nonUsers);
     }
-  }, [searchQuery, existingUsers, nonUsers, searchContacts]);
+  }, [searchQuery, existingUsers, nonUsers, searchContacts, initialLoadComplete, hasData, isDataReady]);
 
-  useEffect(() => {
-    // Only group if we have data and initial load is complete
-    if (
-      !initialLoadComplete ||
-      (filteredExistingUsers.length === 0 && filteredNonUsers.length === 0)
-    ) {
-      return;
-    }
-
-    // Use requestAnimationFrame to prevent blocking the UI
-    requestAnimationFrame(() => {
-      setLoadingPhase('Organizing contacts...');
-
-      // Group existing users
-      const groupedExisting = contactService.groupContactsAlphabetically(
-        filteredExistingUsers,
-      );
-      setGroupedExistingUsers(groupedExisting);
-
-      // Group non-users in next frame to prevent blocking
-      requestAnimationFrame(() => {
-        const groupedNonUsersData = contactService.groupContactsAlphabetically(
-          filteredNonUsers.map(nonUser => ({
-            user_id: nonUser.phoneNumber,
-            fullName: nonUser.name || 'Unknown',
-            phoneNumber: nonUser.phoneNumber,
-          })),
-        );
-        setGroupedNonUsers(groupedNonUsersData);
-
-        setLoadingPhase('Complete');
-      });
-    });
-  }, [filteredExistingUsers, filteredNonUsers, initialLoadComplete]);
+  // ✅ FIX: Removed grouping useEffect since grouping now happens in the main data load
 
   const handleContactSelect = async (contact: Contact) => {
     console.log('📱 Contact selected:', {
@@ -376,16 +402,27 @@ const FilteredContactsScreen: React.FC = () => {
       return;
     }
 
+    // Show loading immediately when user clicks Create Group button
+    setIsCreatingChat(true);
+
     Alert.prompt(
       'Create Group Chat',
       'Enter group name:',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Cancel', 
+          style: 'cancel',
+          onPress: () => {
+            // Hide loading if user cancels
+            setIsCreatingChat(false);
+          }
+        },
         {
           text: 'Create',
           onPress: async (groupName?: string) => {
             if (!groupName || !groupName.trim()) {
               Alert.alert('Error', 'Please enter a group name.');
+              // Keep loading state active for retry
               return;
             }
 
@@ -419,6 +456,9 @@ const FilteredContactsScreen: React.FC = () => {
                 'Error',
                 'Failed to create group chat. Please try again.',
               );
+            } finally {
+              // Hide loading when chat creation is complete (success or error)
+              setIsCreatingChat(false);
             }
           },
         },
@@ -650,8 +690,10 @@ const FilteredContactsScreen: React.FC = () => {
     );
   };
 
-  // Only show loading screen if we're still loading and don't have any data yet
-  if (isLoading && !hasData) {
+  // Only show loading screen if we're still loading and data isn't ready yet
+  // This prevents showing empty state during initial load when cache is empty
+  // ✅ FIX: Use shouldShowLoading to ensure we never show empty state during loading
+  if (shouldShowLoading) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <CustomHeader
@@ -708,6 +750,8 @@ const FilteredContactsScreen: React.FC = () => {
     );
   }
 
+  // ✅ FIX: Removed skeleton loading state as it's redundant with the main loading state
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <CustomHeader
@@ -750,20 +794,6 @@ const FilteredContactsScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* Grouping Indicator */}
-      {isGrouping && (
-        <View
-          style={[
-            styles.groupingIndicator,
-            { backgroundColor: colors.surface },
-          ]}
-        >
-          <ActivityIndicator size="small" color={colors.accent} />
-          <Text style={[styles.groupingText, { color: colors.textSecondary }]}>
-            Organizing contacts...
-          </Text>
-        </View>
-      )}
 
       <ScrollView
         style={styles.contentContainer}
@@ -1370,21 +1400,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginLeft: moderateScale(8),
   },
-  groupingIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: hp(1),
-    paddingHorizontal: wp(4),
-    marginHorizontal: wp(4),
-    marginVertical: hp(0.5),
-    borderRadius: moderateScale(8),
-  },
-  groupingText: {
-    fontSize: responsiveFont(14),
-    marginLeft: wp(2),
-    fontWeight: '500',
-  },
   loaderOverlay: {
     position: 'absolute',
     top: 0,
@@ -1416,6 +1431,41 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginTop: moderateScale(12),
     textAlign: 'center',
+  },
+  // Skeleton loading styles
+  skeletonBar: {
+    height: moderateScale(20),
+    borderRadius: moderateScale(10),
+    flex: 1,
+  },
+  skeletonContactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: wp(5),
+    paddingVertical: hp(1.5),
+    marginHorizontal: wp(3),
+    marginVertical: hp(0.3),
+  },
+  skeletonAvatar: {
+    width: moderateScale(48),
+    height: moderateScale(48),
+    borderRadius: moderateScale(24),
+    marginRight: wp(3),
+  },
+  skeletonContactInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  skeletonText: {
+    height: moderateScale(16),
+    borderRadius: moderateScale(8),
+    marginBottom: hp(0.5),
+    width: '70%',
+  },
+  skeletonTextSmall: {
+    height: moderateScale(12),
+    borderRadius: moderateScale(6),
+    width: '50%',
   },
 });
 

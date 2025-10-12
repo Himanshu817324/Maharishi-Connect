@@ -155,6 +155,12 @@ const authSlice = createSlice({
           hasSeenOnboarding: state.hasSeenOnboarding,
         });
         
+        // Also save token separately for services if it exists
+        if (action.payload.token) {
+          AsyncStorage.setItem('auth_token', action.payload.token);
+          console.log('🔄 [updateUserProfile] Token saved to AsyncStorage');
+        }
+        
         console.log('🔄 [updateUserProfile] Data saved to AsyncStorage');
       } else {
         console.error('❌ [updateUserProfile] No user in state, cannot update profile');

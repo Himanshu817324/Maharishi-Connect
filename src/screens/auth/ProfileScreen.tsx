@@ -5,7 +5,6 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -15,27 +14,22 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import {
-  launchCamera,
-  launchImageLibrary,
-  ImagePickerResponse,
-  MediaType,
-} from 'react-native-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { lightweightImagePicker } from '@/services/lightweightImagePicker';
 import Toast from 'react-native-toast-message';
 import { useDispatch, useSelector } from 'react-redux';
 import { apiService } from '../../services/apiService';
 import { locationsService } from '../../services/locationsService';
 import { imageUploadService } from '../../services/imageUploadService';
 import { RootState } from '../../store';
-import { login, updateUserProfile } from '../../store/slices/authSlice';
-import { LightColors } from '../../theme/colors';
+import { updateUserProfile } from '../../store/slices/authSlice';
 import { RootStackParamList } from '../../types/navigation';
 import ModernDropdown from '../../components/atoms/ui/ModernDropdown';
-import { requestContactsPermissionWithAlert } from '../../utils/permissions';
+import requestContactsPermissionWithAlert from '../../utils/permissions';
 
 type ProfileScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
-  'AuthStack'
+  'AuthStack'                                                                                                                                                                                                                                                                                                                       
 >;
 
 const ProfileScreen = () => {
@@ -52,9 +46,8 @@ const ProfileScreen = () => {
 
   // Prefill fields if user data exists
   const [fullName, setFullName] = useState(user?.fullName || '');
-  const [selectedCountry, setSelectedCountry] = useState(user?.country || '');
+  const [selectedCountry, setSelectedCountry] = useState(user?.country || 'India');
   const [selectedState, setSelectedState] = useState(user?.state || '');
-  const [selectedStatus, setSelectedStatus] = useState(user?.status || '');
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
@@ -69,6 +62,27 @@ const ProfileScreen = () => {
   const [countries, setCountries] = useState<string[]>([]);
   const [states, setStates] = useState<string[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(true);
+  const [loadingStates, setLoadingStates] = useState(false);
+
+  // Generate initials from full name
+  const getInitials = (name: string) => {
+    if (!name) return 'U';
+    const words = name.trim().split(' ');
+    if (words.length === 1) {
+      return words[0].charAt(0).toUpperCase();
+    }
+    return (words[0].charAt(0) + words[words.length - 1].charAt(0)).toUpperCase();
+  };
+
+  // Get default state for a country
+  const getDefaultState = (country: string): string => {
+    const defaultStates: Record<string, string> = {
+      'India': 'Uttar Pradesh',
+      'UK': 'England',
+      'USA': 'California',
+    };
+    return defaultStates[country] || '';
+  };
 
   useEffect(() => {
     if (!user) {
@@ -76,7 +90,7 @@ const ProfileScreen = () => {
     }
   }, [user, navigation]);
 
-  // Load countries and states from API
+  // Load countries from API
   useEffect(() => {
     const loadLocations = async () => {
       try {
@@ -85,12 +99,6 @@ const ProfileScreen = () => {
         // Load countries
         const countriesData = await locationsService.getCountries();
         setCountries(countriesData);
-
-        // If user has a pre-selected country, load its states
-        if (user?.country) {
-          const statesData = await locationsService.getStates(user.country);
-          setStates(statesData);
-        }
       } catch (error) {
         console.error('Error loading locations:', error);
         // Don't show error toast for fallback data
@@ -100,7 +108,37 @@ const ProfileScreen = () => {
     };
 
     loadLocations();
-  }, [user?.country]);
+  }, []);
+
+  // Load states when country changes
+  useEffect(() => {
+    const loadStates = async () => {
+      if (!selectedCountry) return;
+      
+      try {
+        setLoadingStates(true);
+        const statesData = await locationsService.getStates(selectedCountry);
+        setStates(statesData);
+        
+        // Set default state if current state is not valid for the new country
+        if (!statesData.includes(selectedState)) {
+          const defaultState = getDefaultState(selectedCountry);
+          setSelectedState(defaultState);
+        }
+        
+        console.log('🏛️ States loaded for', selectedCountry, ':', statesData);
+      } catch (error) {
+        console.error('❌ Error loading states:', error);
+        setStates([]);
+        setSelectedState(getDefaultState(selectedCountry));
+      } finally {
+        setLoadingStates(false);
+      }
+    };
+
+    loadStates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCountry]); // Only depend on selectedCountry
 
   if (!user) {
     return null;
@@ -121,72 +159,52 @@ const ProfileScreen = () => {
     );
   };
 
-  const openCamera = () => {
-    const options = {
-      mediaType: 'photo' as MediaType,
-      includeBase64: false,
-      maxHeight: 2048,
-      maxWidth: 2048,
-      quality: 0.8 as const,
-      cameraType: 'back' as const,
-    };
-
-    launchCamera(options, (response: ImagePickerResponse) => {
-      if (response.didCancel) {
-        return;
-      }
-
-      if (response.errorMessage) {
-        console.error('Camera error:', response.errorMessage);
+  const openCamera = async () => {
+    try {
+      const result = await lightweightImagePicker.takePhoto();
+      
+      if (result.success && result.files.length > 0) {
+        const file = result.files[0];
+        uploadImage(file.uri);
+      } else if (result.error) {
         Toast.show({
           type: 'error',
           text1: 'Camera Error',
-          text2: response.errorMessage,
+          text2: result.error,
         });
-        return;
       }
-
-      if (response.assets && response.assets[0]) {
-        const asset = response.assets[0];
-        if (asset.uri) {
-          uploadImage(asset.uri);
-        }
-      }
-    });
+    } catch (error) {
+      console.error('Camera error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Camera Error',
+        text2: 'Failed to access camera',
+      });
+    }
   };
 
-  const openImageLibrary = () => {
-    const options = {
-      mediaType: 'photo' as MediaType,
-      includeBase64: false,
-      maxHeight: 2048,
-      maxWidth: 2048,
-      quality: 0.8 as const,
-      selectionLimit: 1,
-    };
-
-    launchImageLibrary(options, (response: ImagePickerResponse) => {
-      if (response.didCancel) {
-        return;
-      }
-
-      if (response.errorMessage) {
-        console.error('Gallery error:', response.errorMessage);
+  const openImageLibrary = async () => {
+    try {
+      const result = await lightweightImagePicker.pickImages(1);
+      
+      if (result.success && result.files.length > 0) {
+        const file = result.files[0];
+        uploadImage(file.uri);
+      } else if (result.error) {
         Toast.show({
           type: 'error',
           text1: 'Gallery Error',
-          text2: response.errorMessage,
+          text2: result.error,
         });
-        return;
       }
-
-      if (response.assets && response.assets[0]) {
-        const asset = response.assets[0];
-        if (asset.uri) {
-          uploadImage(asset.uri);
-        }
-      }
-    });
+    } catch (error) {
+      console.error('Gallery error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Gallery Error',
+        text2: 'Failed to access gallery',
+      });
+    }
   };
 
   const uploadImage = async (imageUri: string) => {
@@ -250,8 +268,12 @@ const ProfileScreen = () => {
       return;
     }
 
-    if (!fullName || !selectedCountry || !selectedState || !selectedStatus) {
-      Toast.show({ type: 'error', text1: 'Please fill all fields' });
+    if (!fullName || !selectedCountry || !selectedState) {
+      Toast.show({ 
+        type: 'error', 
+        text1: 'Please fill all fields',
+        text2: 'Name, country, and state are required'
+      });
       return;
     }
 
@@ -264,7 +286,7 @@ const ProfileScreen = () => {
         country: selectedCountry,
         state: selectedState,
       },
-      status: selectedStatus,
+      status: 'Working', // Dummy data
       // Send tempId if image was uploaded, otherwise use manual URL
       profilePicture: uploadTempId || profileImage || null,
     };
@@ -290,19 +312,31 @@ const ProfileScreen = () => {
         // Prepare user data for Redux store
         const userData = {
           fullName: response.user.fullName,
-          avatar: response.user.profilePicture || 'https://picsum.photos/200',
+          avatar: response.user.profilePicture || null, // Will use initials if null
           country: country,
           state: state,
-          status: response.user.status,
+          status: 'Working', // Dummy data
           isVerified: response.user.isVerified,
           profileCompleted: true, // Mark profile as completed
           token: response.token, // Store the JWT token
         };
 
         console.log('📝 Updating Redux with user data:', userData);
+        console.log('📝 Token from response:', response.token);
 
         // Use updateUserProfile to update existing user data
         dispatch(updateUserProfile(userData));
+        
+        // Verify token was saved to AsyncStorage
+        try {
+          const savedToken = await AsyncStorage.getItem('auth_token');
+          console.log('📝 Token verification - saved token:', savedToken ? 'EXISTS' : 'NOT FOUND');
+          if (savedToken) {
+            console.log('📝 Token verification - token preview:', savedToken.substring(0, 20) + '...');
+          }
+        } catch (error) {
+          console.error('📝 Token verification failed:', error);
+        }
       }
 
       Toast.show({ type: 'success', text1: 'Profile saved successfully!' });
@@ -312,9 +346,7 @@ const ProfileScreen = () => {
 
       // Request contacts permission after successful profile completion
       try {
-        const permissionResult = await requestContactsPermissionWithAlert(
-          false,
-        );
+        const permissionResult = await requestContactsPermissionWithAlert.requestContactsPermission();
         if (permissionResult.granted) {
           // Contacts permission granted
         } else {
@@ -378,26 +410,6 @@ const ProfileScreen = () => {
     }
   };
 
-  const getStateEmoji = (_state: string) => {
-    // You can add specific state emojis if needed
-    return '📍';
-  };
-
-  // Reset state when country changes and load new states
-  const handleCountryChange = async (country: string) => {
-    setSelectedCountry(country);
-    setSelectedState(''); // Reset state when country changes
-
-    // Load states for the selected country
-    try {
-      const statesData = await locationsService.getStates(country);
-      setStates(statesData);
-    } catch (error) {
-      console.error(`Error loading states for ${country}:`, error);
-      // Don't show error toast for fallback data
-    }
-  };
-
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -405,21 +417,10 @@ const ProfileScreen = () => {
     >
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header Section */}
-        <View style={styles.headerSection}>
-          <Text style={styles.title}>Complete Your Profile</Text>
-          <Text style={styles.subtitle}>
-            Let&apos;s set up your account to get started
-          </Text>
-        </View>
-
-        {/* Profile Image Section */}
-        <View style={styles.imageSection}>
+      <View style={styles.content}>
+        {/* Main Content Area */}
+        <View style={styles.mainContent}>
+          {/* Profile Image Section */}
           <TouchableOpacity
             style={[
               styles.imageContainer,
@@ -428,10 +429,16 @@ const ProfileScreen = () => {
             onPress={showImagePicker}
             disabled={uploading}
           >
-            <Image
-              source={{ uri: profileImage || 'https://picsum.photos/200' }}
-              style={styles.profileImage}
-            />
+            {profileImage ? (
+              <Image
+                source={{ uri: profileImage }}
+                style={styles.profileImage}
+              />
+            ) : (
+              <View style={styles.initialsContainer}>
+                <Text style={styles.initialsText}>{getInitials(fullName)}</Text>
+              </View>
+            )}
             <View style={styles.imageOverlay}>
               {uploading ? (
                 <View style={styles.uploadingContainer}>
@@ -441,122 +448,79 @@ const ProfileScreen = () => {
               ) : (
                 <View style={styles.cameraIconContainer}>
                   <Text style={styles.imageOverlayText}>📷</Text>
-                  <Text style={styles.cameraIconText}>Change Photo</Text>
                 </View>
               )}
             </View>
           </TouchableOpacity>
-          <Text style={styles.imageText}>
-            {uploading ? 'Uploading image...' : 'Tap to select profile picture'}
-          </Text>
-          {profileImage && !uploading && (
-            <Text style={styles.imageStatusText}>
-              ✅ Image uploaded successfully
-            </Text>
-          )}
-        </View>
 
-        {/* Form Section */}
-        <View style={styles.formSection}>
-          {/* Full Name Input */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>👤 Full Name</Text>
-            <TextInput
-              style={[
-                styles.input,
-                focusedField === 'fullName' && styles.inputFocused,
-              ]}
-              placeholder="Enter your full name"
-              placeholderTextColor={LightColors.subText}
-              value={fullName}
-              onChangeText={setFullName}
-              onFocus={() => setFocusedField('fullName')}
-              onBlur={() => setFocusedField(null)}
-            />
-          </View>
+          {/* Username Input */}
+          <TextInput
+            style={[
+              styles.input,
+              focusedField === 'fullName' && styles.inputFocused,
+            ]}
+            placeholder="Username"
+            placeholderTextColor="#9CA3AF"
+            value={fullName}
+            onChangeText={setFullName}
+            onFocus={() => setFocusedField('fullName')}
+            onBlur={() => setFocusedField(null)}
+          />
 
           {/* Country Picker */}
           <ModernDropdown
-            label="Country"
-            emoji="🌍"
+            label=""
+            emoji=""
             options={countries.map(country => ({
               label: country,
               value: country,
               emoji: getCountryEmoji(country),
             }))}
             selectedValue={selectedCountry}
-            onValueChange={handleCountryChange}
-            placeholder="Select your country"
+            onValueChange={setSelectedCountry}
+            placeholder="Country"
             loading={loadingLocations}
             disabled={loadingLocations}
+            style={styles.dropdownFullWidth}
           />
 
           {/* State Picker */}
           <ModernDropdown
-            label="State/Region"
-            emoji="📍"
+            label=""
+            emoji=""
             options={states.map(state => ({
               label: state,
               value: state,
-              emoji: getStateEmoji(state),
+              emoji: '🏛️',
             }))}
             selectedValue={selectedState}
-            onValueChange={value => setSelectedState(value)}
-            placeholder={
-              loadingLocations
-                ? 'Loading states...'
-                : selectedCountry
-                ? 'Select your state/region'
-                : 'Select country first'
-            }
-            loading={loadingLocations}
-            disabled={!selectedCountry || loadingLocations}
-          />
-
-          {/* Status Picker */}
-          <ModernDropdown
-            label="Status"
-            emoji="📊"
-            options={[
-              { label: 'Available', value: 'Available', emoji: '🟢' },
-              { label: 'Working', value: 'Working', emoji: '💼' },
-              { label: 'Busy', value: 'Busy', emoji: '🔴' },
-              { label: 'Away', value: 'Away', emoji: '⏰' },
-            ]}
-            selectedValue={selectedStatus}
-            onValueChange={value => setSelectedStatus(value)}
-            placeholder="Select your status"
+            onValueChange={setSelectedState}
+            placeholder="State/Province"
+            loading={loadingStates}
+            disabled={loadingStates || !selectedCountry}
+            style={styles.dropdownFullWidth}
           />
         </View>
-      </ScrollView>
 
-      {/* Bottom Section */}
-      <View style={styles.bottomSection}>
-        <TouchableOpacity
-          style={[
-            styles.saveButton,
-            (loading || loadingLocations) && styles.saveButtonDisabled,
-          ]}
-          onPress={onSubmit}
-          disabled={loading || loadingLocations}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.saveButtonText}>
-            {loadingLocations
-              ? 'Loading locations...'
-              : loading
-              ? 'Setting up your profile...'
-              : 'Complete Setup'}
-          </Text>
-          {!loading && !loadingLocations && (
-            <Text style={styles.buttonArrow}>✨</Text>
-          )}
-        </TouchableOpacity>
-
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Powered by</Text>
-          <Text style={styles.brandText}>Maharishi Connect</Text>
+        {/* Bottom Section */}
+        <View style={styles.bottomSection}>
+          <TouchableOpacity
+            style={[
+              styles.saveButton,
+              (loading || loadingLocations || loadingStates) && styles.saveButtonDisabled,
+            ]}
+            onPress={onSubmit}
+            disabled={loading || loadingLocations || loadingStates}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.saveButtonText}>
+              {loadingLocations || loadingStates
+                ? 'Loading locations...'
+                : loading
+                ? 'Setting up your profile...'
+                : 'CONTINUE'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -568,47 +532,40 @@ export default ProfileScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: LightColors.background,
+    backgroundColor: '#ffffff',
   },
-  scrollView: {
+  content: {
     flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 20,
-  },
-  headerSection: {
     paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 30,
+  },
+  mainContent: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: LightColors.text,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: LightColors.subText,
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  imageSection: {
-    alignItems: 'center',
-    marginBottom: 40,
+    marginTop: 40,
   },
   imageContainer: {
     position: 'relative',
-    marginBottom: 12,
+    marginBottom: 40,
   },
   profileImage: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    borderWidth: 4,
-    borderColor: LightColors.primary,
+    backgroundColor: '#F3F4F6',
+  },
+  initialsContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#8B5CF6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  initialsText: {
+    fontSize: 48,
+    fontWeight: '700',
+    color: '#ffffff',
   },
   imageOverlay: {
     position: 'absolute',
@@ -617,25 +574,14 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: LightColors.primary,
+    backgroundColor: '#8B5CF6',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 3,
-    borderColor: LightColors.background,
+    borderColor: '#ffffff',
   },
   imageOverlayText: {
     fontSize: 16,
-  },
-  imageText: {
-    fontSize: 14,
-    color: LightColors.subText,
-    fontWeight: '600',
-  },
-  imageStatusText: {
-    fontSize: 12,
-    color: '#4CAF50',
-    fontWeight: '500',
-    marginTop: 4,
   },
   imageContainerDisabled: {
     opacity: 0.6,
@@ -654,95 +600,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cameraIconText: {
-    color: 'white',
-    fontSize: 8,
-    marginTop: 1,
-    fontWeight: '600',
-  },
-  formSection: {
-    paddingHorizontal: 24,
-  },
-  inputGroup: {
-    marginBottom: 24,
-  },
-  inputLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: LightColors.text,
-    marginBottom: 12,
-  },
   input: {
-    backgroundColor: LightColors.card,
-    borderRadius: 16,
-    padding: 18,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     fontSize: 16,
-    color: LightColors.text,
-    borderWidth: 2,
-    borderColor: LightColors.border,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    color: '#374151',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    width: '100%',
+    marginBottom: 16,
   },
   inputFocused: {
-    borderColor: LightColors.primary,
-    shadowColor: LightColors.primary,
-    shadowOpacity: 0.1,
+    borderColor: '#8B5CF6',
+  },
+  dropdownFullWidth: {
+    width: '100%',
   },
   bottomSection: {
-    paddingHorizontal: 24,
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
     paddingTop: 20,
-    backgroundColor: LightColors.background,
   },
   saveButton: {
-    backgroundColor: LightColors.primary,
-    borderRadius: 16,
-    paddingVertical: 18,
+    backgroundColor: '#8B5CF6',
+    borderRadius: 8,
+    paddingVertical: 16,
     paddingHorizontal: 24,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: LightColors.primary,
-    shadowOffset: {
-      width: 0,
-      height: 6,
-    },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 12,
-    marginBottom: 24,
+    width: '100%',
   },
   saveButtonDisabled: {
-    backgroundColor: LightColors.subText,
-    shadowOpacity: 0,
-    elevation: 0,
+    backgroundColor: '#9CA3AF',
   },
   saveButtonText: {
-    color: LightColors.textOnPrimary,
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
-    marginRight: 8,
-  },
-  buttonArrow: {
-    fontSize: 16,
-  },
-  footer: {
-    alignItems: 'center',
-  },
-  footerText: {
-    fontSize: 12,
-    color: LightColors.subText,
-    marginBottom: 4,
-  },
-  brandText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: LightColors.primary,
   },
 });

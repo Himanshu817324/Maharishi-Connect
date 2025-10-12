@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   Pressable,
   Platform,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import OptimizedIcon from '@/components/atoms/ui/OptimizedIcon';
 import { useTheme } from '@/theme';
 import {
   responsiveFont,
@@ -36,7 +36,7 @@ interface ChatHeaderProps {
   backgroundColor?: string;
 }
 
-const ChatHeader: React.FC<ChatHeaderProps> = ({
+const ChatHeader: React.FC<ChatHeaderProps> = memo(({
   chat,
   currentUserId,
   onBack,
@@ -75,12 +75,12 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
     }
   }, [otherUserId, getUserStatus]);
 
-  const handleMenuPress = () => setIsMenuVisible(!isMenuVisible);
-  const handleMenuClose = () => setIsMenuVisible(false);
-  const handleMenuAction = (action: () => void) => {
+  const handleMenuPress = useCallback(() => setIsMenuVisible(!isMenuVisible), [isMenuVisible]);
+  const handleMenuClose = useCallback(() => setIsMenuVisible(false), []);
+  const handleMenuAction = useCallback((action: () => void) => {
     action();
     setIsMenuVisible(false);
-  };
+  }, []);
 
   const getChatTitle = () => {
     if (chat.type === 'group') return chat.name || 'Group Chat';
@@ -94,17 +94,8 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
     );
   };
 
-  const getChatSubtitle = () => {
+  const getChatSubtitle = useCallback(() => {
     if (chat.type === 'group') return `${chat.participants.length} members`;
-
-    console.log('🔍 ChatHeader getChatSubtitle:', {
-      otherUserStatus,
-      otherUserId,
-      participants: chat.participants.map(p => ({
-        id: p.user_id,
-        online: (p.userDetails as any)?.online,
-      })),
-    });
 
     // Try to get status from user status hook first
     if (otherUserStatus) {
@@ -122,7 +113,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
     }
 
     return 'Offline';
-  };
+  }, [chat.type, chat.participants, otherUserStatus, otherUserId]);
 
   const getAvatarInitials = () => {
     if (chat.type === 'group') {
@@ -180,12 +171,11 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
       style={[
         styles.container,
         {
-          backgroundColor: backgroundColor || colors.primary,
-          shadowColor: '#000',
+          backgroundColor: backgroundColor || colors.background,
         },
       ]}
     >
-      <CustomStatusBar backgroundColor={colors.primary} />
+      <CustomStatusBar backgroundColor={colors.background} />
       <View style={styles.headerContent}>
         <View style={styles.leftSection}>
           {onBack && (
@@ -194,43 +184,40 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
               onPress={onBack}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Icon
+              <OptimizedIcon
                 name="arrow-back"
                 size={moderateScale(24)}
-                color={colors.textOnPrimary}
+                color={colors.text}
               />
             </TouchableOpacity>
           )}
           <View style={styles.avatarContainer}>
             {renderAvatar()}
-            {chat.type === 'direct' && (
-              <View
-                style={[
-                  styles.statusIndicator,
-                  {
-                    backgroundColor:
-                      otherUserStatus?.isOnline ||
-                      (
-                        chat.participants.find(p => p.user_id === otherUserId)
-                          ?.userDetails as any
-                      )?.online
-                        ? '#4CAF50'
-                        : colors.textSecondary,
-                  },
-                ]}
-              />
-            )}
+            {chat.type === 'direct' && (() => {
+              const isOnline = otherUserStatus?.isOnline || 
+                (chat.participants.find(p => p.user_id === otherUserId)?.userDetails as any)?.online;
+              return (
+                <View
+                  style={[
+                    styles.statusIndicator,
+                    {
+                      backgroundColor: isOnline ? '#4CAF50' : colors.textSecondary,
+                    },
+                  ]}
+                />
+              );
+            })()}
           </View>
           <View style={styles.titleContainer}>
             <Text
-              style={[styles.title, { color: colors.textOnPrimary }]}
+              style={[styles.title, { color: colors.text }]}
               numberOfLines={1}
             >
               {getChatTitle()}
             </Text>
             <View style={styles.subtitleContainer}>
               <Text
-                style={[styles.subtitle, { color: colors.textOnPrimary }]}
+                style={[styles.subtitle, { color: colors.textSecondary }]}
                 numberOfLines={1}
               >
                 {getChatSubtitle()}
@@ -255,10 +242,10 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
               onPress={onCall}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Icon
+              <OptimizedIcon
                 name="call"
                 size={moderateScale(20)}
-                color={colors.textOnPrimary}
+                color={colors.text}
               />
             </TouchableOpacity>
           )}
@@ -269,10 +256,10 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
               onPress={onVideoCall}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Icon
+              <OptimizedIcon
                 name="videocam"
                 size={moderateScale(20)}
-                color={colors.textOnPrimary}
+                color={colors.text}
               />
             </TouchableOpacity>
           )}
@@ -281,10 +268,10 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
             style={styles.actionButton}
             onPress={handleMenuPress}
           >
-            <Icon
+            <OptimizedIcon
               name="ellipsis-vertical"
               size={moderateScale(20)}
-              color={colors.textOnPrimary}
+              color={colors.text}
             />
           </TouchableOpacity>
         </View>
@@ -306,7 +293,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
                 style={styles.menuItem}
                 onPress={() => handleMenuAction(onSearch)}
               >
-                <Icon
+                <OptimizedIcon
                   name="search"
                   size={moderateScale(20)}
                   color={colors.text}
@@ -321,7 +308,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
                 style={styles.menuItem}
                 onPress={() => handleMenuAction(onInfo)}
               >
-                <Icon
+                <OptimizedIcon
                   name="information-circle"
                   size={moderateScale(20)}
                   color={colors.text}
@@ -336,7 +323,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
                 style={styles.menuItem}
                 onPress={() => handleMenuAction(onMore)}
               >
-                <Icon
+                <OptimizedIcon
                   name="settings"
                   size={moderateScale(20)}
                   color={colors.text}
@@ -351,16 +338,12 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
       </Modal>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
     paddingTop: Platform.OS === 'ios' ? hp(6) : hp(1),
     paddingBottom: hp(1.5),
-    elevation: 4,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
   },
   headerContent: {
     flexDirection: 'row',

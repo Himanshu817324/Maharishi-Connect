@@ -44,13 +44,32 @@ class ApiService {
       clearTimeout(timeoutId);
       console.log("📡 Response status:", response.status, response.statusText);
 
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      console.log("📡 Response content-type:", contentType);
+
+      if (!contentType || !contentType.includes('application/json')) {
+        // If not JSON, get the text response for debugging
+        const textResponse = await response.text();
+        console.error("❌ Non-JSON response received:", textResponse.substring(0, 200));
+        
+        if (!response.ok) {
+          throw new Error(`Server error ${response.status}: ${response.statusText}. Server returned: ${textResponse.substring(0, 100)}`);
+        } else {
+          throw new Error("Server returned non-JSON response. Please check your API endpoint.");
+        }
+      }
+
       let data: ApiResponse<T>;
 
       try {
         data = await response.json();
       } catch (parseError) {
         console.error("Failed to parse JSON response:", parseError);
-        throw new Error(NETWORK_ERRORS.INVALID_RESPONSE);
+        // Try to get the raw response for debugging
+        const textResponse = await response.text();
+        console.error("Raw response:", textResponse.substring(0, 200));
+        throw new Error(`Invalid JSON response: ${parseError.message}`);
       }
 
       if (!response.ok) {
@@ -166,6 +185,23 @@ class ApiService {
       });
 
       clearTimeout(timeoutId);
+      console.log("📡 FormData Response status:", response.status, response.statusText);
+
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      console.log("📡 FormData Response content-type:", contentType);
+
+      if (!contentType || !contentType.includes('application/json')) {
+        // If not JSON, get the text response for debugging
+        const textResponse = await response.text();
+        console.error("❌ Non-JSON response received for FormData:", textResponse.substring(0, 200));
+        
+        if (!response.ok) {
+          throw new Error(`Upload failed ${response.status}: ${response.statusText}. Server returned: ${textResponse.substring(0, 100)}`);
+        } else {
+          throw new Error("Server returned non-JSON response for file upload. Please check your upload endpoint.");
+        }
+      }
 
       let data: ApiResponse<T>;
 
@@ -173,12 +209,51 @@ class ApiService {
         data = await response.json();
       } catch (parseError) {
         console.error("Failed to parse JSON response:", parseError);
-        throw new Error(NETWORK_ERRORS.INVALID_RESPONSE);
+        // Try to get the raw response for debugging
+        const textResponse = await response.text();
+        console.error("Raw FormData response:", textResponse.substring(0, 200));
+        throw new Error(`Invalid JSON response from upload: ${parseError.message}`);
       }
 
       if (!response.ok) {
-        const errorMessage =
-          data.message || `HTTP ${response.status}: ${response.statusText}`;
+        let errorMessage = data.message || `HTTP ${response.status}: ${response.statusText}`;
+        
+        // Provide more specific error messages based on status codes
+        switch (response.status) {
+          case 400:
+            errorMessage = 'Invalid request. Please check your file and try again.';
+            break;
+          case 401:
+            errorMessage = 'Authentication failed. Please log in again.';
+            break;
+          case 403:
+            errorMessage = 'Permission denied. You may not have access to upload files.';
+            break;
+          case 413:
+            errorMessage = 'File too large. Please choose a smaller file.';
+            break;
+          case 415:
+            errorMessage = 'Unsupported file type. Please choose a different file format.';
+            break;
+          case 429:
+            errorMessage = 'Too many requests. Please wait a moment and try again.';
+            break;
+          case 500:
+            errorMessage = 'Server error. Please try again later.';
+            break;
+          case 502:
+          case 503:
+          case 504:
+            errorMessage = 'Service temporarily unavailable. Please try again later.';
+            break;
+          default:
+            if (response.status >= 500) {
+              errorMessage = 'Server error. Please try again later.';
+            } else if (response.status >= 400) {
+              errorMessage = 'Request failed. Please check your file and try again.';
+            }
+        }
+        
         throw new Error(errorMessage);
       }
 
@@ -243,7 +318,41 @@ class ApiService {
   }
 
   async uploadProfileImage(formData: FormData): Promise<ApiResponse> {
-    return this.makeFormDataRequest("/upload/profile-image", formData);
+    const endpoints = [
+      "/upload/profile-image",
+      "/upload/image", 
+      "/upload/cloud",
+      "/user/upload-profile-image",
+      "/api/upload/profile-image"
+    ];
+    
+    let lastError: Error | null = null;
+    
+    for (let i = 0; i < endpoints.length; i++) {
+      try {
+        console.log(`🔄 Trying upload endpoint ${i + 1}/${endpoints.length}: ${endpoints[i]}`);
+        const result = await this.makeFormDataRequest(endpoints[i], formData);
+        console.log(`✅ Upload successful with endpoint: ${endpoints[i]}`);
+        return result;
+      } catch (error) {
+        lastError = error as Error;
+        console.log(`❌ Endpoint ${endpoints[i]} failed:`, error);
+        
+        // If it's a client error (4xx), don't try other endpoints
+        if (error instanceof Error && error.message.includes('4')) {
+          console.log('🛑 Client error detected, stopping endpoint attempts');
+          throw error;
+        }
+        
+        // Wait before trying next endpoint (except for last one)
+        if (i < endpoints.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    }
+    
+    // If all endpoints failed, throw the last error with context
+    throw new Error(`All upload endpoints failed. Last error: ${lastError?.message || 'Unknown error'}`);
   }
 
   async uploadImageToCloud(formData: FormData): Promise<ApiResponse> {
@@ -270,6 +379,40 @@ class ApiService {
       return response.ok;
     } catch (error) {
       return false;
+    }
+  }
+
+  /**
+   * Test server response format for debugging
+   */
+  async testServerResponse(): Promise<void> {
+    try {
+      console.log("🧪 Testing server response format...");
+      
+      const response = await fetch(`${API_BASE_URL}/health`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+      });
+
+      console.log("🧪 Health check response status:", response.status);
+      console.log("🧪 Health check response headers:", Object.fromEntries(response.headers.entries()));
+      
+      const contentType = response.headers.get('content-type');
+      console.log("🧪 Health check content-type:", contentType);
+      
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+        console.log("🧪 Health check JSON response:", data);
+      } else {
+        const textResponse = await response.text();
+        console.log("🧪 Health check non-JSON response:", textResponse.substring(0, 500));
+      }
+      
+    } catch (error) {
+      console.error("🧪 Health check failed:", error);
     }
   }
 }

@@ -1,7 +1,7 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import React from 'react';
 import { Platform, View, StyleSheet } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import OptimizedIcon from '@/components/atoms/ui/OptimizedIcon';
 import { useTheme } from '@/theme';
 import { moderateScale } from '@/theme/responsive';
 import { TabStackParamList } from '@/types/navigation';
@@ -37,7 +37,7 @@ const TabBarIcon = ({ route, color, focused }: { route: any; color: string; focu
   }
 
   return (
-    <Icon 
+    <OptimizedIcon 
       name={iconName} 
       size={moderateScale(focused ? 26 : 24)} 
       color={color} 
@@ -65,17 +65,17 @@ export default function TabNavigator() {
           headerBackTitleStyle: {
             color: colors.textOnPrimary,
           },
-            tabBarActiveTintColor: colors.accentLight,
+            tabBarActiveTintColor: "#FFEB7A",
             tabBarInactiveTintColor: colors.textOnPrimary,
             tabBarStyle: {
-              backgroundColor: colors.primary,
-              borderTopColor: colors.primary,
+              backgroundColor: '#7f1d1d',
+              borderTopColor: '#7f1d1d',
               borderTopWidth: 0,
               height: Platform.OS === 'ios' ? moderateScale(85) : moderateScale(65),
               paddingBottom: Platform.OS === 'ios' ? moderateScale(25) : moderateScale(10),
               paddingTop: 0, // Removed extra top padding
               elevation: 8,
-              shadowColor: colors.primary,
+              shadowColor: '#7f1d1d',
               shadowOffset: {
                 width: 0,
                 height: -2,
