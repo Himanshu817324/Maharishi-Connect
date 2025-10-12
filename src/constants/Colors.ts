@@ -1,33 +1,33 @@
-// Colors.ts
+// Colors.ts - Legacy colors file (use src/theme/colors.ts for new implementations)
 export const Colors = {
   light: {
-    background: "#F5F1EB",
-    text: "#111111",
-    subText: "#555555",
-    primary: "#075E54",
-    accent: "#D9FDD3",
-    tabBarBG: "#075E54",
-    headerBG: "#075E54",
-    button: "#075E54",
-    border: "#E5E5E5",
-    card: "#F7F7F7",
-    inputBg: "#F1F1F1",
+    background: "#FAFAFA", // Light neutral background
+    text: "#212121", // Standard dark grey text
+    subText: "#757575",
+    primary: "#7B1E3C", // Deep elegant maroon
+    accent: "#FFD54F", // Warm soft yellow
+    tabBarBG: "#7B1E3C",
+    headerBG: "#7B1E3C",
+    button: "#7B1E3C",
+    border: "#E0E0E0",
+    card: "#FFFFFF",
+    inputBg: "#F5F5F5",
     textOnPrimary: "#FFFFFF",
-    statusbar: "#075E54"
+    statusbar: "#7B1E3C"
   },
   dark: {
-    background: "#000000",
-    text: "#FFFFFF",
-    subText: "#AAAAAA",
-    primary: "#183535",
-    accent: "#25D366",
-    tabBarBG: "#183535",
-    headerBG: "#183535",
-    button: "#183535",
-    border: "#222222",
-    card: "#1C1C1C",
-    inputBg: "#111111",
+    background: "#121212", // True dark base
+    text: "#EDEDED", // Soft white text
+    subText: "#BDBDBD",
+    primary: "#B8324F", // Brighter maroon for dark mode
+    accent: "#FFEB7A", // Vibrant yellow for dark mode
+    tabBarBG: "#B8324F",
+    headerBG: "#B8324F",
+    button: "#B8324F",
+    border: "#333333",
+    card: "#1E1E1E",
+    inputBg: "#121212",
     textOnPrimary: "#FFFFFF",
-    statusbar: "#183535"
+    statusbar: "#B8324F"
   }
 };

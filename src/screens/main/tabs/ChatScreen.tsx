@@ -395,7 +395,7 @@ const ChatScreen: React.FC = () => {
               {getChatSubtitle(item)}
             </Text>
             {hasUnread && (
-              <View style={[styles.unreadBadge, { backgroundColor: '#7f1d1d' }]}>
+              <View style={[styles.unreadBadge, { backgroundColor: colors.primary }]}>
                 <Text style={styles.unreadText}>
                   {(item.unread_count || 0) > 99 ? '99+' : item.unread_count}
                 </Text>
@@ -541,8 +541,8 @@ const ChatScreen: React.FC = () => {
             style={[
               styles.filterButton,
               { 
-                backgroundColor: activeFilter === 'all' ? '#7f1d1d' : colors.surface,
-                borderColor: activeFilter === 'all' ? '#7f1d1d' : colors.border,
+                backgroundColor: activeFilter === 'all' ? colors.primary : colors.surface,
+                borderColor: activeFilter === 'all' ? colors.primary : colors.border,
               }
             ]}
             onPress={() => setActiveFilter('all')}
@@ -551,11 +551,11 @@ const ChatScreen: React.FC = () => {
             <OptimizedIcon 
               name="chatbubbles-outline" 
               size={moderateScale(16)} 
-              color={activeFilter === 'all' ? '#FFFFFF' : colors.textSecondary} 
+              color={activeFilter === 'all' ? colors.textOnPrimary : colors.textSecondary} 
             />
             <Text style={[
               styles.filterButtonText,
-              { color: activeFilter === 'all' ? '#FFFFFF' : colors.text }
+              { color: activeFilter === 'all' ? colors.textOnPrimary : colors.text }
             ]}>
               All
             </Text>
@@ -565,8 +565,8 @@ const ChatScreen: React.FC = () => {
             style={[
               styles.filterButton,
               { 
-                backgroundColor: activeFilter === 'direct' ? '#7f1d1d' : colors.surface,
-                borderColor: activeFilter === 'direct' ? '#7f1d1d' : colors.border,
+                backgroundColor: activeFilter === 'direct' ? colors.primary : colors.surface,
+                borderColor: activeFilter === 'direct' ? colors.primary : colors.border,
               }
             ]}
             onPress={() => setActiveFilter('direct')}
@@ -575,11 +575,11 @@ const ChatScreen: React.FC = () => {
             <OptimizedIcon 
               name="person-outline" 
               size={moderateScale(16)} 
-              color={activeFilter === 'direct' ? '#FFFFFF' : colors.textSecondary} 
+              color={activeFilter === 'direct' ? colors.textOnPrimary : colors.textSecondary} 
             />
             <Text style={[
               styles.filterButtonText,
-              { color: activeFilter === 'direct' ? '#FFFFFF' : colors.text }
+              { color: activeFilter === 'direct' ? colors.textOnPrimary : colors.text }
             ]}>
               Direct
             </Text>
@@ -589,8 +589,8 @@ const ChatScreen: React.FC = () => {
             style={[
               styles.filterButton,
               { 
-                backgroundColor: activeFilter === 'groups' ? '#7f1d1d' : colors.surface,
-                borderColor: activeFilter === 'groups' ? '#7f1d1d' : colors.border,
+                backgroundColor: activeFilter === 'groups' ? colors.primary : colors.surface,
+                borderColor: activeFilter === 'groups' ? colors.primary : colors.border,
               }
             ]}
             onPress={() => setActiveFilter('groups')}
@@ -599,11 +599,11 @@ const ChatScreen: React.FC = () => {
             <OptimizedIcon 
               name="people-outline" 
               size={moderateScale(16)} 
-              color={activeFilter === 'groups' ? '#FFFFFF' : colors.textSecondary} 
+              color={activeFilter === 'groups' ? colors.textOnPrimary : colors.textSecondary} 
             />
             <Text style={[
               styles.filterButtonText,
-              { color: activeFilter === 'groups' ? '#FFFFFF' : colors.text }
+              { color: activeFilter === 'groups' ? colors.textOnPrimary : colors.text }
             ]}>
               Groups
             </Text>
@@ -613,8 +613,8 @@ const ChatScreen: React.FC = () => {
             style={[
               styles.filterButton,
               { 
-                backgroundColor: activeFilter === 'unread' ? '#7f1d1d' : colors.surface,
-                borderColor: activeFilter === 'unread' ? '#7f1d1d' : colors.border,
+                backgroundColor: activeFilter === 'unread' ? colors.primary : colors.surface,
+                borderColor: activeFilter === 'unread' ? colors.primary : colors.border,
               }
             ]}
             onPress={() => setActiveFilter('unread')}
@@ -623,11 +623,11 @@ const ChatScreen: React.FC = () => {
             <OptimizedIcon 
               name="mail-unread-outline" 
               size={moderateScale(16)} 
-              color={activeFilter === 'unread' ? '#FFFFFF' : colors.textSecondary} 
+              color={activeFilter === 'unread' ? colors.textOnPrimary : colors.textSecondary} 
             />
             <Text style={[
               styles.filterButtonText,
-              { color: activeFilter === 'unread' ? '#FFFFFF' : colors.text }
+              { color: activeFilter === 'unread' ? colors.textOnPrimary : colors.text }
             ]}>
               Unread
             </Text>
@@ -647,11 +647,11 @@ const ChatScreen: React.FC = () => {
             <OptimizedIcon 
               name="archive-outline" 
               size={moderateScale(16)} 
-              color={activeFilter === 'archived' ? '#FFFFFF' : colors.textSecondary} 
+              color={activeFilter === 'archived' ? colors.textOnPrimary : colors.textSecondary} 
             />
             <Text style={[
               styles.filterButtonText,
-              { color: activeFilter === 'archived' ? '#FFFFFF' : colors.text }
+              { color: activeFilter === 'archived' ? colors.textOnPrimary : colors.text }
             ]}>
               Archived
             </Text>

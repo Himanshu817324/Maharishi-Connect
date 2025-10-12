@@ -18,7 +18,7 @@ import {
   Image,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { LightColors } from '../../theme/colors';
+import { useTheme } from '../../theme';
 import { RootStackParamList } from '../../types/navigation';
 import Toast from 'react-native-toast-message';
 import { useDispatch } from 'react-redux';
@@ -35,18 +35,19 @@ const countries = [
 const LoginScreen = () => {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const dispatch = useDispatch();
+  const { colors } = useTheme();
 
-  // Create styles with LightColors theme
+  // Create dynamic styles with theme colors
   const dynamicStyles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: LightColors.background,
+      backgroundColor: colors.background,
     },
     content: {
       flex: 1,
       paddingHorizontal: 24,
       paddingTop: 60,
-      paddingBottom: 0,
+      paddingBottom: 40,
     },
     mainContent: {
       flex: 1,
@@ -57,43 +58,33 @@ const LoginScreen = () => {
       width: 80,
       height: 80,
       borderRadius: 40,
-      backgroundColor: LightColors.card,
+      backgroundColor: colors.primary,
       justifyContent: 'center',
       alignItems: 'center',
-      shadowColor: LightColors.primary,
+      marginBottom: 32,
+      shadowColor: colors.primary,
       shadowOffset: {
         width: 0,
-        height: 12,
+        height: 4,
       },
-      shadowOpacity: 0.15,
-      shadowRadius: 24,
-      elevation: 15,
-      borderWidth: 3,
-      borderColor: LightColors.background,
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 8,
     },
     logo: {
       width: 50,
       height: 50,
-      resizeMode: 'contain',
-    },
-    logoSubtext: {
-      fontSize: 16,
-      color: LightColors.textSecondary,
-      fontWeight: '500',
-      letterSpacing: 1,
-      textAlign: 'center',
-      marginTop: 8,
     },
     heading: {
       fontSize: 24,
       fontWeight: '700',
-      color: LightColors.text,
+      color: colors.text,
       textAlign: 'center',
       marginBottom: 8,
     },
     subheading: {
       fontSize: 16,
-      color: LightColors.textSecondary,
+      color: colors.textSecondary,
       textAlign: 'center',
       marginBottom: 32,
       lineHeight: 24,
@@ -101,12 +92,12 @@ const LoginScreen = () => {
     countrySelector: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: LightColors.inputBg,
+      backgroundColor: colors.inputBg,
       borderRadius: 8,
       paddingHorizontal: 16,
       paddingVertical: 12,
       borderWidth: 1,
-      borderColor: LightColors.border,
+      borderColor: colors.border,
       width: '100%',
       marginBottom: 16,
       gap: 8,
@@ -119,7 +110,7 @@ const LoginScreen = () => {
       flex: 1,
       fontSize: 16,
       fontWeight: '500',
-      color: LightColors.text,
+      color: colors.text,
     },
     phoneInputRow: {
       flexDirection: 'row',
@@ -129,36 +120,36 @@ const LoginScreen = () => {
       gap: 8,
     },
     countryCodeInput: {
-      backgroundColor: LightColors.inputBg,
+      backgroundColor: colors.inputBg,
       borderRadius: 8,
       paddingHorizontal: 16,
       paddingVertical: 12,
       borderWidth: 1,
-      borderColor: LightColors.border,
+      borderColor: colors.border,
       minWidth: 80,
       alignItems: 'center',
     },
     countryCodeText: {
       fontSize: 16,
       fontWeight: '500',
-      color: LightColors.text,
+      color: colors.text,
     },
     phoneNumberInput: {
       flex: 1,
-      backgroundColor: LightColors.inputBg,
+      backgroundColor: colors.inputBg,
       borderRadius: 8,
       paddingHorizontal: 16,
       paddingVertical: 12,
       borderWidth: 1,
-      borderColor: LightColors.border,
+      borderColor: colors.border,
       fontSize: 16,
-      color: LightColors.text,
+      color: colors.text,
     },
     phoneInputDisabled: {
-      color: LightColors.textTertiary,
+      color: colors.textTertiary,
     },
     errorText: {
-      color: LightColors.error,
+      color: colors.error,
       fontSize: 14,
       fontWeight: '500',
       marginBottom: 16,
@@ -175,7 +166,7 @@ const LoginScreen = () => {
     },
     otpInstructionText: {
       fontSize: 16,
-      color: LightColors.textSecondary,
+      color: colors.textSecondary,
       textAlign: 'center',
       marginBottom: 24,
       marginTop: 8,
@@ -194,19 +185,19 @@ const LoginScreen = () => {
       height: 45,
       borderRadius: 8,
       borderWidth: 1,
-      borderColor: LightColors.border,
-      backgroundColor: LightColors.inputBg,
+      borderColor: colors.border,
+      backgroundColor: colors.inputBg,
       fontSize: 18,
       fontWeight: '600',
-      color: LightColors.text,
+      color: colors.text,
       textAlign: 'center',
     },
     otpInputFilled: {
-      borderColor: LightColors.accent,
-      backgroundColor: LightColors.surface,
+      borderColor: colors.accent,
+      backgroundColor: colors.surface,
     },
     otpInputError: {
-      borderColor: LightColors.error,
+      borderColor: colors.error,
     },
     otpButtonContainer: {
       width: '100%',
@@ -219,35 +210,32 @@ const LoginScreen = () => {
     },
     timerText: {
       fontSize: 14,
-      color: LightColors.textSecondary,
+      color: colors.textSecondary,
       textAlign: 'center',
     },
     resendButton: {
-      width: '100%',
       paddingVertical: 12,
       paddingHorizontal: 24,
       borderRadius: 8,
       backgroundColor: 'transparent',
       borderWidth: 1,
-      borderColor: LightColors.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
+      borderColor: colors.primary,
     },
     resendButtonText: {
       fontSize: 14,
       fontWeight: '600',
-      color: LightColors.primary,
+      color: colors.primary,
     },
     buttonContainer: {
       width: '100%',
       marginBottom: 16,
     },
     sendButton: {
-      backgroundColor: LightColors.primary,
+      backgroundColor: colors.primary,
       borderRadius: 8,
       paddingVertical: 16,
       alignItems: 'center',
-      shadowColor: LightColors.primary,
+      shadowColor: colors.primary,
       shadowOffset: {
         width: 0,
         height: 2,
@@ -257,23 +245,21 @@ const LoginScreen = () => {
       elevation: 4,
     },
     sendButtonDisabled: {
-      backgroundColor: LightColors.textTertiary,
+      backgroundColor: colors.textTertiary,
       shadowOpacity: 0,
       elevation: 0,
     },
     sendButtonText: {
       fontSize: 16,
       fontWeight: '600',
-      color: LightColors.textOnPrimary,
+      color: colors.textOnPrimary,
     },
     verifyButton: {
-      width: '100%',
-      backgroundColor: LightColors.accent,
+      backgroundColor: colors.accent,
       borderRadius: 8,
       paddingVertical: 16,
-      justifyContent: 'center',
       alignItems: 'center',
-      shadowColor: LightColors.accent,
+      shadowColor: colors.accent,
       shadowOffset: {
         width: 0,
         height: 2,
@@ -283,24 +269,24 @@ const LoginScreen = () => {
       elevation: 4,
     },
     verifyButtonDisabled: {
-      backgroundColor: LightColors.textTertiary,
+      backgroundColor: colors.textTertiary,
       shadowOpacity: 0,
       elevation: 0,
     },
     verifyButtonText: {
       fontSize: 16,
       fontWeight: '600',
-      color: LightColors.text,
+      color: colors.text,
     },
     disclaimerText: {
       fontSize: 12,
-      color: LightColors.textSecondary,
+      color: colors.textSecondary,
       textAlign: 'center',
       lineHeight: 18,
       marginTop: 16,
     },
     linkText: {
-      color: LightColors.accent,
+      color: colors.primary,
       fontWeight: '600',
     },
     modalOverlay: {
@@ -310,12 +296,12 @@ const LoginScreen = () => {
       alignItems: 'center',
     },
     dropdownContainer: {
-      backgroundColor: LightColors.surface,
+      backgroundColor: colors.surface,
       borderRadius: 12,
       padding: 20,
       maxHeight: 400,
       width: '80%',
-      shadowColor: LightColors.shadow,
+      shadowColor: colors.shadow,
       shadowOffset: {
         width: 0,
         height: 4,
@@ -327,7 +313,7 @@ const LoginScreen = () => {
     dropdownTitle: {
       fontSize: 18,
       fontWeight: '600',
-      color: LightColors.text,
+      color: colors.text,
       marginBottom: 16,
       textAlign: 'center',
     },
@@ -340,7 +326,7 @@ const LoginScreen = () => {
       marginBottom: 4,
     },
     dropdownItemSelected: {
-      backgroundColor: LightColors.accent,
+      backgroundColor: colors.accent,
     },
     dropdownFlag: {
       fontSize: 20,
@@ -349,22 +335,22 @@ const LoginScreen = () => {
     dropdownText: {
       flex: 1,
       fontSize: 16,
-      color: LightColors.text,
+      color: colors.text,
     },
     dropdownTextSelected: {
-      color: LightColors.text,
+      color: colors.text,
       fontWeight: '600',
     },
     dropdownCode: {
       fontSize: 14,
-      color: LightColors.textSecondary,
+      color: colors.textSecondary,
       fontWeight: '500',
     },
     dropdownCodeSelected: {
-      color: LightColors.text,
+      color: colors.text,
     },
     bottomSection: {
-      paddingBottom: 0,
+      paddingBottom: Platform.OS === 'ios' ? 40 : 24,
       paddingTop: 20,
     },
   });
@@ -467,10 +453,7 @@ const LoginScreen = () => {
     try {
       setOtpLoading(true);
 
-      const credential = PhoneAuthProvider.credential(
-        verificationId,
-        otpString,
-      );
+      const credential = PhoneAuthProvider.credential(verificationId, otpString);
       const userCredential = await auth().signInWithCredential(credential);
 
       if (!userCredential) {
@@ -487,10 +470,7 @@ const LoginScreen = () => {
       if (!data.isNewUser && data.token) {
         try {
           console.log('🔐 [LoginScreen] Fetching complete user profile...');
-          const profileData = await apiService.getUserProfile(
-            firebaseUid,
-            data.token,
-          );
+          const profileData = await apiService.getUserProfile(firebaseUid, data.token);
           console.log('🔐 [LoginScreen] Profile data received:', profileData);
 
           const userProfile = profileData.user || profileData.data;
@@ -530,10 +510,7 @@ const LoginScreen = () => {
             );
           }
         } catch (profileError) {
-          console.error(
-            '❌ [LoginScreen] Error fetching profile data:',
-            profileError,
-          );
+          console.error('❌ [LoginScreen] Error fetching profile data:', profileError);
           dispatch(
             login({
               id: firebaseUid,
@@ -566,8 +543,7 @@ const LoginScreen = () => {
         // Request contacts permission for existing users
         console.log('🔐 Requesting contacts permission for existing user...');
         try {
-          const permissionResult =
-            await permissionManager.requestContactsPermission();
+          const permissionResult = await permissionManager.requestContactsPermission();
           if (permissionResult.granted) {
             console.log('✅ Contacts permission granted for existing user');
           } else {
@@ -579,10 +555,7 @@ const LoginScreen = () => {
             });
           }
         } catch (permissionError) {
-          console.error(
-            '❌ Error requesting contacts permission for existing user:',
-            permissionError,
-          );
+          console.error('❌ Error requesting contacts permission for existing user:', permissionError);
         }
       }
     } catch (err: any) {
@@ -716,7 +689,7 @@ const LoginScreen = () => {
       console.log('Confirmation object:', confirmation);
       console.log('Verification ID:', confirmation.verificationId);
       Toast.show({ type: 'success', text1: `OTP sent to ${normalized}` });
-
+      
       // Show OTP input instead of navigating
       setVerificationId(confirmation.verificationId || '');
       setNormalizedPhone(normalized);
@@ -747,30 +720,25 @@ const LoginScreen = () => {
     }
   };
 
+
   return (
     <KeyboardAvoidingView
       style={dynamicStyles.container}
-      behavior={Platform.OS === 'ios' ? 'position' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor={LightColors.background}
-      />
-
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      
       <View style={dynamicStyles.content}>
         {/* Main Content Area */}
         <View style={dynamicStyles.mainContent}>
           {/* Logo */}
           <View style={dynamicStyles.iconContainer}>
-            <Image
-              source={require('../../assets/logo.png')}
+            <Image 
+              source={require('../../assets/logo.png')} 
               style={dynamicStyles.logo}
               resizeMode="contain"
             />
           </View>
-          <Text style={dynamicStyles.logoSubtext}>
-            Connect • Chat • Collaborate
-          </Text>
 
           {/* Heading */}
           <Text style={dynamicStyles.heading}>Enter your phone number</Text>
@@ -785,28 +753,21 @@ const LoginScreen = () => {
               {countries.find(c => c.name === selectedCountry)?.flag}
             </Text>
             <Text style={dynamicStyles.countryText}>{selectedCountry}</Text>
-            {!otpSent && (
-              <Icon name="chevron-down" size={20} color={LightColors.accent} />
-            )}
+            {!otpSent && <Icon name="chevron-down" size={20} color={colors.accent} />}
           </TouchableOpacity>
 
           {/* Phone Number Input */}
           <View style={dynamicStyles.phoneInputRow}>
             {/* Country Code Input */}
             <View style={dynamicStyles.countryCodeInput}>
-              <Text style={dynamicStyles.countryCodeText}>
-                {getCurrentCountryCode()}
-              </Text>
+              <Text style={dynamicStyles.countryCodeText}>{getCurrentCountryCode()}</Text>
             </View>
-
+            
             {/* Phone Number Input */}
             <TextInput
-              style={[
-                dynamicStyles.phoneNumberInput,
-                otpSent && dynamicStyles.phoneInputDisabled,
-              ]}
+              style={[dynamicStyles.phoneNumberInput, otpSent && dynamicStyles.phoneInputDisabled]}
               placeholder="Phone number"
-              placeholderTextColor={LightColors.textTertiary}
+              placeholderTextColor={colors.textTertiary}
               value={phoneNumber}
               onChangeText={setPhoneNumber}
               keyboardType="phone-pad"
@@ -817,23 +778,23 @@ const LoginScreen = () => {
           </View>
 
           {/* Error Message */}
-          {error ? <Text style={dynamicStyles.errorText}>{error}</Text> : null}
+          {error ? (
+            <Text style={dynamicStyles.errorText}>{error}</Text>
+          ) : null}
 
           {/* Reserved Space for OTP Section */}
           <View style={dynamicStyles.otpReservedSpace}>
-            <Animated.View
+            <Animated.View 
               style={[
                 dynamicStyles.otpSection,
                 {
                   opacity: otpAnim,
-                  transform: [
-                    {
-                      translateY: otpAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [20, 0],
-                      }),
-                    },
-                  ],
+                  transform: [{
+                    translateY: otpAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [20, 0],
+                    }),
+                  }],
                 },
               ]}
             >
@@ -847,7 +808,7 @@ const LoginScreen = () => {
                 {otp.map((digit, index) => (
                   <TextInput
                     key={index}
-                    ref={ref => {
+                    ref={(ref) => {
                       if (ref) {
                         otpInputRefs.current[index] = ref;
                       }
@@ -858,11 +819,11 @@ const LoginScreen = () => {
                       error && dynamicStyles.otpInputError,
                     ]}
                     value={digit}
-                    onChangeText={text => handleOtpChange(text, index)}
+                    onChangeText={(text) => handleOtpChange(text, index)}
                     keyboardType="numeric"
                     maxLength={1}
                     selectTextOnFocus
-                    onKeyPress={e => handleKeyPress(e.nativeEvent.key, index)}
+                    onKeyPress={(e) => handleKeyPress(e.nativeEvent.key, index)}
                     onFocus={() => {}}
                   />
                 ))}
@@ -885,17 +846,12 @@ const LoginScreen = () => {
             {!otpSent ? (
               /* Send OTP Button */
               <TouchableOpacity
-                style={[
-                  dynamicStyles.sendButton,
-                  loading && dynamicStyles.sendButtonDisabled,
-                ]}
+                style={[dynamicStyles.sendButton, loading && dynamicStyles.sendButtonDisabled]}
                 onPress={handleSendOtp}
                 disabled={loading}
               >
                 {loading ? (
-                  <Text style={dynamicStyles.sendButtonText}>
-                    Sending OTP...
-                  </Text>
+                  <Text style={dynamicStyles.sendButtonText}>Sending OTP...</Text>
                 ) : (
                   <Text style={dynamicStyles.sendButtonText}>Get OTP</Text>
                 )}
@@ -913,11 +869,9 @@ const LoginScreen = () => {
                   disabled={otpLoading}
                 >
                   {otpLoading ? (
-                    <ActivityIndicator color={LightColors.text} size="small" />
+                    <ActivityIndicator color={colors.text} size="small" />
                   ) : (
-                    <Text style={dynamicStyles.verifyButtonText}>
-                      Verify OTP
-                    </Text>
+                    <Text style={dynamicStyles.verifyButtonText}>Verify OTP</Text>
                   )}
                 </TouchableOpacity>
 
@@ -934,14 +888,9 @@ const LoginScreen = () => {
                       style={dynamicStyles.resendButton}
                     >
                       {resendLoading ? (
-                        <ActivityIndicator
-                          color={LightColors.primary}
-                          size="small"
-                        />
+                        <ActivityIndicator color={colors.primary} size="small" />
                       ) : (
-                        <Text style={dynamicStyles.resendButtonText}>
-                          Resend OTP
-                        </Text>
+                        <Text style={dynamicStyles.resendButtonText}>Resend OTP</Text>
                       )}
                     </TouchableOpacity>
                   )}
@@ -959,20 +908,19 @@ const LoginScreen = () => {
         animationType="fade"
         onRequestClose={() => setShowCountryDropdown(false)}
       >
-        <TouchableOpacity
+        <TouchableOpacity 
           style={dynamicStyles.modalOverlay}
           activeOpacity={1}
           onPress={() => setShowCountryDropdown(false)}
         >
           <View style={dynamicStyles.dropdownContainer}>
             <Text style={dynamicStyles.dropdownTitle}>Select Country</Text>
-            {countries.map(country => (
+            {countries.map((country) => (
               <TouchableOpacity
                 key={country.name}
                 style={[
                   dynamicStyles.dropdownItem,
-                  selectedCountry === country.name &&
-                    dynamicStyles.dropdownItemSelected,
+                  selectedCountry === country.name && dynamicStyles.dropdownItemSelected
                 ]}
                 onPress={() => {
                   setSelectedCountry(country.name);
@@ -980,22 +928,16 @@ const LoginScreen = () => {
                 }}
               >
                 <Text style={dynamicStyles.dropdownFlag}>{country.flag}</Text>
-                <Text
-                  style={[
-                    dynamicStyles.dropdownText,
-                    selectedCountry === country.name &&
-                      dynamicStyles.dropdownTextSelected,
-                  ]}
-                >
+                <Text style={[
+                  dynamicStyles.dropdownText,
+                  selectedCountry === country.name && dynamicStyles.dropdownTextSelected
+                ]}>
                   {country.name}
                 </Text>
-                <Text
-                  style={[
-                    dynamicStyles.dropdownCode,
-                    selectedCountry === country.name &&
-                      dynamicStyles.dropdownCodeSelected,
-                  ]}
-                >
+                <Text style={[
+                  dynamicStyles.dropdownCode,
+                  selectedCountry === country.name && dynamicStyles.dropdownCodeSelected
+                ]}>
                   {country.code}
                 </Text>
               </TouchableOpacity>

@@ -1,17 +1,17 @@
 // theme/colors.ts
 import { Platform } from 'react-native';
 
-// Base color palette
+// Base color palette - Maroon & Yellow Theme
 const BaseColors = {
-  // Primary colors
-  primary: "#183535",
-  primaryLight: "#128C7E",
-  primaryDark: "#004D40",
+  // Primary colors (Maroon)
+  primary: "#7B1E3C", // Deep elegant maroon
+  primaryLight: "#B8324F", // Brighter maroon for dark mode
+  primaryDark: "#5A1529", // Darker maroon variant
   
-  // Accent colors
-  accent: "#25D366",
-  accentLight: "#D9FDD3",
-  accentDark: "#1A9B4A",
+  // Accent colors (Yellow)
+  accent: "#FFD54F", // Warm soft yellow
+  accentLight: "#FFEB7A", // Vibrant yellow for dark mode
+  accentDark: "#FFC107", // Darker yellow variant
   
   // Status colors
   success: "#4CAF50",
@@ -67,31 +67,31 @@ const getPlatformColors = () => {
 const platformColors = getPlatformColors();
 
 export const LightColors = {
-  // Core colors
-  background: "#fffbeb",
+  // Core colors - Light Mode Palette
+  background: "#FAFAFA", // Light neutral background
   surface: "#FFFFFF",
-  surfaceVariant: "#F7F7F7",
+  surfaceVariant: "#F5F5F5",
   
   // Text colors
-  text: "#111111",
-  textSecondary: "#555555",
-  subText: "#555555", // Alias for backward compatibility
-  textTertiary: "#888888",
+  text: "#212121", // Standard dark grey text for readability
+  textSecondary: "#757575",
+  subText: "#757575", // Alias for backward compatibility
+  textTertiary: "#9E9E9E",
   textOnPrimary: "#FFFFFF",
-  textOnSurface: "#111111",
-  textOnBackground: "#111111",
+  textOnSurface: "#212121",
+  textOnBackground: "#212121",
   
-  // Primary colors
-  primary: BaseColors.primary,
-  primaryLight: BaseColors.primaryLight,
-  primaryDark: BaseColors.primaryDark,
-  onPrimary: BaseColors.white,
+  // Primary colors (Maroon)
+  primary: "#7B1E3C", // Deep elegant maroon
+  primaryLight: "#B8324F",
+  primaryDark: "#5A1529",
+  onPrimary: "#FFFFFF",
   
-  // Accent colors
-  accent: BaseColors.accent,
-  accentLight: BaseColors.accentLight,
-  accentDark: BaseColors.accentDark,
-  onAccent: BaseColors.primary,
+  // Accent colors (Yellow)
+  accent: "#FFD54F", // Warm soft yellow
+  accentLight: "#FFEB7A",
+  accentDark: "#FFC107",
+  onAccent: "#212121",
   
   // Status colors
   success: BaseColors.success,
@@ -104,53 +104,53 @@ export const LightColors = {
   onInfo: BaseColors.white,
   
   // UI colors
-  border: "#E5E5E5",
+  border: "#E0E0E0",
   borderLight: "#F0F0F0",
-  borderDark: "#CCCCCC",
+  borderDark: "#BDBDBD",
   divider: "#E0E0E0",
   
   // Background colors
-  card: "#F7F7F7",
+  card: "#FFFFFF",
   cardElevated: "#FFFFFF",
-  inputBg: "#F1F1F1",
+  inputBg: "#F5F5F5",
   inputBgFocused: "#FFFFFF",
   
   // Navigation colors
-  tabBarBG: BaseColors.primary,
-  tabBarActive: BaseColors.white,
-  tabBarInactive: "#B0BEC5",
-  headerBG: BaseColors.primary,
-  headerText: BaseColors.white,
+  tabBarBG: "#7B1E3C",
+  tabBarActive: "#FFD54F",
+  tabBarInactive: "#BDBDBD",
+  headerBG: "#7B1E3C",
+  headerText: "#FFFFFF",
   
   // Button colors
-  button: BaseColors.primary,
-  buttonSecondary: BaseColors.gray200,
-  buttonText: BaseColors.white,
-  buttonTextSecondary: BaseColors.gray700,
+  button: "#7B1E3C",
+  buttonSecondary: "#F5F5F5",
+  buttonText: "#FFFFFF",
+  buttonTextSecondary: "#212121",
   
   // Status bar
-  statusbar: BaseColors.accent,
-  statusbarContent: "dark-content",
+  statusbar: "#7B1E3C",
+  statusbarContent: "light-content",
   
   // Platform specific
   ...(Platform.OS === 'ios' ? platformColors.ios : {}),
   ...(Platform.OS === 'android' ? platformColors.android : {}),
   
-  // Chat specific
-  chatBubble: "#7f1d1d", // Bright yellow/gold for my chat bubble color
-  chatBubbleOther: "#ffffff", // Dark gray for other person's chat bubble color
-  chatBubbleText: "#ffffff",
-  chatBubbleTextOther: BaseColors.gray700,
-  chatTime: BaseColors.gray500,
-  chatTimeOther: BaseColors.gray500,
+  // Chat specific - Light Mode
+  chatBubble: "#FFE082", // Muted yellow for user messages
+  chatBubbleOther: "#F5F5F5", // Soft grey for incoming messages
+  chatBubbleText: "#212121",
+  chatBubbleTextOther: "#212121",
+  chatTime: "#757575",
+  chatTimeOther: "#757575",
   
   // Message status
-  messageSent: BaseColors.gray500,
-  messageDelivered: BaseColors.gray600,
-  messageRead: BaseColors.primary,
+  messageSent: "#757575",
+  messageDelivered: "#616161",
+  messageRead: "#7B1E3C",
   
   // Typing indicator
-  typingIndicator: BaseColors.gray500,
+  typingIndicator: "#757575",
   
   // Online status
   online: BaseColors.success,
@@ -163,41 +163,41 @@ export const LightColors = {
 };
 
 export const DarkColors = {
-  // Core colors
-  background: "#102323", // Updated background color for dark mode
-  surface: "#1A2A2A",
+  // Core colors - Dark Mode Palette
+  background: "#121212", // True dark base
+  surface: "#1E1E1E",
   surfaceVariant: "#2C2C2C",
   
   // Text colors
-  text: "#FFFFFF",
-  textSecondary: "#AAAAAA",
-  subText: "#AAAAAA", // Alias for backward compatibility
-  textTertiary: "#888888",
+  text: "#EDEDED", // Soft white text
+  textSecondary: "#BDBDBD",
+  subText: "#BDBDBD", // Alias for backward compatibility
+  textTertiary: "#9E9E9E",
   textOnPrimary: "#FFFFFF",
-  textOnSurface: "#FFFFFF",
-  textOnBackground: "#FFFFFF",
+  textOnSurface: "#EDEDED",
+  textOnBackground: "#EDEDED",
   
-  // Primary colors
-  primary: BaseColors.primaryLight,
-  primaryLight: "#4DB6AC",
-  primaryDark: BaseColors.primary,
-  onPrimary: BaseColors.white,
+  // Primary colors (Maroon)
+  primary: "#B8324F", // Slightly brighter maroon to stand out on dark BG
+  primaryLight: "#E85A7A",
+  primaryDark: "#7B1E3C",
+  onPrimary: "#FFFFFF",
   
-  // Accent colors
-  accent: BaseColors.accentDark,
-  accentLight: BaseColors.accent,
-  accentDark: "#1B5E20",
-  onAccent: BaseColors.white,
+  // Accent colors (Yellow)
+  accent: "#FFEB7A", // Vibrant but soft yellow - looks rich in dark UI
+  accentLight: "#FFF59D",
+  accentDark: "#FFD54F",
+  onAccent: "#212121",
   
   // Status colors
   success: "#66BB6A",
   warning: "#FFB74D",
   error: "#EF5350",
   info: "#42A5F5",
-  onSuccess: BaseColors.black,
-  onWarning: BaseColors.black,
-  onError: BaseColors.white,
-  onInfo: BaseColors.white,
+  onSuccess: "#212121",
+  onWarning: "#212121",
+  onError: "#FFFFFF",
+  onInfo: "#FFFFFF",
   
   // UI colors
   border: "#333333",
@@ -206,54 +206,98 @@ export const DarkColors = {
   divider: "#333333",
   
   // Background colors
-  card: "#1C1C1C",
+  card: "#1E1E1E",
   cardElevated: "#2C2C2C",
-  inputBg: "#111111",
-  inputBgFocused: "#1C1C1C",
+  inputBg: "#121212",
+  inputBgFocused: "#1E1E1E",
   
   // Navigation colors
-  tabBarBG: BaseColors.primary,
-  tabBarActive: BaseColors.white,
-  tabBarInactive: "#B0BEC5",
-  headerBG: BaseColors.primary,
-  headerText: BaseColors.white,
+  tabBarBG: "#B8324F",
+  tabBarActive: "#FFEB7A",
+  tabBarInactive: "#757575",
+  headerBG: "#B8324F",
+  headerText: "#FFFFFF",
   
   // Button colors
-  button: BaseColors.primaryLight,
-  buttonSecondary: BaseColors.gray700,
-  buttonText: BaseColors.white,
-  buttonTextSecondary: BaseColors.gray300,
+  button: "#B8324F",
+  buttonSecondary: "#333333",
+  buttonText: "#FFFFFF",
+  buttonTextSecondary: "#EDEDED",
   
   // Status bar
-  statusbar: BaseColors.primary,
+  statusbar: "#B8324F",
   statusbarContent: "light-content",
   
   // Platform specific
   ...(Platform.OS === 'ios' ? platformColors.ios : {}),
   ...(Platform.OS === 'android' ? platformColors.android : {}),
   
-  // Chat specific
-  chatBubble: "#7f1d1d", // Dark red for my chat bubble color in dark mode
-  chatBubbleOther: "#1E1E1E", // Dark gray for other person's chat bubble color
-  chatBubbleText: BaseColors.white,
-  chatBubbleTextOther: BaseColors.white,
-  chatTime: BaseColors.gray400,
-  chatTimeOther: BaseColors.gray400,
+  // Chat specific - Dark Mode
+  chatBubble: "#2C0F18", // Subtle maroon tint for user messages
+  chatBubbleOther: "#1E1E1E", // Neutral dark for received messages
+  chatBubbleText: "#EDEDED",
+  chatBubbleTextOther: "#EDEDED",
+  chatTime: "#9E9E9E",
+  chatTimeOther: "#9E9E9E",
   
   // Message status
-  messageSent: BaseColors.gray500,
-  messageDelivered: BaseColors.gray400,
-  messageRead: BaseColors.primaryLight,
+  messageSent: "#9E9E9E",
+  messageDelivered: "#BDBDBD",
+  messageRead: "#B8324F",
   
   // Typing indicator
-  typingIndicator: BaseColors.gray400,
+  typingIndicator: "#9E9E9E",
   
   // Online status
   online: "#66BB6A",
-  offline: BaseColors.gray600,
+  offline: "#757575",
   
   // Shadows
   shadow: "rgba(0, 0, 0, 0.3)",
   shadowLight: "rgba(0, 0, 0, 0.1)",
   shadowDark: "rgba(0, 0, 0, 0.5)",
+};
+
+// Gradient colors for special effects
+export const GradientColors = {
+  // Maroon gradient (for app header or FAB)
+  maroonGradient: {
+    light: ["#7B1E3C", "#B8324F"],
+    dark: ["#B8324F", "#E85A7A"],
+  },
+  
+  // Yellow gradient (for status bar or highlights)
+  yellowGradient: {
+    light: ["#FFD54F", "#FFEB7A"],
+    dark: ["#FFEB7A", "#FFF59D"],
+  },
+  
+  // Combined gradient
+  primaryGradient: {
+    light: ["#7B1E3C", "#FFD54F"],
+    dark: ["#B8324F", "#FFEB7A"],
+  },
+};
+
+// Additional utility colors
+export const UtilityColors = {
+  // Transparent variants
+  transparent: "transparent",
+  overlay: "rgba(0, 0, 0, 0.5)",
+  overlayLight: "rgba(0, 0, 0, 0.3)",
+  overlayDark: "rgba(0, 0, 0, 0.7)",
+  
+  // Focus states
+  focusRing: "rgba(123, 30, 60, 0.3)", // Maroon with opacity
+  focusRingDark: "rgba(184, 50, 79, 0.3)", // Brighter maroon with opacity
+  
+  // Selection states
+  selection: "rgba(255, 213, 79, 0.2)", // Yellow with opacity
+  selectionDark: "rgba(255, 235, 122, 0.2)", // Brighter yellow with opacity
+  
+  // Disabled states
+  disabled: "#BDBDBD",
+  disabledDark: "#757575",
+  disabledText: "#9E9E9E",
+  disabledTextDark: "#616161",
 };
