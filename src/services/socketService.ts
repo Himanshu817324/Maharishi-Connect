@@ -24,15 +24,19 @@ class SocketService {
         },
         onConnect: () => {
           logger.info('Socket connected successfully');
+          console.log('🔌 [SocketService] Socket connected successfully');
         },
         onDisconnect: () => {
           logger.warn('Socket disconnected');
+          console.log('🔌 [SocketService] Socket disconnected');
         },
         onError: (error) => {
           logger.error('Socket error:', error);
+          console.log('🔌 [SocketService] Socket error:', error);
         },
         onMessage: (event, data) => {
           logger.debug(`Received message: ${event}`, data);
+          console.log('🔌 [SocketService] Received message:', event, data);
         }
       });
 
@@ -53,9 +57,9 @@ class SocketService {
 
     console.log('📤 [SocketService] Sending message immediately:', { chatId, content, messageType });
     this.socket.emit('send_message', {
-      chat_id: chatId,
+      chatId: chatId,
       content,
-      message_type: messageType,
+      messageType: messageType,
       timestamp: new Date().toISOString()
     });
     console.log('✅ [SocketService] Message sent via socket');
@@ -65,13 +69,17 @@ class SocketService {
   startTyping(chatId: string): void {
     if (!this.socket?.isConnected) return;
     
-    this.socket.emit('start_typing', { chat_id: chatId });
+    this.socket.emit('typing_start', {
+      chatId: chatId
+    });
   }
 
   stopTyping(chatId: string): void {
     if (!this.socket?.isConnected) return;
     
-    this.socket.emit('stop_typing', { chat_id: chatId });
+    this.socket.emit('typing_stop', {
+      chatId: chatId
+    });
   }
 
   // Message status updates
@@ -105,8 +113,9 @@ class SocketService {
     this.socket?.on('chat_created', callback);
   }
 
-  addChatCreatedListener(callback: (chat: any) => void): void {
-    this.socket?.on('chat_created', callback);
+  addChatCreatedListener(callback: (chat: any) => void): () => void {
+    this.socket?.on('chatCreated', callback);
+    return () => this.socket?.off('chatCreated', callback);
   }
 
   // Additional listener methods
@@ -124,43 +133,47 @@ class SocketService {
   }
 
   addMessageListener(callback: (message: any) => void): () => void {
-    this.socket?.on('new_message', callback);
-    return () => this.socket?.off('new_message', callback);
+    console.log('🔌 [SocketService] Adding message listener, socket connected:', this.socket?.isConnected);
+    this.socket?.on('newMessage', callback);
+    return () => {
+      console.log('🔌 [SocketService] Removing message listener');
+      this.socket?.off('newMessage', callback);
+    };
   }
 
   addMessageSentListener(callback: (message: any) => void): () => void {
-    this.socket?.on('message_sent', callback);
-    return () => this.socket?.off('message_sent', callback);
+    this.socket?.on('messageSent', callback);
+    return () => this.socket?.off('messageSent', callback);
   }
 
   addMessageDeliveredListener(callback: (data: any) => void): () => void {
-    this.socket?.on('message_delivered', callback);
-    return () => this.socket?.off('message_delivered', callback);
+    this.socket?.on('messageDelivered', callback);
+    return () => this.socket?.off('messageDelivered', callback);
   }
 
   addJoinedChatListener(callback: (data: any) => void): () => void {
-    this.socket?.on('joined_chat', callback);
-    return () => this.socket?.off('joined_chat', callback);
+    this.socket?.on('joinedChat', callback);
+    return () => this.socket?.off('joinedChat', callback);
   }
 
   addUserOnlineListener(callback: (userData: any) => void): () => void {
-    this.socket?.on('user_online', callback);
-    return () => this.socket?.off('user_online', callback);
+    this.socket?.on('userOnline', callback);
+    return () => this.socket?.off('userOnline', callback);
   }
 
   addUserOfflineListener(callback: (userData: any) => void): () => void {
-    this.socket?.on('user_offline', callback);
-    return () => this.socket?.off('user_offline', callback);
+    this.socket?.on('userOffline', callback);
+    return () => this.socket?.off('userOffline', callback);
   }
 
   // Chat management
   joinChat(chatId: string): void {
-    this.socket?.emit('join_chat', { chat_id: chatId });
+    this.socket?.emit('join_chat', chatId);
   }
 
   addTypingListener(callback: (data: any) => void): () => void {
-    this.socket?.on('typing', callback);
-    return () => this.socket?.off('typing', callback);
+    this.socket?.on('user_typing', callback);
+    return () => this.socket?.off('user_typing', callback);
   }
 
   // Read receipts
@@ -222,6 +235,37 @@ class SocketService {
 
   get socketId(): string | undefined {
     return this.socket?.id;
+  }
+
+  // Additional event listeners from reference implementation
+  addChatJoinedListener(callback: (data: any) => void): () => void {
+    this.socket?.on('chatJoined', callback);
+    return () => this.socket?.off('chatJoined', callback);
+  }
+
+  addChatLeftListener(callback: (data: any) => void): () => void {
+    this.socket?.on('chatLeft', callback);
+    return () => this.socket?.off('chatLeft', callback);
+  }
+
+  addMessageReactionListener(callback: (data: any) => void): () => void {
+    this.socket?.on('messageReaction', callback);
+    return () => this.socket?.off('messageReaction', callback);
+  }
+
+  addMessagePinnedListener(callback: (data: any) => void): () => void {
+    this.socket?.on('messagePinned', callback);
+    return () => this.socket?.off('messagePinned', callback);
+  }
+
+  addChatArchivedListener(callback: (data: any) => void): () => void {
+    this.socket?.on('chatArchived', callback);
+    return () => this.socket?.off('chatArchived', callback);
+  }
+
+  addErrorListener(callback: (error: any) => void): () => void {
+    this.socket?.on('error', callback);
+    return () => this.socket?.off('error', callback);
   }
 }
 

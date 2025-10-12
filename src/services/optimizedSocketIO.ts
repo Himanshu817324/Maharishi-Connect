@@ -87,6 +87,7 @@ class OptimizedSocketIO {
 
         // Generic message handler
         this.socket.onAny((event, data) => {
+          console.log('🔌 [OptimizedSocketIO] Received event:', event, 'Data:', data);
           this.options.onMessage?.(event, data);
         });
 

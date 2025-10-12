@@ -17,6 +17,11 @@ class ImagePersistenceService {
       ? `${RNFS.DocumentDirectoryPath}/persistentImages`
       : `${RNFS.ExternalDirectoryPath}/persistentImages`;
     
+    console.log('📁 [ImagePersistence] Using directory:', this.persistentDir);
+    console.log('📁 [ImagePersistence] Platform:', Platform.OS);
+    console.log('📁 [ImagePersistence] External directory:', RNFS.ExternalDirectoryPath);
+    console.log('📁 [ImagePersistence] Document directory:', RNFS.DocumentDirectoryPath);
+    
     this.initializeDirectory();
   }
 
@@ -40,10 +45,50 @@ class ImagePersistenceService {
   }
 
   /**
+   * Ensure the persistent directory exists (call this before any file operations)
+   */
+  private async ensureDirectoryExists(): Promise<void> {
+    try {
+      const dirExists = await RNFS.exists(this.persistentDir);
+      if (!dirExists) {
+        console.log('📁 [ImagePersistence] Directory does not exist, creating:', this.persistentDir);
+        
+        try {
+          await RNFS.mkdir(this.persistentDir, { NSURLIsExcludedFromBackupKey: true });
+          console.log('📁 [ImagePersistence] Directory created successfully');
+        } catch (mkdirError) {
+          console.error('❌ [ImagePersistence] Failed to create directory, trying fallback:', mkdirError);
+          
+          // Fallback to document directory if external directory fails
+          if (Platform.OS === 'android' && this.persistentDir.includes(RNFS.ExternalDirectoryPath)) {
+            const fallbackDir = `${RNFS.DocumentDirectoryPath}/persistentImages`;
+            console.log('📁 [ImagePersistence] Trying fallback directory:', fallbackDir);
+            
+            try {
+              await RNFS.mkdir(fallbackDir, { NSURLIsExcludedFromBackupKey: true });
+              this.persistentDir = fallbackDir;
+              console.log('📁 [ImagePersistence] Fallback directory created successfully');
+            } catch (fallbackError) {
+              console.error('❌ [ImagePersistence] Fallback directory creation also failed:', fallbackError);
+              throw fallbackError;
+            }
+          } else {
+            throw mkdirError;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ [ImagePersistence] Failed to ensure directory exists:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Check if image is already persisted locally
    */
   async isImagePersisted(imageUrl: string): Promise<boolean> {
     try {
+      await this.ensureDirectoryExists();
       const fileName = this.generateFileName(imageUrl);
       const localPath = `${this.persistentDir}/${fileName}`;
       return await RNFS.exists(localPath);
@@ -58,6 +103,7 @@ class ImagePersistenceService {
    */
   async getPersistedImagePath(imageUrl: string): Promise<string | null> {
     try {
+      await this.ensureDirectoryExists();
       const fileName = this.generateFileName(imageUrl);
       const localPath = `${this.persistentDir}/${fileName}`;
       const exists = await RNFS.exists(localPath);
@@ -73,6 +119,9 @@ class ImagePersistenceService {
    */
   async persistImage(imageUrl: string): Promise<ImagePersistenceResult> {
     try {
+      // Ensure directory exists before attempting to persist
+      await this.ensureDirectoryExists();
+
       // Check if already persisted
       const isPersisted = await this.isImagePersisted(imageUrl);
       if (isPersisted) {
@@ -88,6 +137,9 @@ class ImagePersistenceService {
       // Generate file path
       const fileName = this.generateFileName(imageUrl);
       const localPath = `${this.persistentDir}/${fileName}`;
+      
+      console.log('📁 [ImagePersistence] Target path:', localPath);
+      console.log('📁 [ImagePersistence] Directory exists:', await RNFS.exists(this.persistentDir));
 
       // Download the image using react-native-fs (React Native compatible)
       const downloadResult = await RNFS.downloadFile({

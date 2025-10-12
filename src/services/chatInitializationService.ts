@@ -129,7 +129,7 @@ class ChatInitializationService {
   private setupEventListeners(): void {
     // Socket connection listeners
     socketService.addConnectionListener((connected: boolean) => {
-      console.log(`🔌 Socket connection status: ${connected ? 'Connected' : 'Disconnected'}`);
+      console.log(`🔌 [ChatInitializationService] Socket connection status: ${connected ? 'Connected' : 'Disconnected'}`);
 
       if (connected) {
         // Rejoin any active chats when reconnected
@@ -151,12 +151,15 @@ class ChatInitializationService {
       const state = store.getState();
       const currentChatId = state.message.currentChatId;
       
+      console.log('📨 [ChatInitializationService] Current chat ID:', currentChatId, 'Message chat ID:', message.chat_id);
+      
       if (currentChatId === message.chat_id) {
         console.log('📨 [ChatInitializationService] Message is for current chat, letting ConversationScreen handle it');
         return;
       }
 
       // Handle chat creation for new messages
+      console.log('📨 [ChatInitializationService] Processing message for non-current chat');
       await this.handleNewMessage(message);
     });
 
@@ -179,6 +182,11 @@ class ChatInitializationService {
     socketService.addJoinedChatListener((data) => {
       console.log('👥 Joined chat:', data.chatId);
       // Chat join events will be handled by Redux store listeners
+    });
+
+    // Error listener
+    socketService.addErrorListener((error) => {
+      console.error('🔌 [ChatInitializationService] Socket error:', error);
     });
 
     // User status listeners

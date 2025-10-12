@@ -140,20 +140,53 @@ const ChatScreen: React.FC = () => {
   }, [dispatch]);
 
   const setupSocketListeners = useCallback(() => {
-    socketService.addChatCreatedListener((chat: ChatData) => {
+    // Listen for new chats being created
+    const removeChatCreatedListener = socketService.addChatCreatedListener((chat: ChatData) => {
+      console.log('💬 [ChatScreen] New chat created:', chat.id);
       dispatch(setCurrentChat(chat));
       // Force refresh chats when a new chat is created
       loadChats(true);
     });
     
-    return () => {};
+    // Listen for new messages to update chat list
+    const removeMessageListener = socketService.addMessageListener((message: any) => {
+      console.log('📨 [ChatScreen] New message received for chat:', message.chat_id);
+      // Force refresh chats to update last message and unread count
+      loadChats(true);
+    });
+    
+    // Listen for connection status changes
+    const removeConnectionListener = socketService.addConnectionListener((connected: boolean) => {
+      console.log('🔌 [ChatScreen] Socket connection status changed:', connected);
+      if (connected) {
+        // Refresh chats when reconnected
+        loadChats(true);
+      }
+    });
+    
+    return () => {
+      removeChatCreatedListener();
+      removeMessageListener();
+      removeConnectionListener();
+    };
   }, [dispatch, loadChats]);
 
   useEffect(() => {
     loadChats();
     const cleanup = setupSocketListeners();
     
-    return cleanup;
+    // Setup periodic refresh every 30 seconds (similar to reference implementation)
+    const refreshInterval = setInterval(() => {
+      console.log('🔄 [ChatScreen] Periodic chat list refresh');
+      loadChats(true);
+    }, 30000); // 30 seconds
+    
+    return () => {
+      if (cleanup) {
+        cleanup();
+      }
+      clearInterval(refreshInterval);
+    };
   }, [loadChats, setupSocketListeners]);
 
   useFocusEffect(
