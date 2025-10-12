@@ -145,6 +145,17 @@ class ChatInitializationService {
         content: message.content,
         sender_id: message.sender_id
       });
+
+      // Check if we're currently viewing this chat - if so, let ConversationScreen handle it
+      const { store } = await import('@/store');
+      const state = store.getState();
+      const currentChatId = state.message.currentChatId;
+      
+      if (currentChatId === message.chat_id) {
+        console.log('📨 [ChatInitializationService] Message is for current chat, letting ConversationScreen handle it');
+        return;
+      }
+
       // Handle chat creation for new messages
       await this.handleNewMessage(message);
     });

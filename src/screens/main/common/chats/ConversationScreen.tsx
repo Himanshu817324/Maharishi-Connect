@@ -175,8 +175,20 @@ const ConversationScreen: React.FC = () => {
       messages: currentChatMessages.map(m => ({
         id: m.id,
         sender_id: m.sender_id,
-        content: m.content,
+        content: m.content.substring(0, 30) + '...',
+        timestamp: m.created_at
       })),
+      duplicateCheck: (() => {
+        const messageIds = currentChatMessages.map(m => m.id);
+        const uniqueIds = new Set(messageIds);
+        const duplicates = messageIds.filter((id, index) => messageIds.indexOf(id) !== index);
+        return {
+          hasDuplicates: duplicates.length > 0,
+          duplicateIds: duplicates,
+          totalUnique: uniqueIds.size,
+          totalMessages: messageIds.length
+        };
+      })()
     });
   }, [currentChatMessages, chat?.id]);
 
@@ -989,10 +1001,15 @@ const ConversationScreen: React.FC = () => {
   const groupMessagesWithSeparators = useCallback((messages: MessageData[]): GroupedMessageItem[] => {
     if (messages.length === 0) return [];
     
+    console.log('📱 [groupMessagesWithSeparators] Processing messages:', {
+      messageCount: messages.length,
+      messageIds: messages.map(m => m.id)
+    });
+    
     const groupedItems: GroupedMessageItem[] = [];
     let lastDate = '';
     
-    messages.forEach((message) => {
+    messages.forEach((message, index) => {
       const messageDate = new Date(message.created_at);
       // Get local date string in YYYY-MM-DD format
       const currentDate = messageDate.getFullYear() + '-' + 
@@ -1018,6 +1035,18 @@ const ConversationScreen: React.FC = () => {
         type: 'message',
         data: message
       });
+      
+      console.log(`📱 [groupMessagesWithSeparators] Added message ${index + 1}/${messages.length}:`, {
+        messageId: message.id,
+        content: message.content.substring(0, 50) + '...',
+        timestamp: message.created_at
+      });
+    });
+    
+    console.log('📱 [groupMessagesWithSeparators] Final grouped items:', {
+      totalItems: groupedItems.length,
+      messageItems: groupedItems.filter(item => item.type === 'message').length,
+      separatorItems: groupedItems.filter(item => item.type === 'separator').length
     });
     
     return groupedItems;
@@ -1028,6 +1057,30 @@ const ConversationScreen: React.FC = () => {
     groupMessagesWithSeparators(currentChatMessages), 
     [groupMessagesWithSeparators, currentChatMessages]
   );
+
+  // Debug log for message grouping
+  useEffect(() => {
+    console.log('📱 [ConversationScreen] Messages grouped:', {
+      chatId: chat?.id,
+      rawMessageCount: currentChatMessages.length,
+      groupedItemCount: groupedMessages.length,
+      messageIds: currentChatMessages.map(m => m.id),
+      groupedMessageIds: groupedMessages
+        .filter(item => item.type === 'message')
+        .map(item => (item.data as MessageData).id),
+      duplicateCheck: (() => {
+        const messageIds = currentChatMessages.map(m => m.id);
+        const uniqueIds = new Set(messageIds);
+        const duplicates = messageIds.filter((id, index) => messageIds.indexOf(id) !== index);
+        return {
+          hasDuplicates: duplicates.length > 0,
+          duplicateIds: duplicates,
+          totalUnique: uniqueIds.size,
+          totalMessages: messageIds.length
+        };
+      })()
+    });
+  }, [groupedMessages, currentChatMessages, chat?.id]);
 
 
   const handleMediaSelected = async (type: string, files: MediaFile[]) => {
@@ -1324,6 +1377,8 @@ const ConversationScreen: React.FC = () => {
       chatType: chat?.type,
       showAvatar,
       content: messageData.content,
+      timestamp: messageData.created_at,
+      messageType: messageData.message_type,
     });
 
     // Render file message if it's a file type
@@ -1447,11 +1502,15 @@ const ConversationScreen: React.FC = () => {
             <FlatList
               ref={flatListRef}
               data={groupedMessages}
-              keyExtractor={(item, _index) => 
-                item.type === 'separator' 
-                  ? `separator-${(item.data as { date: string; formattedDate: string }).date}`
-                  : (item.data as MessageData).id
-              }
+              keyExtractor={(item, index) => {
+                if (item.type === 'separator') {
+                  return `separator-${(item.data as { date: string; formattedDate: string }).date}`;
+                } else {
+                  const message = item.data as MessageData;
+                  // Use a combination of ID and index to ensure uniqueness
+                  return `message-${message.id}-${index}`;
+                }
+              }}
               renderItem={renderMessage}
               ListEmptyComponent={renderEmptyState}
               showsVerticalScrollIndicator={false}

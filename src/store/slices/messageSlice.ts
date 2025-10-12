@@ -27,6 +27,30 @@ const initialState: MessageState = {
   pagination: {},
 };
 
+// Utility function for enhanced duplicate detection
+const findDuplicateMessage = (messages: MessageData[], message: MessageData): number => {
+  return messages.findIndex(m => {
+    // Primary check: exact ID match
+    if (m.id === message.id) return true;
+    
+    // Secondary check: same content, sender, and timestamp (within 1 second)
+    const timeDiff = Math.abs(new Date(m.created_at).getTime() - new Date(message.created_at).getTime());
+    return (
+      m.content === message.content &&
+      m.sender_id === message.sender_id &&
+      timeDiff < 1000 && // Within 1 second
+      m.message_type === message.message_type
+    );
+  });
+};
+
+// Utility function to remove duplicate messages by ID
+const removeDuplicateMessages = (messages: MessageData[]): MessageData[] => {
+  return messages.filter((message, index, array) => {
+    return array.findIndex(m => m.id === message.id) === index;
+  });
+};
+
 // Async thunks
 export const fetchChatMessages = createAsyncThunk(
   'message/fetchChatMessages',
@@ -229,7 +253,19 @@ const messageSlice = createSlice({
     setCurrentChatMessages: (state, action: PayloadAction<string>) => {
       const chatId = action.payload;
       state.currentChatId = chatId;
-      state.currentChatMessages = state.messages[chatId] || [];
+      
+      // Get messages for this chat and remove duplicates
+      const messages = state.messages[chatId] || [];
+      const uniqueMessages = removeDuplicateMessages(messages);
+      
+      console.log('🔄 [setCurrentChatMessages] Setting current chat messages:', {
+        chatId: chatId,
+        originalCount: messages.length,
+        uniqueCount: uniqueMessages.length,
+        removedDuplicates: messages.length - uniqueMessages.length
+      });
+      
+      state.currentChatMessages = uniqueMessages;
     },
     clearCurrentChatMessages: (state) => {
       state.currentChatId = null;
@@ -246,6 +282,9 @@ const messageSlice = createSlice({
       const message = action.payload;
       const chatId = message.chat_id;
 
+      // Add stack trace for debugging
+      console.log('🔄 [addMessage] Called from:', new Error().stack?.split('\n')[2]?.trim());
+
       if (!state.messages[chatId]) {
         state.messages[chatId] = [];
       }
@@ -256,11 +295,34 @@ const messageSlice = createSlice({
         status: message.status ? mapServerStatusToClient(message.status) : 'sent'
       };
 
-      // Check if message already exists
-      const existingIndex = state.messages[chatId].findIndex(m => m.id === message.id);
+      // Enhanced duplicate detection - check by ID, content, sender, and timestamp
+      const existingIndex = findDuplicateMessage(state.messages[chatId], message);
+
       if (existingIndex >= 0) {
-        state.messages[chatId][existingIndex] = mappedMessage;
+        console.log('🔄 [addMessage] Updating existing message:', {
+          messageId: message.id,
+          chatId: chatId,
+          existingIndex: existingIndex,
+          content: message.content,
+          senderId: message.sender_id,
+          timestamp: message.created_at
+        });
+        // Update existing message with new data (preserve optimistic status if needed)
+        const existingMessage = state.messages[chatId][existingIndex];
+        state.messages[chatId][existingIndex] = {
+          ...mappedMessage,
+          // Keep optimistic status if the existing message is still sending
+          status: existingMessage.status === 'sending' ? existingMessage.status : mappedMessage.status
+        };
       } else {
+        console.log('🔄 [addMessage] Adding new message:', {
+          messageId: message.id,
+          chatId: chatId,
+          content: message.content,
+          senderId: message.sender_id,
+          timestamp: message.created_at,
+          totalMessagesInChat: state.messages[chatId].length
+        });
         state.messages[chatId].push(mappedMessage);
         // Sort messages by created_at
         state.messages[chatId].sort((a, b) =>
@@ -270,7 +332,9 @@ const messageSlice = createSlice({
 
       // Update current chat messages if this is the current chat
       if (state.currentChatId === chatId) {
-        state.currentChatMessages = state.messages[chatId];
+        // Remove duplicates from current chat messages
+        const uniqueMessages = removeDuplicateMessages(state.messages[chatId]);
+        state.currentChatMessages = uniqueMessages;
       }
     },
     addMessageAndCreateChat: (state, action: PayloadAction<{ message: MessageData; chat: any }>) => {
@@ -501,9 +565,27 @@ const messageSlice = createSlice({
           state.messages[chatId] = [];
         }
         
-        // Merge new messages with existing ones, avoiding duplicates
-        const existingMessageIds = new Set(state.messages[chatId].map(m => m.id));
-        const newMessages = messages.filter(msg => !existingMessageIds.has(msg.id));
+        // Enhanced duplicate detection for fetched messages
+        const newMessages: MessageData[] = [];
+        
+        for (const message of messages) {
+          const mappedMessage = {
+            ...message,
+            status: message.status ? mapServerStatusToClient(message.status) : 'sent'
+          };
+          
+          // Check if message already exists using enhanced detection
+          const existingIndex = findDuplicateMessage(state.messages[chatId], message);
+          
+          if (existingIndex >= 0) {
+            console.log('🔄 [fetchChatMessages] Updating existing message:', message.id);
+            // Update existing message
+            state.messages[chatId][existingIndex] = mappedMessage;
+          } else {
+            console.log('🔄 [fetchChatMessages] Adding new message:', message.id);
+            newMessages.push(mappedMessage);
+          }
+        }
         
         // Add new messages and sort by created_at (only if needed)
         if (newMessages.length > 0) {
