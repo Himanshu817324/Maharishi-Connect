@@ -1,4 +1,5 @@
 import React, { useEffect, useCallback, useState, useMemo } from 'react';
+import React, { useEffect, useCallback, useState, useMemo } from 'react';
 import {
   View,
   FlatList,
@@ -6,6 +7,10 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
+  Image,
+  TextInput,
+  TouchableWithoutFeedback,
+  ScrollView,
   Image,
   TextInput,
   TouchableWithoutFeedback,
@@ -22,12 +27,6 @@ import { socketService } from '@/services/socketService';
 import { ChatData } from '@/services/chatService';
 import { useDrawer } from '@/contexts/DrawerContext';
 import { useFilter } from '@/contexts/FilterContext';
-
-// Chat item separator component
-const ChatItemSeparator: React.FC = () => {
-  const { colors } = useTheme();
-  return <View style={[styles.chatItemSeparator, { backgroundColor: colors.border }]} />;
-};
 
 const ChatScreen: React.FC = () => {
   const { colors } = useTheme();
@@ -97,20 +96,6 @@ const ChatScreen: React.FC = () => {
         return chatTitle.includes(searchLower) || lastMessage.includes(searchLower);
       });
     }
-    
-    console.log('📱 [ChatScreen] Filtered chats updated:', {
-      totalChats: chats.length,
-      filteredCount: filtered.length,
-      activeFilter: activeFilter,
-      searchText: searchText,
-      chatOrder: filtered.map(chat => ({
-        id: chat.id,
-        name: getChatTitle(chat),
-        unread_count: chat.unread_count || 0,
-        last_message_time: chat.last_message?.created_at,
-        updated_at: chat.updated_at
-      }))
-    });
     
     return filtered;
   }, [chats, activeFilter, searchText, getChatTitle]);
@@ -196,6 +181,7 @@ const ChatScreen: React.FC = () => {
   );
 
   const handleChatPress = useCallback((chat: ChatData) => {
+  const handleChatPress = useCallback((chat: ChatData) => {
     // Clear unread count immediately when chat is opened
     if (chat.unread_count && chat.unread_count > 0) {
       dispatch(clearUnreadCount(chat.id));
@@ -204,9 +190,14 @@ const ChatScreen: React.FC = () => {
     dispatch(setCurrentChat(chat));
     (navigation as any).navigate('ConversationScreen', { chat });
   }, [dispatch, navigation]);
+  }, [dispatch, navigation]);
 
   const handleCreateChat = useCallback(() => {
+  const handleCreateChat = useCallback(() => {
     (navigation as any).navigate('FilteredContactsScreen');
+  }, [navigation]);
+
+  const getChatSubtitle = useCallback((chat: ChatData) => {
   }, [navigation]);
 
   const getChatSubtitle = useCallback((chat: ChatData) => {
@@ -245,6 +236,7 @@ const ChatScreen: React.FC = () => {
       ? `${chat.participants.length} members`
       : 'No messages yet';
   }, [user?.id, user?.firebaseUid]);
+  }, [user?.id, user?.firebaseUid]);
 
   const getMediaTypeText = (messageType: string) => {
     switch (messageType) {
@@ -262,6 +254,7 @@ const ChatScreen: React.FC = () => {
   };
 
   const getChatAvatarInitials = useCallback((chat: ChatData) => {
+  const getChatAvatarInitials = useCallback((chat: ChatData) => {
     if (chat.type === 'group') {
       return chat.name?.charAt(0).toUpperCase() || 'G';
     } else {
@@ -272,7 +265,9 @@ const ChatScreen: React.FC = () => {
       return name?.charAt(0).toUpperCase() || 'U';
     }
   }, [user?.id, user?.firebaseUid]);
+  }, [user?.id, user?.firebaseUid]);
 
+  const getAvatarColor = useCallback((chat: ChatData) => {
   const getAvatarColor = useCallback((chat: ChatData) => {
     const avatarColors = [
       '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', 
@@ -282,6 +277,7 @@ const ChatScreen: React.FC = () => {
     const title = getChatTitle(chat);
     const index = title.charCodeAt(0) % avatarColors.length;
     return avatarColors[index];
+  }, [getChatTitle]);
   }, [getChatTitle]);
 
   const formatLastMessageTime = (timestamp: string) => {
@@ -305,6 +301,7 @@ const ChatScreen: React.FC = () => {
     }
   };
 
+  const renderChatItem = useCallback(({ item }: { item: ChatData }) => {
   const renderChatItem = useCallback(({ item }: { item: ChatData }) => {
     const avatarColor = getAvatarColor(item);
     const hasUnread = item.unread_count && item.unread_count > 0;
@@ -332,7 +329,7 @@ const ChatScreen: React.FC = () => {
                     {getChatAvatarInitials(item)}
                   </Text>
                   <View style={styles.groupBadge}>
-                    <OptimizedIcon name="people" size={moderateScale(10)} color="#FFFFFF" />
+                    <Icon name="people" size={moderateScale(10)} color="#FFFFFF" />
                   </View>
                 </View>
               );
@@ -378,6 +375,7 @@ const ChatScreen: React.FC = () => {
             </Text>
             {item.last_message && (
               <Text style={styles.chatTime}>
+              <Text style={styles.chatTime}>
                 {formatLastMessageTime(item.last_message.created_at)}
               </Text>
             )}
@@ -405,6 +403,7 @@ const ChatScreen: React.FC = () => {
         </View>
       </TouchableOpacity>
     );
+  }, [user, colors, getAvatarColor, getChatAvatarInitials, getChatSubtitle, getChatTitle, handleChatPress]);
   }, [user, colors, getAvatarColor, getChatAvatarInitials, getChatSubtitle, getChatTitle, handleChatPress]);
 
   const renderEmptyState = useCallback(() => {
@@ -448,7 +447,7 @@ const ChatScreen: React.FC = () => {
     return (
       <View style={styles.emptyContainer}>
         <View style={[styles.emptyIconContainer, { backgroundColor: colors.surface }]}>
-          <OptimizedIcon name={emptyContent.icon} size={moderateScale(56)} color={colors.textSecondary} />
+          <Icon name={emptyContent.icon} size={moderateScale(56)} color={colors.textSecondary} />
         </View>
         <Text style={[styles.emptyTitle, { color: colors.text }]}>
           {emptyContent.title}
@@ -461,7 +460,7 @@ const ChatScreen: React.FC = () => {
             style={[styles.emptyButton, { backgroundColor: colors.accent }]}
             onPress={handleCreateChat}
           >
-            <OptimizedIcon name="add-circle-outline" size={moderateScale(20)} color="#FFFFFF" />
+            <Icon name="add-circle-outline" size={moderateScale(20)} color="#FFFFFF" />
             <Text style={styles.emptyButtonText}>Start Chatting</Text>
           </TouchableOpacity>
         )}
@@ -492,7 +491,7 @@ const ChatScreen: React.FC = () => {
           style={styles.headerButton}
           onPress={openDrawer}
         >
-          <OptimizedIcon name="menu-outline" size={moderateScale(24)} color={colors.text} />
+          <Icon name="menu-outline" size={moderateScale(24)} color={colors.text} />
         </TouchableOpacity>
         
         <Text style={[styles.headerTitle, { color: colors.text }]}>
@@ -503,7 +502,7 @@ const ChatScreen: React.FC = () => {
           style={styles.headerButton}
           onPress={toggleSearch}
         >
-          <OptimizedIcon name="search-outline" size={moderateScale(24)} color={colors.text} />
+          <Icon name="search-outline" size={moderateScale(24)} color={colors.text} />
         </TouchableOpacity>
       </View>
       
@@ -511,7 +510,7 @@ const ChatScreen: React.FC = () => {
       {isSearchVisible && (
         <View style={[styles.searchContainer, { backgroundColor: colors.background }]}>
           <View style={[styles.searchInputContainer, { backgroundColor: colors.background }]}>
-            <OptimizedIcon name="search-outline" size={moderateScale(20)} color={colors.textSecondary} style={styles.searchIcon} />
+            <Icon name="search-outline" size={moderateScale(20)} color={colors.textSecondary} style={styles.searchIcon} />
             <TextInput
               style={[styles.searchInput, { color: colors.text }]}
               placeholder="Search chats..."
@@ -523,7 +522,7 @@ const ChatScreen: React.FC = () => {
             />
             {searchText.length > 0 && (
               <TouchableOpacity onPress={() => setSearchText('')} style={styles.clearButton}>
-                <OptimizedIcon name="close-circle" size={moderateScale(20)} color={colors.textSecondary} />
+                <Icon name="close-circle" size={moderateScale(20)} color={colors.textSecondary} />
               </TouchableOpacity>
             )}
           </View>
@@ -541,14 +540,14 @@ const ChatScreen: React.FC = () => {
             style={[
               styles.filterButton,
               { 
-                backgroundColor: activeFilter === 'all' ? '#7f1d1d' : colors.surface,
-                borderColor: activeFilter === 'all' ? '#7f1d1d' : colors.border,
+                backgroundColor: activeFilter === 'all' ? colors.accent : colors.surface,
+                borderColor: activeFilter === 'all' ? colors.accent : colors.border,
               }
             ]}
             onPress={() => setActiveFilter('all')}
             activeOpacity={0.7}
           >
-            <OptimizedIcon 
+            <Icon 
               name="chatbubbles-outline" 
               size={moderateScale(16)} 
               color={activeFilter === 'all' ? '#FFFFFF' : colors.textSecondary} 
@@ -565,14 +564,14 @@ const ChatScreen: React.FC = () => {
             style={[
               styles.filterButton,
               { 
-                backgroundColor: activeFilter === 'direct' ? '#7f1d1d' : colors.surface,
-                borderColor: activeFilter === 'direct' ? '#7f1d1d' : colors.border,
+                backgroundColor: activeFilter === 'direct' ? colors.accent : colors.surface,
+                borderColor: activeFilter === 'direct' ? colors.accent : colors.border,
               }
             ]}
             onPress={() => setActiveFilter('direct')}
             activeOpacity={0.7}
           >
-            <OptimizedIcon 
+            <Icon 
               name="person-outline" 
               size={moderateScale(16)} 
               color={activeFilter === 'direct' ? '#FFFFFF' : colors.textSecondary} 
@@ -589,14 +588,14 @@ const ChatScreen: React.FC = () => {
             style={[
               styles.filterButton,
               { 
-                backgroundColor: activeFilter === 'groups' ? '#7f1d1d' : colors.surface,
-                borderColor: activeFilter === 'groups' ? '#7f1d1d' : colors.border,
+                backgroundColor: activeFilter === 'groups' ? colors.accent : colors.surface,
+                borderColor: activeFilter === 'groups' ? colors.accent : colors.border,
               }
             ]}
             onPress={() => setActiveFilter('groups')}
             activeOpacity={0.7}
           >
-            <OptimizedIcon 
+            <Icon 
               name="people-outline" 
               size={moderateScale(16)} 
               color={activeFilter === 'groups' ? '#FFFFFF' : colors.textSecondary} 
@@ -613,14 +612,14 @@ const ChatScreen: React.FC = () => {
             style={[
               styles.filterButton,
               { 
-                backgroundColor: activeFilter === 'unread' ? '#7f1d1d' : colors.surface,
-                borderColor: activeFilter === 'unread' ? '#7f1d1d' : colors.border,
+                backgroundColor: activeFilter === 'unread' ? colors.accent : colors.surface,
+                borderColor: activeFilter === 'unread' ? colors.accent : colors.border,
               }
             ]}
             onPress={() => setActiveFilter('unread')}
             activeOpacity={0.7}
           >
-            <OptimizedIcon 
+            <Icon 
               name="mail-unread-outline" 
               size={moderateScale(16)} 
               color={activeFilter === 'unread' ? '#FFFFFF' : colors.textSecondary} 
@@ -644,7 +643,7 @@ const ChatScreen: React.FC = () => {
             onPress={() => setActiveFilter('archived')}
             activeOpacity={0.7}
           >
-            <OptimizedIcon 
+            <Icon 
               name="archive-outline" 
               size={moderateScale(16)} 
               color={activeFilter === 'archived' ? '#FFFFFF' : colors.textSecondary} 
@@ -660,6 +659,7 @@ const ChatScreen: React.FC = () => {
       </View>
       
       <FlatList
+        data={filteredChats}
         data={filteredChats}
         keyExtractor={(item) => item.id}
         renderItem={renderChatItem}
@@ -678,12 +678,86 @@ const ChatScreen: React.FC = () => {
       </TouchableOpacity>
     </View>
     </TouchableWithoutFeedback>
+    </TouchableWithoutFeedback>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(2),
+    paddingTop: hp(4), // Extra padding for status bar
+  },
+  headerButton: {
+    padding: wp(2),
+    borderRadius: moderateScale(8),
+  },
+  headerTitle: {
+    fontSize: responsiveFont(20),
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  searchContainer: {
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: moderateScale(12),
+    paddingHorizontal: wp(3),
+    paddingVertical: hp(1),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  searchIcon: {
+    marginRight: wp(2),
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: responsiveFont(16),
+    paddingVertical: 0,
+  },
+  clearButton: {
+    marginLeft: wp(2),
+    padding: wp(1),
+  },
+  filterContainer: {
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  filterScrollContent: {
+    paddingHorizontal: wp(1),
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: wp(3),
+    paddingVertical: hp(1),
+    marginHorizontal: wp(1),
+    borderRadius: moderateScale(20),
+    borderWidth: 1,
+    minWidth: moderateScale(80),
+    justifyContent: 'center',
+  },
+  filterButtonText: {
+    fontSize: responsiveFont(14),
+    fontWeight: '600',
+    marginLeft: wp(1.5),
+    letterSpacing: 0.2,
   },
   header: {
     flexDirection: 'row',
@@ -782,12 +856,25 @@ const styles = StyleSheet.create({
     paddingVertical: hp(1.5),
     borderRadius: moderateScale(8),
   },
-  chatItemSeparator: {
-    height: 1,
-    marginHorizontal: wp(4),
-    opacity: 0.3,
-  },
   avatar: {
+    width: moderateScale(50),
+    height: moderateScale(50),
+    borderRadius: moderateScale(25),
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: wp(3),
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: moderateScale(25),
+  },
+  avatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    borderRadius: moderateScale(25),
     width: moderateScale(50),
     height: moderateScale(50),
     borderRadius: moderateScale(25),
@@ -811,6 +898,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   avatarText: {
+    fontSize: responsiveFont(20),
     fontSize: responsiveFont(20),
     fontWeight: '700',
     color: '#FFFFFF',
@@ -852,6 +940,7 @@ const styles = StyleSheet.create({
   chatTime: {
     fontSize: responsiveFont(13),
     fontWeight: '500',
+    color: '#AAAAAA',
     color: '#AAAAAA',
   },
   chatSubtitle: {
