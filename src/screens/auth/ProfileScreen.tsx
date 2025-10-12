@@ -21,11 +21,12 @@ import { useDispatch, useSelector } from 'react-redux';
 import { apiService } from '../../services/apiService';
 import { locationsService } from '../../services/locationsService';
 import { imageUploadService } from '../../services/imageUploadService';
-import { RootState } from '../../store';
+import { RootState, store } from '../../store';
 import { updateUserProfile } from '../../store/slices/authSlice';
 import { RootStackParamList } from '../../types/navigation';
 import ModernDropdown from '../../components/atoms/ui/ModernDropdown';
 import requestContactsPermissionWithAlert from '../../utils/permissions';
+import { LightColors } from '../../theme/colors';
 
 type ProfileScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -53,14 +54,14 @@ const ProfileScreen = () => {
 
   // Image upload state
   const [profileImage, setProfileImage] = useState<string | null>(
-    (user as any)?.profilePicture || null,
+    user?.avatar || (user as any)?.profilePicture || null,
   );
   const [uploading, setUploading] = useState(false);
   const [uploadTempId, setUploadTempId] = useState<string | null>(null);
 
   // Dynamic location data
   const [countries, setCountries] = useState<string[]>([]);
-  const [states, setStates] = useState<string[]>([]);
+  const [_states, setStates] = useState<string[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(true);
   const [loadingStates, setLoadingStates] = useState(false);
 
@@ -120,13 +121,12 @@ const ProfileScreen = () => {
         const statesData = await locationsService.getStates(selectedCountry);
         setStates(statesData);
         
-        // Set default state if current state is not valid for the new country
-        if (!statesData.includes(selectedState)) {
-          const defaultState = getDefaultState(selectedCountry);
-          setSelectedState(defaultState);
-        }
+        // Always set default state for the selected country
+        const defaultState = getDefaultState(selectedCountry);
+        setSelectedState(defaultState);
         
         console.log('🏛️ States loaded for', selectedCountry, ':', statesData);
+        console.log('🏛️ Default state set to:', defaultState);
       } catch (error) {
         console.error('❌ Error loading states:', error);
         setStates([]);
@@ -137,8 +137,7 @@ const ProfileScreen = () => {
     };
 
     loadStates();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCountry]); // Only depend on selectedCountry
+  }, [selectedCountry]);
 
   if (!user) {
     return null;
@@ -209,6 +208,47 @@ const ProfileScreen = () => {
 
   const uploadImage = async (imageUri: string) => {
     try {
+      // Check if user is authenticated
+      if (!user?.firebaseUid) {
+        Toast.show({
+          type: 'error',
+          text1: 'Authentication Error',
+          text2: 'Please log in again',
+        });
+        return;
+      }
+
+      // For profile completion during signup, use signup upload method
+      // For authenticated users, use profile upload method
+      const isNewUser = user?.isNewUser;
+      console.log('🔐 [ProfileScreen] User type:', isNewUser ? 'NEW USER' : 'EXISTING USER');
+      
+      let result;
+      if (isNewUser) {
+        console.log('🔐 [ProfileScreen] Using signup upload method (no auth required)');
+        // Use signup upload method for new users (no auth required)
+        result = await imageUploadService.uploadImageForSignup(imageUri);
+      } else {
+        console.log('🔐 [ProfileScreen] Using profile upload method (auth required)');
+        // Check if authentication token exists for existing users
+        const token = await AsyncStorage.getItem('auth_token');
+        console.log('🔐 [ProfileScreen] Token check:', token ? 'EXISTS' : 'NOT FOUND');
+        if (token) {
+          console.log('🔐 [ProfileScreen] Token preview:', token.substring(0, 20) + '...');
+        }
+        if (!token) {
+          Toast.show({
+            type: 'error',
+            text1: 'Authentication Error',
+            text2: 'No authentication token found',
+          });
+          return;
+        }
+        
+        // Use profile upload method for authenticated users
+        result = await imageUploadService.uploadProfileImage(imageUri, user.firebaseUid);
+      }
+
       setUploading(true);
 
       // Show initial upload status
@@ -218,17 +258,18 @@ const ProfileScreen = () => {
         text2: 'Please wait',
       });
 
-      // Upload image and get tempId for signup
-      const result = await imageUploadService.uploadImageForSignup(imageUri);
-
       if (result.success) {
         // Set tempId if available
         if (result.tempId) {
           setUploadTempId(result.tempId);
+          console.log('📸 [ProfileScreen] Upload tempId set:', result.tempId);
         }
 
         // Use uploaded image URL for preview if available, otherwise use local URI
-        setProfileImage(result.imageUrl || result.url || imageUri);
+        const imageUrl = result.imageUrl || result.url || imageUri;
+        setProfileImage(imageUrl);
+        console.log('📸 [ProfileScreen] Profile image set to:', imageUrl);
+        console.log('📸 [ProfileScreen] Upload result:', result);
 
         Toast.show({
           type: 'success',
@@ -268,11 +309,11 @@ const ProfileScreen = () => {
       return;
     }
 
-    if (!fullName || !selectedCountry || !selectedState) {
+    if (!fullName || !selectedCountry) {
       Toast.show({ 
         type: 'error', 
         text1: 'Please fill all fields',
-        text2: 'Name, country, and state are required'
+        text2: 'Name and country are required'
       });
       return;
     }
@@ -290,6 +331,9 @@ const ProfileScreen = () => {
       // Send tempId if image was uploaded, otherwise use manual URL
       profilePicture: uploadTempId || profileImage || null,
     };
+
+    console.log('📝 [ProfileScreen] Form data being sent:', formData);
+    console.log('📝 [ProfileScreen] Profile picture value:', formData.profilePicture);
 
     try {
       setLoading(true);
@@ -313,6 +357,7 @@ const ProfileScreen = () => {
         const userData = {
           fullName: response.user.fullName,
           avatar: response.user.profilePicture || null, // Will use initials if null
+          profilePicture: response.user.profilePicture || null, // Also store as profilePicture for compatibility
           country: country,
           state: state,
           status: 'Working', // Dummy data
@@ -321,11 +366,24 @@ const ProfileScreen = () => {
           token: response.token, // Store the JWT token
         };
 
+        console.log('📝 [ProfileScreen] Backend response.user:', response.user);
+        console.log('📝 [ProfileScreen] Backend profilePicture:', response.user.profilePicture);
+        console.log('📝 [ProfileScreen] Upload tempId:', uploadTempId);
+        console.log('📝 [ProfileScreen] Local profileImage:', profileImage);
+        console.log('📝 [ProfileScreen] Avatar field being set to:', userData.avatar);
+        console.log('📝 [ProfileScreen] ProfilePicture field being set to:', userData.profilePicture);
+
         console.log('📝 Updating Redux with user data:', userData);
         console.log('📝 Token from response:', response.token);
 
         // Use updateUserProfile to update existing user data
         dispatch(updateUserProfile(userData));
+        
+        // Verify avatar was saved to Redux store
+        const updatedUser = store.getState().auth.user;
+        console.log('📝 [ProfileScreen] Redux store updated user:', updatedUser);
+        console.log('📝 [ProfileScreen] Redux avatar field:', updatedUser?.avatar);
+        console.log('📝 [ProfileScreen] Redux profilePicture field:', updatedUser?.profilePicture);
         
         // Verify token was saved to AsyncStorage
         try {
@@ -415,7 +473,7 @@ const ProfileScreen = () => {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+      <StatusBar barStyle="dark-content" backgroundColor={LightColors.background} />
 
       <View style={styles.content}>
         {/* Main Content Area */}
@@ -460,7 +518,7 @@ const ProfileScreen = () => {
               focusedField === 'fullName' && styles.inputFocused,
             ]}
             placeholder="Username"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={LightColors.textTertiary}
             value={fullName}
             onChangeText={setFullName}
             onFocus={() => setFocusedField('fullName')}
@@ -484,8 +542,8 @@ const ProfileScreen = () => {
             style={styles.dropdownFullWidth}
           />
 
-          {/* State Picker */}
-          <ModernDropdown
+          {/* State Picker - Hidden but data sent to backend */}
+          {/* <ModernDropdown
             label=""
             emoji=""
             options={states.map(state => ({
@@ -499,7 +557,7 @@ const ProfileScreen = () => {
             loading={loadingStates}
             disabled={loadingStates || !selectedCountry}
             style={styles.dropdownFullWidth}
-          />
+          /> */}
         </View>
 
         {/* Bottom Section */}
@@ -532,7 +590,7 @@ export default ProfileScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: LightColors.background,
   },
   content: {
     flex: 1,
@@ -552,20 +610,20 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: LightColors.surface,
   },
   initialsContainer: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#8B5CF6',
+    backgroundColor: LightColors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   initialsText: {
     fontSize: 48,
     fontWeight: '700',
-    color: '#ffffff',
+    color: LightColors.textOnPrimary,
   },
   imageOverlay: {
     position: 'absolute',
@@ -574,11 +632,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#8B5CF6',
+    backgroundColor: LightColors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 3,
-    borderColor: '#ffffff',
+    borderColor: LightColors.background,
   },
   imageOverlayText: {
     fontSize: 16,
@@ -601,19 +659,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   input: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: LightColors.inputBg,
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
-    color: '#374151',
+    color: LightColors.text,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: LightColors.border,
     width: '100%',
     marginBottom: 16,
   },
   inputFocused: {
-    borderColor: '#8B5CF6',
+    borderColor: LightColors.primary,
   },
   dropdownFullWidth: {
     width: '100%',
@@ -623,7 +681,7 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   saveButton: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: LightColors.primary,
     borderRadius: 8,
     paddingVertical: 16,
     paddingHorizontal: 24,
@@ -632,10 +690,10 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   saveButtonDisabled: {
-    backgroundColor: '#9CA3AF',
+    backgroundColor: LightColors.textTertiary,
   },
   saveButtonText: {
-    color: '#ffffff',
+    color: LightColors.textOnPrimary,
     fontSize: 16,
     fontWeight: '600',
   },

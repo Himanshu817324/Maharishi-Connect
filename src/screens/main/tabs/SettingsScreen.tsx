@@ -126,9 +126,9 @@ export default function SettingsScreen() {
           activeOpacity={0.7}
         >
           <View style={styles.avatarContainer}>
-            {user?.avatar ? (
+            {(user?.avatar || user?.profilePicture) ? (
               <Image
-                source={{ uri: user.avatar }}
+                source={{ uri: user.avatar || user?.profilePicture }}
                 style={styles.avatar}
               />
             ) : (

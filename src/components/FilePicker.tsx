@@ -64,7 +64,8 @@ const FilePicker: React.FC<FilePickerProps> = ({
         (progress) => {
           setUploadProgress(progress.percentage);
           onUploadProgress?.(progress.percentage);
-        }
+        },
+        true
       );
 
       if (result.status === 'SUCCESS' && result.file) {

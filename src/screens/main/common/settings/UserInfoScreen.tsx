@@ -9,6 +9,7 @@ import CustomHeader from '../../../../components/atoms/ui/CustomHeader';
 import AvatarWithInitials from '../../../../components/atoms/ui/AvatarWithInitials';
 import { logout } from '../../../../store/slices/authSlice';
 import { moderateScale, responsiveFont, wp, hp } from '../../../../theme/responsive';
+import { LightColors } from '../../../../theme/colors';
 
 export default function UserInfoScreen() {
   const navigation = useNavigation();
@@ -28,19 +29,19 @@ export default function UserInfoScreen() {
           label: 'Full Name', 
           value: user?.fullName || user?.name || 'Not set', 
           icon: 'person-outline',
-          iconColor: '#6366F1'
+          iconColor: LightColors.primary
         },
         { 
           label: 'Phone Number', 
           value: user?.phone || 'Not set', 
           icon: 'call-outline',
-          iconColor: '#10B981'
+          iconColor: LightColors.accent
         },
         { 
           label: 'Status', 
           value: user?.status || 'Available', 
           icon: 'chatbubble-ellipses-outline',
-          iconColor: '#F59E0B'
+          iconColor: LightColors.accent
         },
       ]
     },
@@ -51,13 +52,13 @@ export default function UserInfoScreen() {
           label: 'Country', 
           value: user?.country || 'Not set', 
           icon: 'earth-outline',
-          iconColor: '#3B82F6'
+          iconColor: LightColors.primary
         },
         { 
           label: 'State/Region', 
           value: user?.state || 'Not set', 
           icon: 'location-outline',
-          iconColor: '#8B5CF6'
+          iconColor: LightColors.accent
         },
       ]
     },
@@ -68,7 +69,7 @@ export default function UserInfoScreen() {
           label: 'Verification', 
           value: user?.isVerified ? 'Verified' : 'Not Verified', 
           icon: user?.isVerified ? 'shield-checkmark-outline' : 'shield-outline',
-          iconColor: user?.isVerified ? '#10B981' : '#EF4444',
+          iconColor: user?.isVerified ? LightColors.accent : LightColors.error,
           showBadge: true,
           badgeStatus: user?.isVerified
         },
@@ -76,7 +77,7 @@ export default function UserInfoScreen() {
           label: 'Profile Status', 
           value: user?.profileCompleted ? 'Complete' : 'Incomplete', 
           icon: user?.profileCompleted ? 'checkmark-circle-outline' : 'alert-circle-outline',
-          iconColor: user?.profileCompleted ? '#10B981' : '#F59E0B',
+          iconColor: user?.profileCompleted ? LightColors.accent : LightColors.error,
           showBadge: true,
           badgeStatus: user?.profileCompleted
         },
@@ -134,7 +135,7 @@ export default function UserInfoScreen() {
             style={[styles.editAvatarButton, { backgroundColor: colors.accent }]}
             onPress={handleEditProfile}
           >
-            <Icon name="camera" size={moderateScale(16)} color="#FFFFFF" />
+            <Icon name="camera" size={moderateScale(16)} color={LightColors.textOnPrimary} />
           </TouchableOpacity>
         </View>
         
@@ -195,12 +196,12 @@ export default function UserInfoScreen() {
                   {item.showBadge && (
                     <View style={[
                       styles.statusBadge, 
-                      { backgroundColor: item.badgeStatus ? '#10B981' : '#F59E0B' }
+                      { backgroundColor: item.badgeStatus ? LightColors.accent : LightColors.error }
                     ]}>
                       <Icon 
                         name={item.badgeStatus ? 'checkmark' : 'close'} 
                         size={moderateScale(12)} 
-                        color="#FFFFFF" 
+                        color={LightColors.textOnPrimary} 
                       />
                     </View>
                   )}
@@ -218,16 +219,16 @@ export default function UserInfoScreen() {
           onPress={handleEditProfile}
           activeOpacity={0.8}
         >
-          <Icon name="create-outline" size={moderateScale(20)} color="#FFFFFF" />
+          <Icon name="create-outline" size={moderateScale(20)} color={LightColors.textOnPrimary} />
           <Text style={styles.primaryButtonText}>Edit Profile</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.dangerButton, { backgroundColor: '#EF4444' + '15', borderColor: '#EF4444' + '30' }]}
+          style={[styles.dangerButton, { backgroundColor: LightColors.error + '15', borderColor: LightColors.error + '30' }]}
           onPress={handleLogout}
           activeOpacity={0.8}
         >
-          <Icon name="log-out-outline" size={moderateScale(20)} color="#EF4444" />
+          <Icon name="log-out-outline" size={moderateScale(20)} color={LightColors.error} />
           <Text style={styles.dangerButtonText}>Logout</Text>
         </TouchableOpacity>
       </View>
@@ -282,7 +283,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 3,
-    borderColor: '#FFFFFF',
+    borderColor: LightColors.background,
   },
   profileName: {
     fontSize: responsiveFont(26),
@@ -386,7 +387,7 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     fontSize: responsiveFont(16),
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: LightColors.textOnPrimary,
     letterSpacing: 0.3,
   },
   dangerButton: {
@@ -401,7 +402,7 @@ const styles = StyleSheet.create({
   dangerButtonText: {
     fontSize: responsiveFont(16),
     fontWeight: '700',
-    color: '#EF4444',
+    color: LightColors.error,
     letterSpacing: 0.3,
   },
 });

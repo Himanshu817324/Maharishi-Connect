@@ -39,19 +39,19 @@ export class ImageUploadService {
         name: `profile_${userId}_${Date.now()}.jpg`,
       } as any);
 
-      // Use the file service for profile image uploads (which uses the correct endpoint)
-      const { fileService } = await import('./fileService');
-      const result = await fileService.uploadFile(imageUri, `profile_${userId}_${Date.now()}.jpg`, 'image/jpeg');
+      // Use the apiService for profile image uploads (tries multiple endpoints)
+      const { apiService } = await import('./apiService');
+      const result = await apiService.uploadProfileImage(formData);
       
-      if (result.status === 'SUCCESS' && result.file) {
+      if (result.status === 'SUCCESS' && result.data) {
         return {
           success: true,
-          url: result.file.mediaUrl || result.file.s3Key,
-          imageUrl: result.file.mediaUrl || result.file.s3Key,
-          tempId: result.file.id || result.file.s3Key
+          url: result.data.url || result.data.imageUrl || result.data.profilePicture,
+          imageUrl: result.data.url || result.data.imageUrl || result.data.profilePicture,
+          tempId: result.data.tempId || result.data.id || result.data.fileId
         };
       } else {
-        throw new Error(result.error || 'Upload failed');
+        throw new Error(result.message || 'Upload failed');
       }
     } catch (error) {
       console.error('Image upload error:', error);
@@ -97,17 +97,17 @@ export class ImageUploadService {
         name: `chat_${chatId}_${Date.now()}.jpg`,
       } as any);
 
-      // Use the file service for image uploads (which uses the correct endpoint)
-      const { fileService } = await import('./fileService');
-      const result = await fileService.uploadFile(imageUri, `chat_${chatId}_${Date.now()}.jpg`, 'image/jpeg');
+      // Use the apiService for image uploads (tries multiple endpoints)
+      const { apiService } = await import('./apiService');
+      const result = await apiService.uploadProfileImage(formData);
       
-      if (result.status === 'SUCCESS' && result.file) {
+      if (result.status === 'SUCCESS' && result.data) {
         return {
           success: true,
-          url: result.file.mediaUrl || result.file.s3Key
+          url: result.data.url || result.data.imageUrl || result.data.profilePicture
         };
       } else {
-        throw new Error(result.error || 'Upload failed');
+        throw new Error(result.message || 'Upload failed');
       }
     } catch (error) {
       console.error('Image upload error:', error);
@@ -144,6 +144,8 @@ export class ImageUploadService {
    */
   async uploadImageForSignup(imageUri: string): Promise<UploadResult> {
     try {
+      console.log('📸 [ImageUploadService] Starting signup image upload:', imageUri);
+      
       // Create FormData for upload
       const formData = new FormData();
       formData.append('profileImage', {
@@ -152,19 +154,24 @@ export class ImageUploadService {
         name: `signup_${Date.now()}.jpg`,
       } as any);
 
-      // Use the file service for signup image uploads (which uses the correct endpoint)
-      const { fileService } = await import('./fileService');
-      const result = await fileService.uploadFile(imageUri, `signup_${Date.now()}.jpg`, 'image/jpeg');
+      console.log('📸 [ImageUploadService] FormData created for signup upload');
+
+      // Use the apiService for profile image uploads (tries multiple endpoints)
+      const { apiService } = await import('./apiService');
+      console.log('📸 [ImageUploadService] Calling apiService.uploadProfileImage');
+      const result = await apiService.uploadProfileImage(formData);
       
-      if (result.status === 'SUCCESS' && result.file) {
+      console.log('📸 [ImageUploadService] ApiService result:', result);
+      
+      if (result.status === 'SUCCESS' && result.data) {
         return {
           success: true,
-          url: result.file.mediaUrl || result.file.s3Key,
-          imageUrl: result.file.mediaUrl || result.file.s3Key,
-          tempId: result.file.id || result.file.s3Key
+          url: result.data.url || result.data.imageUrl || result.data.profilePicture,
+          imageUrl: result.data.url || result.data.imageUrl || result.data.profilePicture,
+          tempId: result.data.tempId || result.data.id || result.data.fileId
         };
       } else {
-        throw new Error(result.error || 'Upload failed');
+        throw new Error(result.message || 'Upload failed');
       }
     } catch (error) {
       console.error('Image upload error:', error);

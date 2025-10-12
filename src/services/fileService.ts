@@ -78,6 +78,17 @@ class FileService {
     };
   }
 
+  private async getAuthHeadersOptional(): Promise<Record<string, string>> {
+    const token = await AsyncStorage.getItem('auth_token');
+    if (!token) {
+      return {}; // Return empty headers if no token
+    }
+
+    return {
+      'Authorization': `Bearer ${token}`,
+    };
+  }
+
   private getUserId(): string {
     const state = store.getState();
     const user = state.auth.user;
@@ -265,7 +276,8 @@ class FileService {
     fileUri: string,
     fileName: string,
     mimeType: string,
-    onProgress?: (progress: UploadProgress) => void
+    onProgress?: (progress: UploadProgress) => void,
+    requireAuth: boolean = true
   ): Promise<FileUploadResult> {
     try {
       // Validate file type
@@ -277,8 +289,8 @@ class FileService {
         };
       }
 
-      // Get auth headers first
-      const headers = await this.getAuthHeaders();
+      // Get auth headers (optional for signup scenarios)
+      const headers = requireAuth ? await this.getAuthHeaders() : await this.getAuthHeadersOptional();
       const userId = this.getUserId();
 
       console.log('📤 [FileService] Uploading file:', { fileName, mimeType, userId });
@@ -422,7 +434,11 @@ class FileService {
         const uploadUrl = `${this.baseURL}/user/upload-file`;
         console.log('📤 [FileService] Upload URL:', uploadUrl);
         xhr.open('POST', uploadUrl);
-        xhr.setRequestHeader('Authorization', headers.Authorization);
+        
+        // Only set Authorization header if it exists
+        if (headers.Authorization) {
+          xhr.setRequestHeader('Authorization', headers.Authorization);
+        }
         
         // Set timeout for upload (5 minutes for large files)
         xhr.timeout = 300000; // 5 minutes

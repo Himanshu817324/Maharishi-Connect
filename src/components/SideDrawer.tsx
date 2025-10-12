@@ -183,9 +183,9 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
         {/* Header */}
         <View style={styles.drawerHeader}>
           <View style={styles.userProfileContainer}>
-            {user?.avatar ? (
+            {(user?.avatar || user?.profilePicture) ? (
               <Image
-                source={{ uri: user.avatar }}
+                source={{ uri: user.avatar || user?.profilePicture }}
                 style={styles.userAvatar}
               />
             ) : (
@@ -230,13 +230,13 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
                 <Icon
                   name={item.icon}
                   size={moderateScale(20)}
-                  color={activeFilter === item.key ? '#FFFFFF' : colors.text}
+                  color={activeFilter === item.key ? '#000000' : colors.text}
                   style={styles.menuIcon}
                 />
                 <Text style={[
                   styles.menuText, 
                   { 
-                    color: activeFilter === item.key ? '#FFFFFF' : colors.text,
+                    color: activeFilter === item.key ? '#000000' : colors.text,
                     fontWeight: activeFilter === item.key ? '600' : '500',
                   }
                 ]}>
@@ -246,7 +246,7 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
                   <Icon
                     name="checkmark"
                     size={moderateScale(16)}
-                    color="#FFFFFF"
+                    color="#000000"
                     style={styles.checkIcon}
                   />
                 )}

@@ -1166,7 +1166,7 @@ const ConversationScreen: React.FC = () => {
               // For other file types, use the general file service
               console.log('📤 [ConversationScreen] Uploading file via fileService');
               const { fileService } = await import('@/services/fileService');
-              const result = await fileService.uploadFile(file.uri, file.name, file.type);
+              const result = await fileService.uploadFile(file.uri, file.name, file.type, undefined, true);
               uploadResult = {
                 success: result.status === 'SUCCESS',
                 url: result.file?.mediaUrl,

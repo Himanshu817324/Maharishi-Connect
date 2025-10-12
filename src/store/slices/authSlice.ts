@@ -11,6 +11,7 @@ export interface AuthUser {
   name?: string;
   fullName?: string;
   avatar?: string;
+  profilePicture?: string; // Added for backend compatibility
   country?: string;
   state?: string;
   status?: string;

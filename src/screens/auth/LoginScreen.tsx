@@ -125,7 +125,7 @@ const LoginScreen = () => {
       flexDirection: 'row',
       alignItems: 'center',
       width: '100%',
-      marginBottom: 16,
+      marginBottom: 8,
       gap: 8,
     },
     countryCodeInput: {
@@ -177,8 +177,8 @@ const LoginScreen = () => {
       fontSize: 16,
       color: LightColors.textSecondary,
       textAlign: 'center',
-      marginBottom: 24,
-      marginTop: 8,
+      marginBottom: 12,
+      marginTop: 0,
     },
     otpContainer: {
       flexDirection: 'row',
