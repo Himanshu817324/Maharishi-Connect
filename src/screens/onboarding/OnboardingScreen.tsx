@@ -69,11 +69,11 @@ const OnboardingScreen = () => {
       <View style={styles.contentSection}>
         <Text style={styles.termsTitle}>Before we begin</Text>
         
-        <Text style={styles.normalText}>
+        {/* <Text style={styles.normalText}>
           Please read our <Text style={styles.highlight}>Privacy Policy</Text>.
           By tapping <Text style={styles.highlight}>Agree and Continue</Text>,
           you accept our <Text style={styles.highlight}>Terms of Service</Text>.
-        </Text>
+        </Text> */}
 
         {/* Checkbox Section */}
         <TouchableOpacity 

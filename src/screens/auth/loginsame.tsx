@@ -283,7 +283,8 @@ const LoginScreen = () => {
       color: colors.textSecondary,
       textAlign: 'center',
       lineHeight: 18,
-      marginTop: 16,
+      marginTop: 8,
+      marginBottom: 8,
     },
     linkText: {
       color: colors.primary,
@@ -351,7 +352,8 @@ const LoginScreen = () => {
     },
     bottomSection: {
       paddingBottom: Platform.OS === 'ios' ? 40 : 24,
-      paddingTop: 20,
+      paddingTop: 24,
+      marginTop: 16,
     },
   });
 
@@ -835,11 +837,11 @@ const LoginScreen = () => {
         {/* Bottom Section with Disclaimer and Buttons */}
         <View style={dynamicStyles.bottomSection}>
           {/* Disclaimer */}
-          <Text style={dynamicStyles.disclaimerText}>
+          {/* <Text style={dynamicStyles.disclaimerText}>
             By continuing, you agree to our{' '}
             <Text style={dynamicStyles.linkText}>Terms of Service</Text> and{' '}
             <Text style={dynamicStyles.linkText}>Privacy Policy</Text>
-          </Text>
+          </Text> */}
 
           {/* Button Section */}
           <View style={dynamicStyles.buttonContainer}>

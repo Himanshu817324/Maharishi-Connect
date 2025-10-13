@@ -202,7 +202,7 @@ const LoginScreen = () => {
       textAlign: 'center',
     },
     otpInputFilled: {
-      borderColor: LightColors.accent,
+      borderColor: LightColors.tabBarBG,
       backgroundColor: LightColors.surface,
     },
     otpInputError: {
@@ -244,7 +244,7 @@ const LoginScreen = () => {
     },
     sendButton: {
       backgroundColor: LightColors.primary,
-      borderRadius: 8,
+      borderRadius: 8, 
       paddingVertical: 16,
       alignItems: 'center',
       shadowColor: LightColors.primary,
@@ -268,12 +268,12 @@ const LoginScreen = () => {
     },
     verifyButton: {
       width: '100%',
-      backgroundColor: LightColors.accent,
+      backgroundColor: LightColors.tabBarBG,
       borderRadius: 8,
       paddingVertical: 16,
       justifyContent: 'center',
       alignItems: 'center',
-      shadowColor: LightColors.accent,
+      shadowColor: LightColors.tabBarBG,
       shadowOffset: {
         width: 0,
         height: 2,
@@ -290,14 +290,15 @@ const LoginScreen = () => {
     verifyButtonText: {
       fontSize: 16,
       fontWeight: '600',
-      color: LightColors.text,
+      color: LightColors.textOnPrimary,
     },
     disclaimerText: {
       fontSize: 12,
       color: LightColors.textSecondary,
       textAlign: 'center',
       lineHeight: 18,
-      marginTop: 16,
+      marginTop: 8,
+      marginBottom: 8,
     },
     linkText: {
       color: LightColors.accent,
@@ -364,8 +365,9 @@ const LoginScreen = () => {
       color: LightColors.text,
     },
     bottomSection: {
-      paddingBottom: 0,
-      paddingTop: 20,
+      paddingBottom: 20,
+      paddingTop: 24,
+      marginTop: 16,
     },
   });
 
@@ -874,11 +876,11 @@ const LoginScreen = () => {
         {/* Bottom Section with Disclaimer and Buttons */}
         <View style={dynamicStyles.bottomSection}>
           {/* Disclaimer */}
-          <Text style={dynamicStyles.disclaimerText}>
+          {/* <Text style={dynamicStyles.disclaimerText}>
             By continuing, you agree to our{' '}
             <Text style={dynamicStyles.linkText}>Terms of Service</Text> and{' '}
             <Text style={dynamicStyles.linkText}>Privacy Policy</Text>
-          </Text>
+          </Text> */}
 
           {/* Button Section */}
           <View style={dynamicStyles.buttonContainer}>

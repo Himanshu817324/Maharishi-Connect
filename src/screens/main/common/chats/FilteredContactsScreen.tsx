@@ -651,15 +651,17 @@ const FilteredContactsScreen: React.FC = () => {
         onPress={() => handleInviteViaWhatsApp(item.phoneNumber, item.name)}
         activeOpacity={0.7}
       >
-        <View
-          style={[
-            styles.avatar,
-            { backgroundColor: avatarColor, opacity: 0.6 },
-          ]}
-        >
-          <Text style={styles.avatarText}>
-            {item.name ? item.name.charAt(0).toUpperCase() : '?'}
-          </Text>
+        <View style={styles.avatarContainer}>
+          <View
+            style={[
+              styles.avatar,
+              { backgroundColor: avatarColor, opacity: 0.6 },
+            ]}
+          >
+            <Text style={styles.avatarText}>
+              {item.name ? item.name.charAt(0).toUpperCase() : '?'}
+            </Text>
+          </View>
         </View>
 
         <View style={styles.contactInfo}>
@@ -1215,7 +1217,7 @@ const styles = StyleSheet.create({
   },
   avatarContainer: {
     position: 'relative',
-    marginRight: wp(3),
+    marginRight: wp(4),
   },
   avatar: {
     width: moderateScale(48),

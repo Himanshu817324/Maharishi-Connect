@@ -7,6 +7,7 @@ import {
   Alert,
   Text,
   LayoutAnimation,
+  ActivityIndicator,
 } from 'react-native';
 import {
   useRoute,
@@ -123,7 +124,7 @@ const ConversationScreen: React.FC = () => {
 
   const { chat: routeChat } = route.params as RouteParams;
   const { currentChat } = useSelector((state: RootState) => state.chat);
-  const { currentChatMessages, currentChatId, pagination } = useSelector(
+  const { currentChatMessages, currentChatId, pagination, loading } = useSelector(
     (state: RootState) => state.message,
   );
   const { user } = useSelector((state: RootState) => state.auth);
@@ -1494,11 +1495,42 @@ const ConversationScreen: React.FC = () => {
     );
   }
 
+  // Show loading state while messages are being fetched
+  if (loading && currentChatMessages.length === 0) {
+    return (
+      <CustomSafeAreaView
+        style={[styles.container, { backgroundColor: colors.chatBackground }]}
+        topColor={colors.chatBackground}
+        bottomColor={colors.chatBackground}
+      >
+        <ChatHeader
+          chat={chat}
+          currentUserId={user?.id || user?.firebaseUid}
+          onBack={handleBack}
+          onCall={handleCall}
+          onVideoCall={handleVideoCall}
+          onSearch={handleSearch}
+          onInfo={handleInfo}
+          onMore={handleMore}
+        />
+        
+        <View style={[styles.container, styles.centerContainer]}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.tabBarBG} />
+            <Text style={[styles.loadingText, { color: colors.tabBarBG }]}>
+              Loading messages...
+            </Text>
+          </View>
+        </View>
+      </CustomSafeAreaView>
+    );
+  }
+
   return (
     <CustomSafeAreaView
-      style={styles.container}
-      topColor={colors.background}
-      bottomColor={colors.background}
+      style={[styles.container, { backgroundColor: colors.chatBackground }]}
+      topColor={colors.chatBackground}
+      bottomColor={colors.chatBackground}
     >
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
@@ -1506,7 +1538,7 @@ const ConversationScreen: React.FC = () => {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         enabled={Platform.OS === 'ios'}
       >
-        <View style={styles.screen}>
+        <View style={[styles.screen, { backgroundColor: colors.chatBackground }]}>
           <ChatHeader
             chat={chat}
             currentUserId={user?.id || user?.firebaseUid}
@@ -1516,6 +1548,7 @@ const ConversationScreen: React.FC = () => {
             onSearch={handleSearch}
             onInfo={handleInfo}
             onMore={handleMore}
+            backgroundColor={colors.chatBackground}
           />
 
           <View 
@@ -1646,6 +1679,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: wp(8),
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: hp(4),
   },
   errorContainer: {
     alignItems: 'center',

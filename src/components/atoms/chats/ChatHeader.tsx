@@ -131,7 +131,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = memo(({
   const renderAvatar = () => {
     if (chat.type === 'group') {
       return (
-        <View style={[styles.avatar, { backgroundColor: colors.accent }]}>
+        <View style={[styles.avatar, { backgroundColor: colors.accent, shadowColor: colors.shadow }]}>
           <Text style={[styles.avatarText, { color: colors.textOnPrimary }]}>
             {getAvatarInitials()}
           </Text>
@@ -157,7 +157,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = memo(({
         );
       }
       return (
-        <View style={[styles.avatar, { backgroundColor: colors.accent }]}>
+        <View style={[styles.avatar, { backgroundColor: colors.accent, shadowColor: colors.shadow }]}>
           <Text style={[styles.avatarText, { color: colors.textOnPrimary }]}>
             {getAvatarInitials()}
           </Text>
@@ -171,11 +171,11 @@ const ChatHeader: React.FC<ChatHeaderProps> = memo(({
       style={[
         styles.container,
         {
-          backgroundColor: backgroundColor || colors.background,
+          backgroundColor: backgroundColor || colors.chatBackground,
         },
       ]}
     >
-      <CustomStatusBar backgroundColor={colors.background} />
+      <CustomStatusBar backgroundColor={backgroundColor || colors.chatBackground} />
       <View style={styles.headerContent}>
         <View style={styles.leftSection}>
           {onBack && (
@@ -201,7 +201,8 @@ const ChatHeader: React.FC<ChatHeaderProps> = memo(({
                   style={[
                     styles.statusIndicator,
                     {
-                      backgroundColor: isOnline ? '#4CAF50' : colors.textSecondary,
+                      backgroundColor: isOnline ? colors.success : colors.textSecondary,
+                      borderColor: colors.surface,
                     },
                   ]}
                 />

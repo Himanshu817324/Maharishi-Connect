@@ -267,7 +267,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
           <Icon
             name={showMediaMenu ? 'close' : 'add'}
             size={moderateScale(24)}
-            color={showMediaMenu ? colors.textOnPrimary : colors.accent}
+            color={showMediaMenu ? colors.textOnPrimary : colors.tabBarBG}
           />
         </TouchableOpacity>
 
@@ -297,7 +297,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
           style={[
             styles.sendButton,
             {
-              backgroundColor: message.trim() ? colors.accent : colors.border,
+              backgroundColor: message.trim() ? colors.tabBarBG : colors.border,
             },
           ]}
           onPress={handleSend}

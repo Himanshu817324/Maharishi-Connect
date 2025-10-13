@@ -282,15 +282,15 @@ class MessageStatusService {
       case 'sending':
         return '#FFA500'; // Orange for timer/clock
       case 'sent':
-        return '#666666'; // Dark gray for single tick
+        return '#FFD54F'; // Gray for single tick
       case 'delivered':
-        return '#666666'; // Dark gray for double tick
+        return '#FFEB7A'; // Darker gray for double tick
       case 'seen':
-        return '#007AFF'; // Blue for seen (blue tick)
+        return '#4CAF50'; // Maroon for seen (matches theme primary)
       case 'failed':
-        return '#FF3B30'; // Red for failed
+        return '#F44336'; // Red for failed
       default:
-        return '#666666'; // Dark gray
+        return '#757575'; // Dark gray
     }
   }
 

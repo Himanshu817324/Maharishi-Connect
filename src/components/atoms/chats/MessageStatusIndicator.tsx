@@ -51,11 +51,11 @@ const MessageStatusIndicator: React.FC<MessageStatusIndicatorProps> = ({
       case 'sending':
         return colors.textSecondary; // Gray for sending
       case 'sent':
-        return colors.textSecondary; // Gray for sent
+        return colors.messageSent; // Blue for single tick
       case 'delivered':
-        return colors.textSecondary; // Gray for delivered
+        return colors.messageDelivered; // Blue for double tick
       case 'seen':
-        return colors.accent; // Blue for seen
+        return colors.messageRead; // Light green for seen
       case 'failed':
         return colors.error; // Red for failed
       default:

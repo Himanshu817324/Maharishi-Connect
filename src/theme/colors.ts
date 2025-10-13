@@ -68,7 +68,8 @@ const platformColors = getPlatformColors();
 
 export const LightColors = {
   // Core colors - Light Mode Palette
-  background: "#FAFAFA", // Light neutral background
+  background: "#FAFAFA ", // Light neutral background
+  chatBackground: "#fffbeb ", // Light neutral background
   surface: "#FFFFFF",
   surfaceVariant: "#F5F5F5",
   
@@ -137,17 +138,17 @@ export const LightColors = {
   ...(Platform.OS === 'android' ? platformColors.android : {}),
   
   // Chat specific - Light Mode
-  chatBubble: "#FFE082", // Muted yellow for user messages
-  chatBubbleOther: "#F5F5F5", // Soft grey for incoming messages
-  chatBubbleText: "#212121",
-  chatBubbleTextOther: "#212121",
+  chatBubble: "#7B1E3C", // Muted yellow for user messages
+  chatBubbleOther: "#242626", // Soft grey for incoming messages
+  chatBubbleText: "#ffffff",
+  chatBubbleTextOther: "#ffffff",
   chatTime: "#757575",
   chatTimeOther: "#757575",
   
   // Message status
-  messageSent: "#757575",
-  messageDelivered: "#616161",
-  messageRead: "#7B1E3C",
+  messageSent: "#007AFF",
+  messageDelivered: "#007AFF",
+  messageRead: "#4CAF50",
   
   // Typing indicator
   typingIndicator: "#757575",
@@ -165,6 +166,7 @@ export const LightColors = {
 export const DarkColors = {
   // Core colors - Dark Mode Palette
   background: "#121212", // True dark base
+  chatBackground: "#121212", // True dark base
   surface: "#1E1E1E",
   surfaceVariant: "#2C2C2C",
   
@@ -241,9 +243,9 @@ export const DarkColors = {
   chatTimeOther: "#9E9E9E",
   
   // Message status
-  messageSent: "#9E9E9E",
-  messageDelivered: "#BDBDBD",
-  messageRead: "#B8324F",
+  messageSent: "#007AFF",
+  messageDelivered: "#007AFF",
+  messageRead: "#4CAF50",
   
   // Typing indicator
   typingIndicator: "#9E9E9E",

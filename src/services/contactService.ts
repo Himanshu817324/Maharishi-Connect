@@ -32,6 +32,7 @@ class ContactService {
   private readonly CACHE_DURATION = 10 * 60 * 1000; // ✅ Extended cache duration
   private readonly BATCH_SIZE = 100; // ✅ Batch size for processing
   private groupingCache = new Map<string, ContactGroup[]>(); // ✅ Memoization cache
+  private isLoading = false; // ✅ Prevent concurrent loading
 
   constructor() {
     this.baseURL = 'https://api.maharishiconnect.com/api';
@@ -54,32 +55,43 @@ class ContactService {
   // ✅ OPTIMIZED: Process batch with yield to prevent UI blocking
   private async processBatch(batch: any[]): Promise<string[]> {
     return new Promise((resolve) => {
-      // Use setTimeout to yield control back to UI thread
-      setTimeout(() => {
-        const phoneNumbers = batch
-          .map((contact) => {
-            if (!contact.phoneNumber) return null;
+      // ✅ FIX: Use requestIdleCallback for better performance, fallback to setTimeout
+      const processContacts = () => {
+        try {
+          const phoneNumbers = batch
+            .map((contact) => {
+              // ✅ FIX: Add null safety checks
+              if (!contact || !contact.phoneNumber || typeof contact.phoneNumber !== 'string') {
+                return null;
+              }
 
-            // Clean phone number - remove all non-digit characters except +
-            let cleaned = contact.phoneNumber.replace(/[^\d+]/g, '');
+              // Clean phone number - remove all non-digit characters except +
+              let cleaned = contact.phoneNumber.replace(/[^\d+]/g, '');
 
-            // Remove + if present and ensure it's a valid Indian mobile number
-            if (cleaned.startsWith('+91')) {
-              cleaned = cleaned.substring(3);
-            } else if (cleaned.startsWith('91') && cleaned.length === 12) {
-              cleaned = cleaned.substring(2);
-            }
+              // Remove + if present and ensure it's a valid Indian mobile number
+              if (cleaned.startsWith('+91')) {
+                cleaned = cleaned.substring(3);
+              } else if (cleaned.startsWith('91') && cleaned.length === 12) {
+                cleaned = cleaned.substring(2);
+              }
 
-            // Ensure it's a 10-digit number
-            if (cleaned.length === 10 && /^\d{10}$/.test(cleaned)) {
-              return cleaned;
-            }
-            return null;
-          })
-          .filter((phone): phone is string => !!phone);
+              // Ensure it's a 10-digit number
+              if (cleaned.length === 10 && /^\d{10}$/.test(cleaned)) {
+                return cleaned;
+              }
+              return null;
+            })
+            .filter((phone): phone is string => !!phone);
 
-        resolve(phoneNumbers);
-      }, 0);
+          resolve(phoneNumbers);
+        } catch (error) {
+          console.error('Error processing contact batch:', error);
+          resolve([]); // Return empty array on error
+        }
+      };
+
+      // Use setTimeout for React Native compatibility
+      setTimeout(processContacts, 0);
     });
   }
 
@@ -584,7 +596,23 @@ class ContactService {
       name?: string;
     }>;
   }> {
+    // ✅ FIX: Prevent concurrent loading to avoid race conditions
+    if (this.isLoading) {
+      console.log('⏳ Contact sync already in progress, waiting...');
+      // Wait for current loading to complete
+      while (this.isLoading) {
+        await new Promise<void>(resolve => setTimeout(resolve, 100));
+      }
+      // Return cached data if available
+      if (this.contactsCache && 
+          Date.now() - this.contactsCache.timestamp < this.CACHE_DURATION) {
+        return this.contactsCache.data;
+      }
+    }
+
     try {
+      this.isLoading = true;
+      
       // Check cache first - only return cached data if it's valid and not empty
       if (this.contactsCache && 
           Date.now() - this.contactsCache.timestamp < this.CACHE_DURATION &&
@@ -675,20 +703,31 @@ class ContactService {
 
       // Map non-users back to contact info
       const nonUserContacts = nonUsers.map(phoneNumber => {
-        const deviceContact = deviceContacts.find(contact => {
-          if (!contact.phoneNumber) return false;
-          let cleaned = contact.phoneNumber.replace(/[^\d+]/g, '');
-          if (cleaned.startsWith('+91')) {
-            cleaned = cleaned.substring(3);
-          } else if (cleaned.startsWith('91') && cleaned.length === 12) {
-            cleaned = cleaned.substring(2);
-          }
-          return cleaned === phoneNumber;
-        });
-        return {
-          phoneNumber,
-          name: deviceContact?.fullName || 'Unknown',
-        };
+        try {
+          const deviceContact = deviceContacts.find(contact => {
+            // ✅ FIX: Add null safety checks
+            if (!contact || !contact.phoneNumber || typeof contact.phoneNumber !== 'string') {
+              return false;
+            }
+            let cleaned = contact.phoneNumber.replace(/[^\d+]/g, '');
+            if (cleaned.startsWith('+91')) {
+              cleaned = cleaned.substring(3);
+            } else if (cleaned.startsWith('91') && cleaned.length === 12) {
+              cleaned = cleaned.substring(2);
+            }
+            return cleaned === phoneNumber;
+          });
+          return {
+            phoneNumber,
+            name: deviceContact?.fullName || 'Unknown',
+          };
+        } catch (error) {
+          console.error('Error mapping non-user contact:', error);
+          return {
+            phoneNumber,
+            name: 'Unknown',
+          };
+        }
       });
 
       console.log('✅ Contact status check complete:', {
@@ -710,10 +749,15 @@ class ContactService {
       return result;
     } catch (error) {
       console.error('Error getting contacts with status:', error);
+      // ✅ FIX: Clear cache on error to prevent stale data
+      this.clearCache();
       return {
         existingUsers: [],
         nonUsers: [],
       };
+    } finally {
+      // ✅ FIX: Always reset loading state
+      this.isLoading = false;
     }
   }
 

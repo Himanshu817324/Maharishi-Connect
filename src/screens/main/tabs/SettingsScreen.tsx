@@ -29,6 +29,11 @@ export default function SettingsScreen() {
           onPress: () => {
             console.log('🚪 User logging out...');
             dispatch(logout());
+            // Reset navigation stack to prevent back navigation
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'SplashScreen' as never }],
+            });
           },
         },
       ]
@@ -143,11 +148,11 @@ export default function SettingsScreen() {
             <Text style={[styles.userName, { color: colors.text }]}>
               {user?.fullName || user?.name || user?.phone || 'User'}
             </Text>
-            <Text style={[styles.userStatus, { color: colors.accent }]}>
+            {/* <Text style={[styles.userStatus, { color: colors.tabBarBG }]}>
               Available
-            </Text>
+            </Text> */}
             <TouchableOpacity style={styles.editButton}>
-              <Text style={[styles.editText, { color: colors.accent }]}>
+              <Text style={[styles.editText, { color: colors.tabBarBG }]}>
                 Edit
               </Text>
             </TouchableOpacity>
@@ -187,7 +192,7 @@ export default function SettingsScreen() {
 
         {/* Log Out Button */}
         <TouchableOpacity
-          style={[styles.logoutButton, { backgroundColor: colors.accent }]}
+          style={[styles.logoutButton, { backgroundColor: colors.tabBarBG }]}
           onPress={handleLogout}
           activeOpacity={0.8}
         >
@@ -273,7 +278,7 @@ const styles = StyleSheet.create({
   },
   editText: {
     fontSize: responsiveFont(16),
-    fontWeight: '500',
+    fontWeight: '800',
   },
   section: {
     marginBottom: hp(3),

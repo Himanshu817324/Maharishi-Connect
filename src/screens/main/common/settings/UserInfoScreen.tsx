@@ -104,6 +104,11 @@ export default function UserInfoScreen() {
           onPress: () => {
             console.log('🚪 User logging out from UserInfoScreen...');
             dispatch(logout());
+            // Reset navigation stack to prevent back navigation
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'SplashScreen' as never }],
+            });r
           },
         },
       ]

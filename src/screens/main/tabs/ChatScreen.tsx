@@ -458,7 +458,7 @@ const ChatScreen: React.FC = () => {
         </Text>
         {activeFilter !== 'unread' && activeFilter !== 'archived' && (
           <TouchableOpacity
-            style={[styles.emptyButton, { backgroundColor: colors.accent }]}
+            style={[styles.emptyButton, { backgroundColor: colors.tabBarBG }]}
             onPress={handleCreateChat}
           >
             <OptimizedIcon name="add-circle-outline" size={moderateScale(20)} color="#FFFFFF" />
@@ -474,7 +474,7 @@ const ChatScreen: React.FC = () => {
     return (
       <View style={[styles.container, styles.centerContainer, { backgroundColor: colors.background }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.accent} />
+          <ActivityIndicator size="large" color={colors.tabBarBG} />
           <Text style={[styles.loadingText, { color: colors.text }]}>
             Loading your chats...
           </Text>
@@ -670,7 +670,7 @@ const ChatScreen: React.FC = () => {
       />
       
       <TouchableOpacity
-        style={[styles.fab, { backgroundColor: colors.accent }]}
+        style={[styles.fab, { backgroundColor: colors.tabBarBG }]}
         onPress={handleCreateChat}
         activeOpacity={0.85}
       >
