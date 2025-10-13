@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
     Dimensions,
     Image,
@@ -19,21 +19,12 @@ const { width, height } = Dimensions.get("window");
 const OnboardingScreen = () => {
   const navigation = useNavigation();
   const dispatch = useDispatch();
-  const [isAgreed, setIsAgreed] = useState(false);
-
   const onContinue = () => {
-    if (isAgreed) {
-      // Mark onboarding as seen
-      dispatch(setOnboardingSeen());
-  
-      // Navigate to AuthStack -> LoginScreen
-      (navigation as any).navigate('AuthStack', { screen: 'LoginScreen' });
-    }
-  };
-  
+    // Mark onboarding as seen
+    dispatch(setOnboardingSeen());
 
-  const toggleAgreement = () => {
-    setIsAgreed(!isAgreed);
+    // Navigate to AuthStack -> LoginScreen
+    (navigation as any).navigate('AuthStack', { screen: 'LoginScreen' });
   };
 
   return (
@@ -67,15 +58,15 @@ const OnboardingScreen = () => {
 
       {/* Content Section */}
       <View style={styles.contentSection}>
-        <Text style={styles.termsTitle}>Before we begin</Text>
+        {/* <Text style={styles.termsTitle}>Before we begin</Text>
         
-        {/* <Text style={styles.normalText}>
+        <Text style={styles.normalText}>
           Please read our <Text style={styles.highlight}>Privacy Policy</Text>.
           By tapping <Text style={styles.highlight}>Agree and Continue</Text>,
           you accept our <Text style={styles.highlight}>Terms of Service</Text>.
-        </Text> */}
+        </Text>
 
-        {/* Checkbox Section */}
+        Checkbox Section
         <TouchableOpacity 
           style={styles.checkboxContainer} 
           onPress={toggleAgreement}
@@ -94,24 +85,24 @@ const OnboardingScreen = () => {
             I agree to the <Text style={styles.highlight}>Terms of Service</Text> and{" "}
             <Text style={styles.highlight}>Privacy Policy</Text>
           </Text>
-        </TouchableOpacity>
+        </TouchableOpacity> */}
       </View>
 
       {/* Bottom Section */}
       <View style={styles.bottomSection}>
         <TouchableOpacity
-          style={[styles.continueButton, !isAgreed && styles.continueButtonDisabled]}
+          style={styles.continueButton}
           onPress={onContinue}
-          activeOpacity={isAgreed ? 0.8 : 1}
+          activeOpacity={0.8}
         >
-          <Text style={[styles.continueButtonText, !isAgreed && styles.continueButtonTextDisabled]}>
-            Agree & Continue
+          <Text style={styles.continueButtonText}>
+            Get Started
           </Text>
-          <View style={[styles.buttonArrow, !isAgreed && styles.buttonArrowDisabled]}>
+          <View style={styles.buttonArrow}>
             <Icon 
               name="arrow-forward"
               size={20} 
-              color={isAgreed ? LightColors.textOnPrimary : LightColors.subText} 
+              color={LightColors.textOnPrimary} 
             />
           </View>
         </TouchableOpacity>
@@ -290,47 +281,47 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   continueButton: {
-    backgroundColor: LightColors.accent,
-    borderRadius: 20,
-    paddingVertical: 20,
+    backgroundColor: LightColors.primary,
+    borderRadius: 8,
+    paddingVertical: 16,
     paddingHorizontal: 24,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: LightColors.accent,
+    shadowColor: LightColors.primary,
     shadowOffset: {
       width: 0,
-      height: 6,
+      height: 2,
     },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 12,
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
     marginBottom: 32,
   },
   continueButtonDisabled: {
-    backgroundColor: LightColors.border,
-    shadowOpacity: 0.1,
-    elevation: 2,
+    backgroundColor: LightColors.textTertiary,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   continueButtonText: {
     color: LightColors.textOnPrimary,
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 16,
+    fontWeight: "600",
     marginRight: 12,
   },
   continueButtonTextDisabled: {
-    color: LightColors.subText,
+    color: LightColors.textOnPrimary,
   },
   buttonArrow: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: "rgba(255, 255, 255, 0.2)",
     justifyContent: "center",
     alignItems: "center",
   },
   buttonArrowDisabled: {
-    backgroundColor: "rgba(0, 0, 0, 0.1)",
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
   },
   footer: {
     alignItems: "center",

@@ -55,7 +55,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
       {
         text: 'Copy',
         onPress: () => {
-          /* Copy to clipboard */
+          /* Copy to clipboard - keep original placeholder */
         },
       },
       ...(isOwn
@@ -74,7 +74,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
 
   const renderMessageContent = () => {
     const renderContent = () => {
-      // Ensure message has required properties
+      // Guard: message object + message_type
       if (!message || !message.message_type) {
         return (
           <Text
@@ -107,7 +107,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
           return (
             <TouchableOpacity
               onPress={() => onMediaPress?.(message)}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
               <PersistentImage
                 source={{ uri: message.media_url || '' }}
@@ -122,7 +122,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
                   }
                 }}
               />
-              {message.content && (
+              {message.content ? (
                 <Text
                   style={[
                     styles.messageText,
@@ -131,7 +131,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
                 >
                   {String(message.content)}
                 </Text>
-              )}
+              ) : null}
             </TouchableOpacity>
           );
 
@@ -139,9 +139,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
           return (
             <TouchableOpacity
               onPress={() => onMediaPress?.(message)}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
-              <View style={styles.mediaPlaceholder}>
+              <View style={[styles.mediaPlaceholder, { borderColor: isOwn ? colors.chatBubble : colors.chatBubbleOther }]}>
                 <OptimizedIcon name="play-circle" size={moderateScale(40)} color={isOwn ? colors.textOnPrimary : colors.accent} />
                 <Text
                   style={[
@@ -162,7 +162,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
                   </Text>
                 )}
               </View>
-              {message.content && (
+              {message.content ? (
                 <Text
                   style={[
                     styles.messageText,
@@ -171,7 +171,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
                 >
                   {String(message.content)}
                 </Text>
-              )}
+              ) : null}
             </TouchableOpacity>
           );
 
@@ -179,9 +179,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
           return (
             <TouchableOpacity
               onPress={() => onMediaPress?.(message)}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
-              <View style={styles.mediaPlaceholder}>
+              <View style={[styles.mediaPlaceholder, { borderColor: isOwn ? colors.chatBubble : colors.chatBubbleOther }]}>
                 <OptimizedIcon name="musical-notes" size={moderateScale(40)} color={isOwn ? colors.textOnPrimary : colors.accent} />
                 <Text
                   style={[
@@ -202,7 +202,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
                   </Text>
                 )}
               </View>
-              {message.content && (
+              {message.content ? (
                 <Text
                   style={[
                     styles.messageText,
@@ -211,14 +211,14 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
                 >
                   {String(message.content)}
                 </Text>
-              )}
+              ) : null}
             </TouchableOpacity>
           );
 
         case 'file':
           return (
             <View>
-              <View style={styles.mediaPlaceholder}>
+              <View style={[styles.mediaPlaceholder, { borderColor: isOwn ? colors.chatBubble : colors.chatBubbleOther }]}>
                 <Text
                   style={[
                     styles.mediaText,
@@ -228,7 +228,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
                   📄 {message.media_metadata?.filename || 'File'}
                 </Text>
               </View>
-              {message.content && (
+              {message.content ? (
                 <Text
                   style={[
                     styles.messageText,
@@ -237,7 +237,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
                 >
                   {String(message.content)}
                 </Text>
-              )}
+              ) : null}
             </View>
           );
 
@@ -264,6 +264,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
               styles.senderNameInside,
               { color: isOwn ? colors.textOnPrimary : colors.textSecondary },
             ]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
           >
             {message.sender.fullName}
           </Text>
@@ -280,6 +282,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
         isOwn ? styles.ownContainer : styles.otherContainer,
       ]}
     >
+      {/* Avatar (optional) */}
       {showAvatar && !isOwn && (
         <View style={styles.avatarContainer}>
           <View style={[styles.avatar, { backgroundColor: colors.accent }]}>
@@ -290,6 +293,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
         </View>
       )}
 
+      {/* Message wrapper */}
       <View
         style={[
           styles.messageContainer,
@@ -307,13 +311,18 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
           ]}
           onPress={onPress}
           onLongPress={handleLongPress}
-          activeOpacity={0.7}
+          activeOpacity={0.85}
         >
+          {/* Two-row layout: content then metadata */}
           <View style={styles.messageContentContainer}>
-            {renderMessageContent()}
-            
+            {/* First row: message content (text/media) */}
+            <View style={styles.messageBody}>
+              {renderMessageContent()}
+            </View>
+
+            {/* Second row: metadata */}
             {showTime && (
-              <View style={styles.timeAndStatusContainer}>
+              <View style={styles.metadataRow}>
                 <Text
                   style={[
                     styles.timeText,
@@ -321,14 +330,15 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
                       color: isOwn ? colors.chatBubbleText : colors.chatBubbleTextOther,
                     },
                   ]}
+                  numberOfLines={1}
                 >
                   {formatTime(message.created_at)}
                   {message.edited_at && (
                     <Text style={styles.editedText}> (edited)</Text>
                   )}
                 </Text>
-                
-                {/* Message Status Indicator - Only show for own messages */}
+
+                {/* Message status - only show for own messages */}
                 {isOwn && (
                   <MessageStatusIndicator
                     status={message.status || 'sent'}
@@ -355,7 +365,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    marginVertical: hp(0.3), // Reduced margin for WhatsApp-like tight spacing
+    marginVertical: hp(0.3), // tight vertical spacing
     paddingHorizontal: wp(2),
     alignItems: 'flex-end',
   },
@@ -365,6 +375,7 @@ const styles = StyleSheet.create({
   otherContainer: {
     justifyContent: 'flex-start',
   },
+
   avatarContainer: {
     marginRight: moderateScale(8),
     justifyContent: 'flex-end',
@@ -380,9 +391,11 @@ const styles = StyleSheet.create({
     fontSize: moderateScale(14),
     fontWeight: '600',
   },
+
+  /* messageContainer no longer flex:1 — use shrink so bubble wraps content */
   messageContainer: {
-    flex: 1,
-    maxWidth: wp(85), // Increased width to reduce wrapping
+    maxWidth: wp(85),
+    flexShrink: 1,
   },
   ownMessageContainer: {
     alignItems: 'flex-end',
@@ -390,36 +403,40 @@ const styles = StyleSheet.create({
   otherMessageContainer: {
     alignItems: 'flex-start',
   },
+
+  /* Sender name inside bubble for group chats */
   senderNameInside: {
     fontSize: responsiveFont(11),
     fontWeight: '600',
     marginBottom: hp(0.2),
     opacity: 0.8,
   },
+
   bubble: {
     paddingHorizontal: wp(4),
     paddingVertical: hp(1.2),
     borderRadius: moderateScale(18),
     minHeight: hp(4),
-    maxWidth: wp(85), // Increased width to reduce wrapping
+    maxWidth: wp(85),
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
       height: 1,
     },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 2,
     elevation: 2,
   },
   ownBubble: {
-    borderTopRightRadius: moderateScale(4), // Pointed edge on bottom right (sender's side)
+    borderTopRightRadius: moderateScale(4), // pointed edge look
   },
   otherBubble: {
-    borderTopLeftRadius: moderateScale(4), // Pointed edge on bottom left (receiver's side)
+    borderTopLeftRadius: moderateScale(4),
     borderWidth: 1,
   },
+
+  /* Text container */
   messageTextContainer: {
-    flex: 1,
     flexShrink: 1,
     marginRight: wp(1),
     minWidth: 0,
@@ -428,25 +445,28 @@ const styles = StyleSheet.create({
     fontSize: responsiveFont(16),
     lineHeight: responsiveFont(22),
     flexWrap: 'wrap',
-    flexShrink: 1, // Allow text to shrink if needed
-    flexGrow: 0, // Don't grow beyond content
-    textAlign: 'left', // Ensure consistent text alignment
-    includeFontPadding: false, // Remove extra font padding on Android
-    textAlignVertical: 'center', // Center text vertically on Android
-    marginBottom: 0, // Remove bottom margin for inline layout
+    flexShrink: 1,
+    flexGrow: 0,
+    textAlign: 'left',
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+    marginBottom: 0,
   },
+
+  /* Media styling - responsive */
   mediaImage: {
-    width: wp(50),
-    height: hp(20),
+    width: wp(60), // larger on wider screens but constrained by maxWidth of bubble
+    height: hp(24),
     borderRadius: moderateScale(8),
-    marginBottom: 0, // Remove bottom margin for inline layout
-    maxWidth: wp(80), // Ensure it doesn't exceed screen width
+    marginBottom: hp(0.4),
+    maxWidth: '100%',
   },
   mediaPlaceholder: {
     padding: moderateScale(12),
     borderRadius: moderateScale(8),
-    backgroundColor: 'rgba(0,0,0,0.1)',
-    marginBottom: 0, // Remove bottom margin for inline layout
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    marginBottom: 0,
+    borderWidth: 1,
   },
   mediaText: {
     fontSize: moderateScale(14),
@@ -457,30 +477,39 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: moderateScale(4),
     opacity: 0.8,
-    marginBottom: 0, // Remove bottom margin for inline layout
+    marginBottom: 0,
   },
+
+  /* TWO-ROW LAYOUT: ensures bubble wraps content and metadata stays close */
   messageContentContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'flex-start', // Start alignment instead of space-between
-    flexWrap: 'nowrap',
+    flexDirection: 'column', // stack content and metadata vertically
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
+    flexShrink: 1,
     maxWidth: '100%',
   },
-  timeAndStatusContainer: {
-    flexDirection: 'row',
-    fontWeight: '800',
-    alignItems: 'center',
-    marginLeft: wp(1),
-    flexShrink: 0,
+  messageBody: {
+    flexShrink: 1,
+    flexGrow: 0,
   },
+  metadataRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    alignSelf: 'flex-end', // bottom-right position inside bubble
+    marginTop: hp(0.3),
+    gap: wp(0.5),
+    flexShrink: 1,
+  },
+
   timeText: {
     fontSize: responsiveFont(11),
-    opacity: 0.6, // More subtle for WhatsApp-like appearance
-    fontWeight: '900',
+    opacity: 0.6,
+    fontWeight: '700',
   },
   editedText: {
     fontSize: responsiveFont(9),
-    fontWeight: '800',
+    fontWeight: '600',
     opacity: 0.6,
     fontStyle: 'italic',
   },

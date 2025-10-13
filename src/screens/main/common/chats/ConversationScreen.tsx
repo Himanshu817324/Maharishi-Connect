@@ -156,6 +156,9 @@ const ConversationScreen: React.FC = () => {
 
   const flatListRef = useRef<FlatList>(null);
   const currentChatMessagesRef = useRef<MessageData[]>([]);
+  const [_isUserScrolling, setIsUserScrolling] = useState(false);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+  const [hasInitiallyScrolled, setHasInitiallyScrolled] = useState(false);
 
   const chat = routeChat || currentChat;
 
@@ -167,6 +170,14 @@ const ConversationScreen: React.FC = () => {
     routeChatParticipants: routeChat?.participants?.map(p => p.user_id),
     currentChatParticipants: currentChat?.participants?.map(p => p.user_id),
   });
+
+  // Auto-scroll to bottom when chat changes or messages are first loaded
+  useEffect(() => {
+    if (currentChatMessages.length > 0) {
+      setShouldAutoScroll(true);
+      scrollToBottom(true, false);
+    }
+  }, [chat?.id, currentChatMessages.length, scrollToBottom]);
 
   useEffect(() => {
     currentChatMessagesRef.current = currentChatMessages;
@@ -193,13 +204,37 @@ const ConversationScreen: React.FC = () => {
     });
   }, [currentChatMessages, chat?.id]);
 
+  // Reset initial scroll state when chat changes
   useEffect(() => {
-    if (currentChatMessages.length > 0) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 10);
+    setHasInitiallyScrolled(false);
+  }, [chat?.id]);
+
+  // Initial scroll to bottom when chat opens
+  useEffect(() => {
+    if (currentChatMessages.length > 0 && !hasInitiallyScrolled) {
+      // Force scroll to bottom when chat opens - use multiple attempts to ensure it works
+      const scrollToBottom = () => {
+        if (flatListRef.current) {
+          flatListRef.current.scrollToEnd({ animated: false });
+          console.log('📍 Scrolling to bottom on chat open');
+        }
+      };
+      
+      // Try multiple times with increasing delays to ensure content is rendered
+      const timeout1 = setTimeout(scrollToBottom, 100);
+      const timeout2 = setTimeout(scrollToBottom, 300);
+      const timeout3 = setTimeout(() => {
+        scrollToBottom();
+        setHasInitiallyScrolled(true);
+      }, 500);
+      
+      return () => {
+        clearTimeout(timeout1);
+        clearTimeout(timeout2);
+        clearTimeout(timeout3);
+      };
     }
-  }, [currentChatMessages.length]);
+  }, [chat?.id, currentChatMessages.length, hasInitiallyScrolled]); // Only depend on chat.id to avoid multiple scrolls
 
   const setupSocketListeners = useCallback(() => {
     // Listener for sent messages (confirmation)
@@ -229,7 +264,7 @@ const ConversationScreen: React.FC = () => {
           }),
         );
 
-        scrollToBottom();
+        scrollToBottom(true, false);
       }
     });
 
@@ -337,7 +372,7 @@ const ConversationScreen: React.FC = () => {
             }),
           );
 
-          scrollToBottom();
+          scrollToBottom(true, false);
         }
       },
     );
@@ -527,7 +562,7 @@ const ConversationScreen: React.FC = () => {
       // Note: Some socket listeners don't return cleanup functions
       // They will be cleaned up when the component unmounts
     };
-  }, [chat?.id, dispatch, user?.id, user?.firebaseUid]);
+  }, [chat?.id, dispatch, user?.id, user?.firebaseUid, scrollToBottom]);
 
   const joinChatRoom = useCallback(() => {
     if (chat && socketService.isSocketConnected()) {
@@ -549,11 +584,11 @@ const ConversationScreen: React.FC = () => {
       console.log('📱 Messages loaded:', result);
 
       dispatch(setCurrentChatMessages(chat.id));
-      scrollToBottom();
+      scrollToBottom(true, false);
     } catch (error) {
       console.error('Error loading messages:', error);
     }
-  }, [chat, dispatch]);
+  }, [chat, dispatch, scrollToBottom]);
 
   const loadOlderMessages = useCallback(async () => {
     if (!chat || currentChatMessages.length === 0) return;
@@ -641,11 +676,11 @@ const ConversationScreen: React.FC = () => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       }
       
-      // ✅ FIX: Screen-aware scroll timing
-      const scrollDelay = screenInfo.isSmall ? 100 : screenInfo.isTablet ? 200 : 150;
+      // ✅ FIX: Screen-aware scroll timing - use minimal animation
+      const scrollDelay = screenInfo.isSmall ? 50 : screenInfo.isTablet ? 100 : 75;
       setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, Platform.OS === 'android' ? scrollDelay : 100);
+        flatListRef.current?.scrollToEnd({ animated: false });
+      }, Platform.OS === 'android' ? scrollDelay : 50);
     } else {
       // ✅ FIX: Screen-aware animation for keyboard hide
       const animationDuration = screenInfo.isSmall ? 200 : screenInfo.isTablet ? 300 : 250;
@@ -674,10 +709,34 @@ const ConversationScreen: React.FC = () => {
     }
   }, [isKeyboardVisible, screenInfo]);
 
-  const scrollToBottom = () => {
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 50);
+  const scrollToBottom = useCallback((force = false, animated = true) => {
+    if (force || shouldAutoScroll) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated });
+      }, 50);
+    }
+  }, [shouldAutoScroll]);
+
+  const handleScroll = (event: any) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const isAtBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 20;
+    
+    if (isAtBottom) {
+      setShouldAutoScroll(true);
+      setIsUserScrolling(false);
+    } else {
+      setShouldAutoScroll(false);
+      setIsUserScrolling(true);
+    }
+  };
+
+  const handleScrollBeginDrag = () => {
+    setIsUserScrolling(true);
+    setShouldAutoScroll(false);
+  };
+
+  const handleScrollEndDrag = () => {
+    // Keep the current state, will be updated in handleScroll
   };
 
   const handleSendMessage = async (
@@ -834,7 +893,7 @@ const ConversationScreen: React.FC = () => {
               }),
             );
 
-            scrollToBottom();
+            scrollToBottom(true, false);
           } else {
             console.log('⚠️ No message data in response');
           }
@@ -1004,15 +1063,22 @@ const ConversationScreen: React.FC = () => {
   const groupMessagesWithSeparators = useCallback((messages: MessageData[]): GroupedMessageItem[] => {
     if (messages.length === 0) return [];
     
+    // Sort messages by created_at in ascending order (oldest first) for proper display
+    const sortedMessages = [...messages].sort((a, b) => 
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+    
     console.log('📱 [groupMessagesWithSeparators] Processing messages:', {
-      messageCount: messages.length,
-      messageIds: messages.map(m => m.id)
+      messageCount: sortedMessages.length,
+      messageIds: sortedMessages.map(m => m.id),
+      firstMessageTime: sortedMessages[0]?.created_at,
+      lastMessageTime: sortedMessages[sortedMessages.length - 1]?.created_at
     });
     
     const groupedItems: GroupedMessageItem[] = [];
     let lastDate = '';
     
-    messages.forEach((message, index) => {
+    sortedMessages.forEach((message, index) => {
       const messageDate = new Date(message.created_at);
       // Get local date string in YYYY-MM-DD format
       const currentDate = messageDate.getFullYear() + '-' + 
@@ -1039,7 +1105,7 @@ const ConversationScreen: React.FC = () => {
         data: message
       });
       
-      console.log(`📱 [groupMessagesWithSeparators] Added message ${index + 1}/${messages.length}:`, {
+      console.log(`📱 [groupMessagesWithSeparators] Added message ${index + 1}/${sortedMessages.length}:`, {
         messageId: message.id,
         content: message.content.substring(0, 50) + '...',
         timestamp: message.created_at
@@ -1299,7 +1365,7 @@ const ConversationScreen: React.FC = () => {
       setReplyToMessage(null);
       
       // Scroll to bottom
-      scrollToBottom();
+      scrollToBottom(true, false);
 
     } catch (error) {
       console.error('Error sending media:', error);
@@ -1477,7 +1543,7 @@ const ConversationScreen: React.FC = () => {
         style={[
           styles.container,
           styles.centerContainer,
-          { backgroundColor: colors.background },
+          { backgroundColor: colors.chatBackground },
         ]}
       >
         <View
@@ -1582,8 +1648,27 @@ const ConversationScreen: React.FC = () => {
               ListEmptyComponent={renderEmptyState}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.flatListContent}
-              onContentSizeChange={scrollToBottom}
-              onLayout={scrollToBottom}
+              onScroll={handleScroll}
+              onScrollBeginDrag={handleScrollBeginDrag}
+              onScrollEndDrag={handleScrollEndDrag}
+              scrollEventThrottle={16}
+              onLayout={() => {
+                // Ensure scroll to bottom when FlatList layout is complete (only if not already scrolled)
+                if (!hasInitiallyScrolled) {
+                  setTimeout(() => {
+                    flatListRef.current?.scrollToEnd({ animated: false });
+                    setHasInitiallyScrolled(true);
+                    console.log('📍 FlatList layout complete - scrolling to bottom');
+                  }, 100);
+                }
+              }}
+              onScrollToIndexFailed={(info) => {
+                // Fallback to scrolling to end if scrollToIndex fails
+                console.log('ScrollToIndex failed:', info);
+                setTimeout(() => {
+                  flatListRef.current?.scrollToEnd({ animated: false });
+                }, 100);
+              }}
               onEndReached={loadOlderMessages}
               onEndReachedThreshold={0.1}
               maintainVisibleContentPosition={{
@@ -1659,7 +1744,6 @@ const styles = StyleSheet.create({
   },
   flatListContent: {
     flexGrow: 1,
-    justifyContent: 'flex-end',
     paddingVertical: hp(1),
     paddingHorizontal: wp(1),
     paddingBottom: hp(2),

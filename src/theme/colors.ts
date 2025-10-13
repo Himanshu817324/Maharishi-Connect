@@ -68,13 +68,13 @@ const platformColors = getPlatformColors();
 
 export const LightColors = {
   // Core colors - Light Mode Palette
-  background: "#FAFAFA ", // Light neutral background
+  background: "#FFFFFF", // Pure white background for maximum visibility
   chatBackground: "#fffbeb ", // Light neutral background
   surface: "#FFFFFF",
   surfaceVariant: "#F5F5F5",
   
   // Text colors
-  text: "#212121", // Standard dark grey text for readability
+  text: "#000000", // Pure black text for maximum contrast
   textSecondary: "#757575",
   subText: "#757575", // Alias for backward compatibility
   textTertiary: "#9E9E9E",

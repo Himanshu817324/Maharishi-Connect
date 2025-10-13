@@ -30,7 +30,12 @@ const ChatItemSeparator: React.FC = () => {
 };
 
 const ChatScreen: React.FC = () => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  console.log('🎨 ChatScreen colors:', { 
+    background: colors.background, 
+    isDark, 
+    text: colors.text 
+  });
   const navigation = useNavigation();
   const dispatch = useDispatch<AppDispatch>();
   
@@ -447,7 +452,7 @@ const ChatScreen: React.FC = () => {
 
     return (
       <View style={styles.emptyContainer}>
-        <View style={[styles.emptyIconContainer, { backgroundColor: colors.surface }]}>
+        <View style={[styles.emptyIconContainer, { backgroundColor: colors.background }]}>
           <OptimizedIcon name={emptyContent.icon} size={moderateScale(56)} color={colors.textSecondary} />
         </View>
         <Text style={[styles.emptyTitle, { color: colors.text }]}>
@@ -475,7 +480,7 @@ const ChatScreen: React.FC = () => {
       <View style={[styles.container, styles.centerContainer, { backgroundColor: colors.background }]}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.tabBarBG} />
-          <Text style={[styles.loadingText, { color: colors.text }]}>
+          <Text style={[styles.loadingText, { color: colors.tabBarBG }]}>
             Loading your chats...
           </Text>
         </View>
@@ -541,7 +546,7 @@ const ChatScreen: React.FC = () => {
             style={[
               styles.filterButton,
               { 
-                backgroundColor: activeFilter === 'all' ? colors.primary : colors.surface,
+                backgroundColor: activeFilter === 'all' ? colors.primary : colors.background,
                 borderColor: activeFilter === 'all' ? colors.primary : colors.border,
               }
             ]}
@@ -565,7 +570,7 @@ const ChatScreen: React.FC = () => {
             style={[
               styles.filterButton,
               { 
-                backgroundColor: activeFilter === 'direct' ? colors.primary : colors.surface,
+                backgroundColor: activeFilter === 'direct' ? colors.primary : colors.background,
                 borderColor: activeFilter === 'direct' ? colors.primary : colors.border,
               }
             ]}
@@ -589,7 +594,7 @@ const ChatScreen: React.FC = () => {
             style={[
               styles.filterButton,
               { 
-                backgroundColor: activeFilter === 'groups' ? colors.primary : colors.surface,
+                backgroundColor: activeFilter === 'groups' ? colors.primary : colors.background,
                 borderColor: activeFilter === 'groups' ? colors.primary : colors.border,
               }
             ]}
@@ -613,7 +618,7 @@ const ChatScreen: React.FC = () => {
             style={[
               styles.filterButton,
               { 
-                backgroundColor: activeFilter === 'unread' ? colors.primary : colors.surface,
+                backgroundColor: activeFilter === 'unread' ? colors.primary : colors.background,
                 borderColor: activeFilter === 'unread' ? colors.primary : colors.border,
               }
             ]}
@@ -637,7 +642,7 @@ const ChatScreen: React.FC = () => {
             style={[
               styles.filterButton,
               { 
-                backgroundColor: activeFilter === 'archived' ? colors.accent : colors.surface,
+                backgroundColor: activeFilter === 'archived' ? colors.accent : colors.background,
                 borderColor: activeFilter === 'archived' ? colors.accent : colors.border,
               }
             ]}

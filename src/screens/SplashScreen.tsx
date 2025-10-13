@@ -47,14 +47,7 @@ export default function SplashScreen() {
       hasSeenOnboarding,
     });
 
-    // Navigate immediately if user is not logged in (logout case)
-    if (!isLoggedIn) {
-      console.log('🔐 User not logged in, navigating to AuthStack immediately');
-      navigation.navigate('AuthStack' as never);
-      return;
-    }
-
-    // Small delay to ensure smooth transition for other cases
+    // Small delay to ensure smooth transition
     const navigationTimer = setTimeout(() => {
       console.log('🚀 Navigating from SplashScreen:', {
         isLoggedIn,
@@ -62,11 +55,15 @@ export default function SplashScreen() {
         hasSeenOnboarding,
       });
 
-      // Navigate based on auth state
+      // Navigate based on auth state - FIXED ORDER
       if (!hasSeenOnboarding) {
         // User hasn't seen onboarding -> show onboarding first
         console.log('📱 Navigating to OnboardingStack');
         navigation.navigate('OnboardingStack' as never);
+      } else if (!isLoggedIn) {
+        // User has seen onboarding but not logged in -> show login
+        console.log('🔐 User not logged in, navigating to AuthStack');
+        navigation.navigate('AuthStack' as never);
       } else if (isLoggedIn && !profileCompleted) {
         // User is logged in but profile not completed -> go to profile completion
         console.log('👤 Navigating to AuthStack for profile completion');
