@@ -484,17 +484,14 @@ const LoginScreen = () => {
       const mobileNo = normalizedPhone.replace(/^\+91/, '');
       const data = await apiService.login(mobileNo);
 
-      console.log('🔐 [LoginScreen] Login response:', data);
 
       // Handle user login logic
       if (!data.isNewUser && data.token) {
         try {
-          console.log('🔐 [LoginScreen] Fetching complete user profile...');
           const profileData = await apiService.getUserProfile(
             firebaseUid,
             data.token,
           );
-          console.log('🔐 [LoginScreen] Profile data received:', profileData);
 
           const userProfile = profileData.user || profileData.data;
 
@@ -567,14 +564,11 @@ const LoginScreen = () => {
         navigation.navigate('AuthStack', { screen: 'ProfileScreen' });
       } else {
         // Request contacts permission for existing users
-        console.log('🔐 Requesting contacts permission for existing user...');
         try {
           const permissionResult =
             await permissionManager.requestContactsPermission();
           if (permissionResult.granted) {
-            console.log('✅ Contacts permission granted for existing user');
           } else {
-            console.log('⚠️ Contacts permission denied for existing user');
             Toast.show({
               type: 'info',
               text1: 'Contacts permission denied',
@@ -658,7 +652,6 @@ const LoginScreen = () => {
 
     try {
       setResendLoading(true);
-      console.log('🔄 [LoginScreen] Resending OTP to:', normalizedPhone);
 
       const confirmation = await auth().signInWithPhoneNumber(normalizedPhone);
       setVerificationId(confirmation.verificationId || '');
@@ -694,30 +687,17 @@ const LoginScreen = () => {
       setError('');
 
       const normalized = getCurrentCountryCode() + phoneNumber;
-      console.log('=== OTP SENDING DEBUG ===');
-      console.log('Original phone:', phoneNumber);
-      console.log('Normalized phone:', normalized);
-      console.log('Firebase auth instance:', auth());
-      console.log('Current user:', auth().currentUser);
-      console.log('Starting Firebase phone auth...');
 
       // Test Firebase connection first
       try {
         const app = auth().app;
-        console.log('Firebase app name:', app.name);
-        console.log('Firebase options:', app.options);
       } catch (firebaseError) {
         console.error('Firebase connection test failed:', firebaseError);
         throw new Error('Firebase not properly initialized');
       }
 
       // Send OTP using Firebase
-      console.log('Calling signInWithPhoneNumber with:', normalized);
       const confirmation = await auth().signInWithPhoneNumber(normalized);
-
-      console.log('=== OTP SENT SUCCESSFULLY ===');
-      console.log('Confirmation object:', confirmation);
-      console.log('Verification ID:', confirmation.verificationId);
       Toast.show({ type: 'success', text1: `OTP sent to ${normalized}` });
 
       // Show OTP input instead of navigating

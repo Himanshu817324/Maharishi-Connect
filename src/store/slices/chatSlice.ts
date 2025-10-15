@@ -39,18 +39,6 @@ const sortChats = (chats: ChatData[]): ChatData[] => {
     return bActivity - aActivity; // Most recent first
   });
   
-  console.log('📱 [sortChats] Sorted chats by activity:', sortedChats.map(chat => ({
-    id: chat.id,
-    name: chat.name || 'Direct Chat',
-    unread_count: chat.unread_count || 0,
-    last_message_time: chat.last_message?.created_at,
-    updated_at: chat.updated_at,
-    activity_score: Math.max(
-      new Date(chat.updated_at || 0).getTime(),
-      chat.last_message?.created_at ? new Date(chat.last_message.created_at).getTime() : 0,
-      new Date(chat.created_at || 0).getTime()
-    )
-  })));
   
   return sortedChats;
 };
@@ -91,7 +79,6 @@ export const fetchUserChats = createAsyncThunk(
 
       // If not forced and we have recent data, return existing chats
       if (!forceRefresh && timeSinceLastFetch < 5000 && state.chat.chats.length > 0) {
-        console.log('📱 [Redux] Skipping fetch - recent data available');
         return state.chat.chats;
       }
 
@@ -107,7 +94,6 @@ export const fetchUserChats = createAsyncThunk(
               (chat.last_message.sender_id === currentUserId) && 
               chat.unread_count && 
               chat.unread_count > 0) {
-            console.log('🔔 [Redux] Correcting unread count for own message in chat:', chat.id, 'from', chat.unread_count, 'to 0');
             return {
               ...chat,
               unread_count: 0

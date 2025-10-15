@@ -89,7 +89,6 @@ export class ImageUploadService {
    */
   async uploadImageForSignup(imageUri: string): Promise<UploadResult> {
     try {
-      console.log('📸 [ImageUploadService] Starting signup image upload:', imageUri);
       
       // Create FormData for upload
       const formData = new FormData();
@@ -99,14 +98,10 @@ export class ImageUploadService {
         name: `signup_${Date.now()}.jpg`,
       } as any);
 
-      console.log('📸 [ImageUploadService] FormData created for signup upload');
 
       // Use the apiService for profile image uploads (tries multiple endpoints)
       const { apiService } = await import('./apiService');
-      console.log('📸 [ImageUploadService] Calling apiService.uploadProfileImage');
       const result = await apiService.uploadProfileImage(formData);
-      
-      console.log('📸 [ImageUploadService] ApiService result:', result);
       
       if (result.status === 'SUCCESS' && result.data) {
         return {

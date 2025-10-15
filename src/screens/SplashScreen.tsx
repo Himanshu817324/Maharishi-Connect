@@ -7,7 +7,6 @@ import { useAuthPersistence } from '../hooks/useAuthPersistence';
 import { moderateScale, responsiveFont, wp } from '../theme/responsive';
 
 export default function SplashScreen() {
-  console.log('🎬 SplashScreen component rendered');
   
   const navigation = useNavigation();
   const isLoggedIn = useSelector((state: RootState) => state.auth.isLoggedIn);
@@ -18,18 +17,10 @@ export default function SplashScreen() {
   const isAuthInitialized = useAuthPersistence();
   const [fallbackInitialized, setFallbackInitialized] = useState(false);
   
-  console.log('🎬 SplashScreen state:', {
-    isAuthInitialized,
-    isLoggedIn,
-    profileCompleted,
-    hasSeenOnboarding,
-    fallbackInitialized,
-  });
 
   // Fallback timeout to ensure we don't get stuck
   useEffect(() => {
     const fallbackTimer = setTimeout(() => {
-      console.log('⏰ Fallback timeout reached - forcing navigation');
       setFallbackInitialized(true);
     }, 3000); // 3 second fallback
 
@@ -38,40 +29,25 @@ export default function SplashScreen() {
 
   useEffect(() => {
     if (!isAuthInitialized && !fallbackInitialized) {
-      console.log('⏳ Waiting for auth initialization...');
       return;
     }
 
-    console.log('🚀 Auth initialized, checking navigation state:', {
-      isLoggedIn,
-      profileCompleted,
-      hasSeenOnboarding,
-    });
 
     // Small delay to ensure smooth transition
     const navigationTimer = setTimeout(() => {
-      console.log('🚀 Navigating from SplashScreen:', {
-        isLoggedIn,
-        profileCompleted,
-        hasSeenOnboarding,
-      });
 
       // Navigate based on auth state - FIXED ORDER
       if (!hasSeenOnboarding) {
         // User hasn't seen onboarding -> show onboarding first
-        console.log('📱 Navigating to OnboardingStack');
         navigation.navigate('OnboardingStack' as never);
       } else if (!isLoggedIn) {
         // User has seen onboarding but not logged in -> show login
-        console.log('🔐 User not logged in, navigating to AuthStack');
         navigation.navigate('AuthStack' as never);
       } else if (isLoggedIn && !profileCompleted) {
         // User is logged in but profile not completed -> go to profile completion
-        console.log('👤 Navigating to AuthStack for profile completion');
         navigation.navigate('AuthStack' as never);
       } else if (isLoggedIn && profileCompleted) {
         // User is logged in and profile is completed -> go to main app
-        console.log('🏠 Navigating to MainStack');
         navigation.navigate('MainStack' as never);
       }
     }, 500); // Additional delay for smooth transition

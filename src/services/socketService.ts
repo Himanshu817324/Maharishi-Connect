@@ -24,19 +24,15 @@ class SocketService {
         },
         onConnect: () => {
           logger.info('Socket connected successfully');
-          console.log('🔌 [SocketService] Socket connected successfully');
         },
         onDisconnect: () => {
           logger.warn('Socket disconnected');
-          console.log('🔌 [SocketService] Socket disconnected');
         },
         onError: (error) => {
           logger.error('Socket error:', error);
-          console.log('🔌 [SocketService] Socket error:', error);
         },
         onMessage: (event, data) => {
           logger.debug(`Received message: ${event}`, data);
-          console.log('🔌 [SocketService] Received message:', event, data);
         }
       });
 
@@ -55,14 +51,12 @@ class SocketService {
       return;
     }
 
-    console.log('📤 [SocketService] Sending message immediately:', { chatId, content, messageType });
     this.socket.emit('send_message', {
       chatId: chatId,
       content,
       messageType: messageType,
       timestamp: new Date().toISOString()
     });
-    console.log('✅ [SocketService] Message sent via socket');
   }
 
   // Typing indicators
@@ -133,10 +127,8 @@ class SocketService {
   }
 
   addMessageListener(callback: (message: any) => void): () => void {
-    console.log('🔌 [SocketService] Adding message listener, socket connected:', this.socket?.isConnected);
     this.socket?.on('newMessage', callback);
     return () => {
-      console.log('🔌 [SocketService] Removing message listener');
       this.socket?.off('newMessage', callback);
     };
   }

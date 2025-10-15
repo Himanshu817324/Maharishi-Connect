@@ -155,10 +155,6 @@ class ChatService {
 
   private async getAuthHeaders(): Promise<Record<string, string>> {
     const token = await AsyncStorage.getItem('auth_token');
-    console.log('🔐 [getAuthHeaders] Token check:', token ? 'EXISTS' : 'NOT FOUND');
-    if (token) {
-      console.log('🔐 [getAuthHeaders] Token preview:', token.substring(0, 20) + '...');
-    }
     if (!token) {
       throw new Error('No authentication token found');
     }
@@ -176,8 +172,6 @@ class ChatService {
     const headers = await this.getAuthHeaders();
     const url = `${this.baseURL}${endpoint}`;
 
-    console.log(`🌐 [makeRequest] Making request to: ${url}`);
-    console.log(`🌐 [makeRequest] Headers:`, headers);
 
     const response = await fetch(url, {
       ...options,
@@ -187,8 +181,6 @@ class ChatService {
       },
     });
 
-    console.log(`🌐 [makeRequest] Response status: ${response.status}`);
-    console.log(`🌐 [makeRequest] Response ok: ${response.ok}`);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -197,7 +189,6 @@ class ChatService {
     }
 
     const responseData = await response.json();
-    console.log(`🌐 [makeRequest] Response data:`, JSON.stringify(responseData, null, 2));
     return responseData;
   }
 
@@ -220,7 +211,6 @@ class ChatService {
   // Create direct chat by phone number (uses JWT token for authentication)
   async createDirectChatByPhone(phoneNumber: string): Promise<ChatResponse> {
     try {
-      console.log(`🔍 Creating direct chat with phone: ${phoneNumber}`);
 
       // First, get the user ID for this phone number
       const contactResponse = await this.checkContacts([phoneNumber]);
@@ -237,30 +227,22 @@ class ChatService {
       if (user.firebaseUid) {
         // Use firebaseUid directly if available
         correctUserId = user.firebaseUid;
-        console.log(`✅ Using firebaseUid: ${correctUserId}`);
       } else if (user.profilePicture) {
         // Fallback to profile picture extraction
         const profilePictureMatch = user.profilePicture.match(/profile-images\/([^/]+)\//);
         if (profilePictureMatch) {
           const extractedUserId = profilePictureMatch[1];
           if (extractedUserId !== user._id) {
-            console.warn(`⚠️ USER ID MISMATCH DETECTED!`);
-            console.warn(`   API returned _id: ${user._id}`);
-            console.warn(`   Profile picture shows: ${extractedUserId}`);
-            console.warn(`   Using profile picture ID as correct user ID`);
             correctUserId = extractedUserId;
           }
         }
       } else {
-        console.warn(`⚠️ No firebaseUid or profilePicture available for user: ${user._id}`);
-        console.warn(`   Using MongoDB _id as fallback: ${user._id}`);
       }
 
       // Get local contact data
       const { contactService } = await import('./contactService');
       const localContact = await contactService.getUserByPhoneNumber(phoneNumber);
 
-      console.log(`🔍 Creating chat with user ID: ${correctUserId}`);
 
       // Create chat using the existing /chat/create endpoint
       const response = await this.makeRequest<ChatResponse>('/chat/create', {
@@ -301,11 +283,7 @@ class ChatService {
 
   async getUserChats(): Promise<ChatResponse> {
     try {
-      console.log('📱 [getUserChats] Making API request to /chat/user-chats');
       const response = await this.makeRequest<ChatResponse>('/chat/user-chats');
-      console.log('📱 [getUserChats] API response:', JSON.stringify(response, null, 2));
-      console.log('📱 [getUserChats] Response status:', response.status);
-      console.log('📱 [getUserChats] Chats count:', response.chats?.length || 0);
 
 
       // Map local contact data to chat participants and fetch last messages
@@ -325,12 +303,10 @@ class ChatService {
 
         // Batch fetch last messages for all chats that don't have them
         const chatsWithoutLastMessage = response.chats.filter(chat => !chat.last_message);
-        console.log(`📱 [getUserChats] Found ${chatsWithoutLastMessage.length} chats without last messages`);
 
         // Batch fetch last messages for all chats at once
         if (chatsWithoutLastMessage.length > 0) {
           try {
-            console.log(`📱 [getUserChats] Batch fetching last messages for ${chatsWithoutLastMessage.length} chats`);
             const lastMessagesPromises = chatsWithoutLastMessage.map(async (chat) => {
               try {
                 const messagesResponse = await this.getChatMessages(chat.id, {
@@ -353,7 +329,6 @@ class ChatService {
                 }
                 return { chatId: chat.id, lastMessage: null };
               } catch (error) {
-                console.log(`⚠️ [getUserChats] Failed to fetch last message for chat ${chat.id}:`, error);
                 return { chatId: chat.id, lastMessage: null };
               }
             });
@@ -363,7 +338,6 @@ class ChatService {
               lastMessagesResults.map(result => [result.chatId, result.lastMessage])
             );
 
-            console.log(`📱 [getUserChats] Successfully fetched last messages for ${lastMessagesResults.length} chats`);
 
             // Update each chat with local contact data and last message
             response.chats = response.chats.map((chat) => {
@@ -407,7 +381,6 @@ class ChatService {
               };
             });
           } catch (error) {
-            console.log(`⚠️ [getUserChats] Failed to batch fetch last messages:`, error);
             // Continue with original chats if batch fetch fails
           }
         } else {
@@ -572,20 +545,8 @@ class ChatService {
       const queryString = params.toString();
       const endpoint = `/chat/${chatId}/messages${queryString ? `?${queryString}` : ''}`;
 
-      console.log(`📱 [getChatMessages] Fetching messages for chat ${chatId} with options:`, options);
-      console.log(`📱 [getChatMessages] Endpoint: ${endpoint}`);
 
       const response = await this.makeRequest<MessageResponse>(endpoint);
-      console.log(`📱 [getChatMessages] API response for chat ${chatId}:`, {
-        status: response.status,
-        messageCount: response.messages?.length || 0,
-        messages: response.messages?.map(m => ({
-          id: m.id,
-          content: m.content,
-          created_at: m.created_at,
-          sender_id: m.sender_id
-        }))
-      });
 
       return response;
     } catch (error) {
@@ -724,10 +685,6 @@ class ChatService {
     }>;
   }> {
     try {
-      console.log('🔍 Calling /api/user/check-contacts with phone numbers:', phoneNumbers);
-      console.log('📱 Phone numbers count:', phoneNumbers.length);
-      console.log('📱 First 10 phone numbers:', phoneNumbers.slice(0, 10));
-      console.log('📱 All phone numbers being sent:', phoneNumbers);
 
       // Clean and validate phone numbers - send ALL contacts to backend
       const cleanedPhoneNumbers = phoneNumbers
@@ -735,21 +692,7 @@ class ChatService {
         .filter(phone => phone && phone.length > 0);
       // Backend will handle all contacts at once
 
-      console.log('🧹 Cleaned phone numbers count:', cleanedPhoneNumbers.length);
-      console.log('📤 Final payload being sent to API:', {
-        contacts: cleanedPhoneNumbers.slice(0, 10) // Show first 10 for debugging
-      });
-      console.log('📤 Full payload size:', cleanedPhoneNumbers.length);
-      console.log('📤 Sample phone numbers being sent:', cleanedPhoneNumbers.slice(0, 20));
 
-      // Check if known users are in the sent list
-      const knownUsers = ['9450869601', '9450869602', '9137538943', '9087654321'];
-      console.log('🔍 Checking if known users are in sent list:');
-      knownUsers.forEach(phone => {
-        const isInSentList = cleanedPhoneNumbers.includes(phone);
-        const index = cleanedPhoneNumbers.indexOf(phone);
-        console.log(`📞 Known user ${phone} - In sent list: ${isInSentList} (index: ${index})`);
-      });
 
       const response = await this.makeRequest<{
         message: string;
@@ -766,39 +709,13 @@ class ChatService {
           contacts: cleanedPhoneNumbers
         }),
       });
-      console.log('✅ API checkContacts response:', response);
-      console.log('📋 API Response Details:', {
-        message: response.message,
-        usersCount: response.users.length,
-        users: response.users.map(user => ({
-          name: user.fullName,
-          phone: user.mobileNo,
-          status: user.status
-        }))
-      });
 
-      // Debug: Check if any of our sent phone numbers match the API response
-      if (response.users.length > 0) {
-        console.log('🎯 Found matching users!');
-        response.users.forEach(user => {
-          const isInSentList = cleanedPhoneNumbers.includes(user.mobileNo);
-          console.log(`📞 User ${user.fullName} (${user.mobileNo}) - In sent list: ${isInSentList}`);
-        });
-      } else {
-        console.log('❌ No users found in API response');
-        console.log('🔍 Checking if known users are in our sent list:');
-        knownUsers.forEach(phone => {
-          const isInSentList = cleanedPhoneNumbers.includes(phone);
-          console.log(`📞 Known user ${phone} - In sent list: ${isInSentList}`);
-        });
-      }
       return response;
     } catch (error) {
       console.error('❌ API checkContacts failed:', error);
 
       // If it's a 502 error (Bad Gateway), it might be temporary
       if (error instanceof Error && error.message?.includes('502')) {
-        console.log('🔄 Server temporarily unavailable (502), you can retry in a moment');
         throw new Error('Server temporarily unavailable. Please try again in a moment.');
       }
 
@@ -815,7 +732,6 @@ class ChatService {
     error?: string
   ): Promise<{ status: string; data: MessageData }> {
     try {
-      console.log(`🔄 Updating message status for ${messageId} to ${status}`);
 
       const response = await this.makeRequest<MessageResponse>(
         `/chat/messages/${messageId}/status`,
@@ -829,7 +745,6 @@ class ChatService {
         }
       );
 
-      console.log(`✅ Message status updated for ${messageId}:`, response);
       return {
         status: response.status,
         data: response.data!,
@@ -843,7 +758,6 @@ class ChatService {
   async markMessageAsDelivered(messageId: string): Promise<void> {
     try {
       await this.updateMessageStatus(messageId, 'delivered');
-      console.log(`✅ Message ${messageId} marked as delivered`);
     } catch (error) {
       console.error(`❌ Error marking message as delivered:`, error);
       throw error;
@@ -853,7 +767,6 @@ class ChatService {
   async markMessageAsSeen(messageId: string): Promise<void> {
     try {
       await this.updateMessageStatus(messageId, 'seen');
-      console.log(`✅ Message ${messageId} marked as seen`);
     } catch (error) {
       console.error(`❌ Error marking message as seen:`, error);
       throw error;
@@ -863,7 +776,6 @@ class ChatService {
   async markMessageAsFailed(messageId: string, errorMessage: string): Promise<void> {
     try {
       await this.updateMessageStatus(messageId, 'failed', errorMessage);
-      console.log(`❌ Message ${messageId} marked as failed:`, errorMessage);
     } catch (err) {
       console.error(`❌ Error marking message as failed:`, err);
       throw err;
@@ -872,13 +784,11 @@ class ChatService {
 
   async getMessageStatus(messageId: string): Promise<MessageData> {
     try {
-      console.log(`🔍 Getting message status for: ${messageId}`);
 
       const response = await this.makeRequest<MessageResponse>(
         `/chat/messages/${messageId}/status`
       );
 
-      console.log(`✅ Message status for ${messageId}:`, response);
       return response.data!;
     } catch (error) {
       console.error(`❌ Error getting message status for ${messageId}:`, error);
@@ -888,13 +798,11 @@ class ChatService {
 
   async getMessageReadReceipts(messageId: string): Promise<Array<{ userId: string; readAt: string }>> {
     try {
-      console.log(`🔍 Getting read receipts for message: ${messageId}`);
 
       const response = await this.makeRequest<{ status: string; data: Array<{ userId: string; readAt: string }> }>(
         `/chat/messages/${messageId}/read-receipts`
       );
 
-      console.log(`✅ Read receipts for ${messageId}:`, response.data);
       return response.data;
     } catch (error) {
       console.error(`❌ Error getting read receipts for ${messageId}:`, error);
@@ -904,13 +812,11 @@ class ChatService {
 
   async getMessageDeliveryReceipts(messageId: string): Promise<Array<{ userId: string; deliveredAt: string }>> {
     try {
-      console.log(`🔍 Getting delivery receipts for message: ${messageId}`);
 
       const response = await this.makeRequest<{ status: string; data: Array<{ userId: string; deliveredAt: string }> }>(
         `/chat/messages/${messageId}/delivery-receipts`
       );
 
-      console.log(`✅ Delivery receipts for ${messageId}:`, response.data);
       return response.data;
     } catch (error) {
       console.error(`❌ Error getting delivery receipts for ${messageId}:`, error);

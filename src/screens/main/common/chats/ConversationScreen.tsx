@@ -69,15 +69,6 @@ const formatDateForSeparator = (dateString: string): string => {
     String(yesterday.getMonth() + 1).padStart(2, '0') + '-' + 
     String(yesterday.getDate()).padStart(2, '0');
   
-  console.log('📅 Date comparison:', {
-    messageDateStr,
-    todayStr,
-    yesterdayStr,
-    originalDateString: dateString,
-    messageDateLocal: messageDate.toLocaleDateString(),
-    nowLocal: now.toLocaleDateString(),
-    yesterdayLocal: yesterday.toLocaleDateString()
-  });
   
   if (messageDateStr === todayStr) {
     return 'Today';
@@ -159,14 +150,6 @@ const ConversationScreen: React.FC = () => {
 
   const chat = routeChat || currentChat;
 
-  console.log('🔍 ConversationScreen chat state:', {
-    routeChat: routeChat?.id,
-    currentChat: currentChat?.id,
-    currentChatId: currentChatId,
-    finalChat: chat?.id,
-    routeChatParticipants: routeChat?.participants?.map(p => p.user_id),
-    currentChatParticipants: currentChat?.participants?.map(p => p.user_id),
-  });
 
   // Auto-scroll to bottom when chat changes or messages are first loaded
   useEffect(() => {
@@ -178,27 +161,6 @@ const ConversationScreen: React.FC = () => {
 
   useEffect(() => {
     currentChatMessagesRef.current = currentChatMessages;
-    console.log('📱 Current chat messages updated:', {
-      chatId: chat?.id,
-      messageCount: currentChatMessages.length,
-      messages: currentChatMessages.map(m => ({
-        id: m.id,
-        sender_id: m.sender_id,
-        content: m.content.substring(0, 30) + '...',
-        timestamp: m.created_at
-      })),
-      duplicateCheck: (() => {
-        const messageIds = currentChatMessages.map(m => m.id);
-        const uniqueIds = new Set(messageIds);
-        const duplicates = messageIds.filter((id, index) => messageIds.indexOf(id) !== index);
-        return {
-          hasDuplicates: duplicates.length > 0,
-          duplicateIds: duplicates,
-          totalUnique: uniqueIds.size,
-          totalMessages: messageIds.length
-        };
-      })()
-    });
   }, [currentChatMessages, chat?.id]);
 
   // Reset initial scroll state when chat changes
@@ -213,7 +175,6 @@ const ConversationScreen: React.FC = () => {
       const scrollToBottom = () => {
         if (flatListRef.current) {
           flatListRef.current.scrollToEnd({ animated: false });
-          console.log('📍 Scrolling to bottom on chat open');
         }
       };
       
@@ -237,10 +198,6 @@ const ConversationScreen: React.FC = () => {
     // Listener for sent messages (confirmation)
     socketService.addMessageSentListener((message: MessageData) => {
       if (message.chat_id === chat?.id) {
-        console.log(
-          '📨 [ConversationScreen] Message sent confirmation received:',
-          message.id,
-        );
         // Ensure message has 'sent' status
         const messageWithStatus = {
           ...message,

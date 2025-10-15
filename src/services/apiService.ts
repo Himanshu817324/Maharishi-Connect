@@ -17,7 +17,6 @@ class ApiService {
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     const url = `${API_BASE_URL}${endpoint}`;
-    console.log("🌐 Making API request to:", url);
 
     const defaultHeaders = {
       "Content-Type": "application/json",
@@ -42,11 +41,9 @@ class ApiService {
       });
 
       clearTimeout(timeoutId);
-      console.log("📡 Response status:", response.status, response.statusText);
 
       // Check if response is JSON
       const contentType = response.headers.get('content-type');
-      console.log("📡 Response content-type:", contentType);
 
       if (!contentType || !contentType.includes('application/json')) {
         // If not JSON, get the text response for debugging
@@ -129,8 +126,6 @@ class ApiService {
 
   // Fetch complete user profile data
   async getUserProfile(firebaseUid: string, token: string): Promise<ApiResponse> {
-    console.log('🔍 [getUserProfile] Fetching profile for user:', firebaseUid);
-    console.log('🔍 [getUserProfile] Using token:', token.substring(0, 20) + '...');
 
     // Try multiple endpoints in order of preference
     const endpoints = [
@@ -142,7 +137,6 @@ class ApiService {
 
     for (const endpoint of endpoints) {
       try {
-        console.log(`🔍 [getUserProfile] Trying endpoint: ${endpoint}`);
         const response = await this.makeRequest(endpoint, {
           method: "GET",
           headers: {
@@ -151,10 +145,8 @@ class ApiService {
           },
         });
 
-        console.log('✅ [getUserProfile] Profile data received from', endpoint, ':', response);
         return response;
       } catch (error) {
-        console.log(`❌ [getUserProfile] Endpoint ${endpoint} failed:`, error);
         // Continue to next endpoint
       }
     }
@@ -185,11 +177,9 @@ class ApiService {
       });
 
       clearTimeout(timeoutId);
-      console.log("📡 FormData Response status:", response.status, response.statusText);
 
       // Check if response is JSON
       const contentType = response.headers.get('content-type');
-      console.log("📡 FormData Response content-type:", contentType);
 
       if (!contentType || !contentType.includes('application/json')) {
         // If not JSON, get the text response for debugging
@@ -278,8 +268,6 @@ class ApiService {
   }
 
   async filterContacts(phoneNumbers: string[]): Promise<ApiResponse> {
-    console.log("🔍 API: Filtering contacts with numbers:", phoneNumbers.length);
-    console.log("🔍 API: Sample numbers:", phoneNumbers.slice(0, 3));
 
     // Retry mechanism with exponential backoff for rate limiting
     const maxRetries = 3;
@@ -292,17 +280,14 @@ class ApiService {
           body: JSON.stringify({ contacts: phoneNumbers }),
         });
 
-        console.log("🔍 API: Filter response received:", response);
         return response;
       } catch (error) {
         lastError = error as Error;
-        console.log(`🔍 API: Attempt ${attempt + 1} failed:`, error);
 
         // Check if it's a rate limiting error
         if (error instanceof Error && error.message.includes('Too many authentication attempts')) {
           if (attempt < maxRetries - 1) {
             const delay = Math.pow(2, attempt) * 1000; // Exponential backoff: 1s, 2s, 4s
-            console.log(`🔍 API: Rate limited, waiting ${delay}ms before retry...`);
             await new Promise<void>(resolve => setTimeout(resolve, delay));
             continue;
           }
@@ -330,17 +315,13 @@ class ApiService {
     
     for (let i = 0; i < endpoints.length; i++) {
       try {
-        console.log(`🔄 Trying upload endpoint ${i + 1}/${endpoints.length}: ${endpoints[i]}`);
         const result = await this.makeFormDataRequest(endpoints[i], formData);
-        console.log(`✅ Upload successful with endpoint: ${endpoints[i]}`);
         return result;
       } catch (error) {
         lastError = error as Error;
-        console.log(`❌ Endpoint ${endpoints[i]} failed:`, error);
         
         // If it's a client error (4xx), don't try other endpoints
         if (error instanceof Error && error.message.includes('4')) {
-          console.log('🛑 Client error detected, stopping endpoint attempts');
           throw error;
         }
         
@@ -387,7 +368,6 @@ class ApiService {
    */
   async testServerResponse(): Promise<void> {
     try {
-      console.log("🧪 Testing server response format...");
       
       const response = await fetch(`${API_BASE_URL}/health`, {
         method: "GET",
@@ -397,18 +377,13 @@ class ApiService {
         },
       });
 
-      console.log("🧪 Health check response status:", response.status);
-      console.log("🧪 Health check response headers:", Object.fromEntries(response.headers.entries()));
       
       const contentType = response.headers.get('content-type');
-      console.log("🧪 Health check content-type:", contentType);
       
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
-        console.log("🧪 Health check JSON response:", data);
       } else {
         const textResponse = await response.text();
-        console.log("🧪 Health check non-JSON response:", textResponse.substring(0, 500));
       }
       
     } catch (error) {

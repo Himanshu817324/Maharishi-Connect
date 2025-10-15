@@ -23,7 +23,6 @@ const THEME_STORAGE_KEY = '@maharishi_theme';
 const SYSTEM_THEME_KEY = '@maharishi_system_theme';
 
 export default function ThemeProvider({ children }: ThemeProviderProps) {
-  console.log('🎨 ThemeProvider rendered');
   const [isDark, setIsDark] = useState(false);
   const [isSystemTheme, setIsSystemTheme] = useState(true);
   const [isThemeLoaded, setIsThemeLoaded] = useState(false);
@@ -78,7 +77,6 @@ export default function ThemeProvider({ children }: ThemeProviderProps) {
     } catch (error) {
       console.error('Error loading theme from storage:', error);
     } finally {
-      console.log('🎨 Theme loaded, setting isThemeLoaded to true');
       setIsThemeLoaded(true);
     }
   };
@@ -107,7 +105,6 @@ export default function ThemeProvider({ children }: ThemeProviderProps) {
 
   const handleSetIsDark = (dark: boolean | ((prev: boolean) => boolean)) => {
     const newIsDark = typeof dark === 'function' ? dark(isDark) : dark;
-    console.log('🎨 handleSetIsDark called, current isDark:', isDark, 'new isDark:', newIsDark);
     setIsDark(newIsDark);
     setIsSystemTheme(false);
     saveThemeToStorage(newIsDark, false);
@@ -125,8 +122,7 @@ export default function ThemeProvider({ children }: ThemeProviderProps) {
   };
 
   const toggleTheme = () => {
-    const newIsDark = !isDark;
-    console.log('🎨 toggleTheme called, current isDark:', isDark, 'new isDark:', newIsDark);
+    const newIsDark = !isDark;  
     setIsDark(newIsDark);
     setIsSystemTheme(false);
     saveThemeToStorage(newIsDark, false);
@@ -134,7 +130,6 @@ export default function ThemeProvider({ children }: ThemeProviderProps) {
 
   const colors = isDark ? DarkColors : LightColors;
 
-  console.log('🎨 ThemeProvider rendering children, isThemeLoaded:', isThemeLoaded);
 
   return (
     <ThemeContext.Provider 
