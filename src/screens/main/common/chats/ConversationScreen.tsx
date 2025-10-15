@@ -39,14 +39,11 @@ import { MessageData } from '@/services/chatService';
 import { messageService } from '@/services/messageService';
 import { chatService } from '@/services/chatService';
 import { ChatData } from '@/services/chatService';
-import { MediaFile } from '@/services/mediaService';
-import MediaViewer from '@/components/MediaViewer';
 import ChatHeader from '@/components/atoms/chats/ChatHeader';
 import MessageBubble from '@/components/atoms/chats/MessageBubble';
 import ChatInput from '@/components/atoms/chats/ChatInput';
 import TypingIndicator from '@/components/atoms/chats/TypingIndicator';
 import CustomSafeAreaView from '@/components/atoms/ui/CustomSafeAreaView';
-import FileMessageBubble from '@/components/FileMessageBubble';
 import { FlatList } from 'react-native';
 // import { logger } from '@/utils/logger';
 import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
@@ -1055,9 +1052,6 @@ const ConversationScreen: React.FC = () => {
     );
   };
 
-  const [isMediaViewerVisible, setIsMediaViewerVisible] = useState(false);
-  const [mediaViewerFiles, setMediaViewerFiles] = useState<MediaFile[]>([]);
-  const [mediaViewerIndex, setMediaViewerIndex] = useState(0);
 
   // Function to group messages with day separators - memoized for performance
   const groupMessagesWithSeparators = useCallback((messages: MessageData[]): GroupedMessageItem[] => {
@@ -1152,246 +1146,8 @@ const ConversationScreen: React.FC = () => {
   }, [groupedMessages, currentChatMessages, chat?.id]);
 
 
-  const handleMediaSelected = async (type: string, files: MediaFile[]) => {
-    if (!chat || files.length === 0) return;
-
-    // Debug: Test server response format
-    try {
-      const { apiService } = await import('@/services/apiService');
-      await apiService.testServerResponse();
-    } catch (error) {
-      console.error('Server test failed:', error);
-    }
-
-    try {
-      // For now, we'll send each file as a separate message
-      // In a real implementation, you might want to batch them or create a gallery message
-      for (const file of files) {
-        try {
-          console.log('📤 [ConversationScreen] Processing file:', file.name);
-          
-          // Determine message type based on file type
-          let messageType: 'text' | 'image' | 'video' | 'audio' | 'file' = 'file';
-          if (type === 'image') {
-            messageType = 'image';
-          } else if (type === 'video') {
-            messageType = 'video';
-          } else if (type === 'audio') {
-            messageType = 'audio';
-          }
-
-          // Create a message object for the media file
-          const messageId = `temp_${Date.now()}_${Math.random()}`;
-          const timestamp = new Date().toISOString();
-
-          // Add message to Redux store immediately for optimistic UI
-          dispatch(addMessage({
-            id: messageId,
-            chat_id: chat.id,
-            sender_id: user?.id || '',
-            content: file.name, // Use file name as content
-            message_type: messageType,
-            media_url: file.uri, // Store the local URI temporarily
-            media_metadata: {
-              filename: file.name,
-              size: file.size,
-              mimeType: file.type,
-              fileName: file.name,
-              fileSize: file.size,
-              fileType: file.type,
-              // Additional metadata for media files
-              duration: file.duration,
-              width: file.width,
-              height: file.height,
-            },
-            created_at: timestamp,
-            sender: {
-              user_id: user?.id || '',
-              fullName: user?.fullName || 'You',
-            },
-            status: 'sending',
-          }));
-
-          // Upload the file to server and update message with server URL
-          try {
-            console.log('📤 [ConversationScreen] Starting file upload:', {
-              fileName: file.name,
-              fileType: file.type,
-              fileUri: file.uri,
-              messageType
-            });
-
-            let uploadResult;
-            
-            if (messageType === 'image') {
-              // Use image upload service for images
-              console.log('📤 [ConversationScreen] Uploading image via imageUploadService');
-              const { imageUploadService } = await import('@/services/imageUploadService');
-              uploadResult = await imageUploadService.uploadChatImage(file.uri, chat.id);
-              console.log('📤 [ConversationScreen] Image upload result:', uploadResult);
-            } else {
-              // For other file types, use the general file service
-              console.log('📤 [ConversationScreen] Uploading file via fileService');
-              const { fileService } = await import('@/services/fileService');
-              const result = await fileService.uploadFile(file.uri, file.name, file.type, undefined, true);
-              uploadResult = {
-                success: result.status === 'SUCCESS',
-                url: result.file?.mediaUrl,
-                s3Key: result.file?.s3Key,
-                fileId: result.file?.id,
-                error: result.error,
-              };
-              console.log('📤 [ConversationScreen] File upload result:', uploadResult);
-            }
-
-            if (uploadResult.success && uploadResult.url) {
-              // Update message with server URL
-              dispatch(updateMessage({
-                id: messageId,
-                chat_id: chat.id,
-                sender_id: user?.id || '',
-                content: file.name,
-                message_type: messageType,
-                media_url: uploadResult.url, // Update with server URL
-                media_metadata: {
-                  filename: file.name,
-                  size: file.size,
-                  mimeType: file.type,
-                  fileName: file.name,
-                  fileSize: file.size,
-                  fileType: file.type,
-                  duration: file.duration,
-                  width: file.width,
-                  height: file.height,
-                  // Add server metadata
-                  s3Key: (uploadResult as any).s3Key,
-                  fileId: (uploadResult as any).fileId,
-                },
-                created_at: timestamp,
-                sender: {
-                  user_id: user?.id || '',
-                  fullName: user?.fullName || 'You',
-                },
-                status: 'sent',
-              }));
-
-              // Send message to server via socket
-              try {
-                console.log('📤 [ConversationScreen] Sending message via socket:', {
-                  chatId: chat.id,
-                  messageType,
-                  mediaUrl: uploadResult.url
-                });
-                
-                messageService.sendMessageImmediate(
-                  chat.id,
-                  file.name,
-                  messageType,
-                  {
-                    mediaUrl: uploadResult.url,
-                    mediaMetadata: {
-                      filename: file.name,
-                      size: file.size,
-                      mimeType: file.type,
-                    },
-                  }
-                );
-                
-                console.log('📤 [ConversationScreen] Message sent successfully via socket');
-              } catch (socketError) {
-                console.error('📤 [ConversationScreen] Socket send error:', socketError);
-                // Don't fail the entire upload if socket send fails
-                // The message is already uploaded to server
-              }
-            } else {
-              // Upload failed, update message status
-              console.error('Upload failed:', uploadResult.error || 'Upload failed');
-              dispatch(updateMessageStatus({
-                messageId: messageId,
-                chatId: chat.id,
-                status: 'failed',
-              }));
-            }
-          } catch (uploadError) {
-            console.error('Error uploading file:', uploadError);
-            
-            // Provide more detailed error information
-            let errorMessage = 'Upload failed';
-            if (uploadError instanceof Error) {
-              errorMessage = uploadError.message;
-              console.error('Upload error details:', {
-                message: uploadError.message,
-                name: uploadError.name,
-                stack: uploadError.stack?.substring(0, 200)
-              });
-            }
-            
-            // Update message status to failed
-            dispatch(updateMessageStatus({
-              messageId: messageId,
-              chatId: chat.id,
-              status: 'failed',
-            }));
-            
-            // Show user-friendly error message
-            Alert.alert(
-              'Upload Failed',
-              `Failed to upload ${file.name}: ${errorMessage}`,
-              [{ text: 'OK' }]
-            );
-          }
-        } catch (fileError) {
-          console.error('📤 [ConversationScreen] Error processing individual file:', fileError);
-          // Continue with next file even if this one fails
-        }
-      }
-
-      // Update chat last message
-      const lastMessage = files[files.length - 1];
-      const lastMessageId = `temp_${Date.now()}_${Math.random()}`;
-      const lastMessageTimestamp = new Date().toISOString();
-      
-      dispatch(updateChatLastMessage({
-        chatId: chat.id,
-        lastMessage: {
-          id: lastMessageId,
-          content: lastMessage.name,
-          sender_id: user?.id || '',
-          created_at: lastMessageTimestamp,
-        },
-      }));
-
-      // Clear reply if any
-      setReplyToMessage(null);
-      
-      // Scroll to bottom
-      scrollToBottom(true, false);
-
-    } catch (error) {
-      console.error('Error sending media:', error);
-      Alert.alert('Error', 'Failed to send media');
-    }
-  };
 
 
-  const handleMediaPress = (message: MessageData) => {
-    if (!message.media_url) return;
-
-    // Convert message to MediaFile format
-    const mediaFile: MediaFile = {
-      uri: message.media_url,
-      name: message.content || 'Media File',
-      type: message.media_metadata?.mimeType || 'application/octet-stream',
-      size: message.media_metadata?.size || 0,
-      duration: (message.media_metadata as any)?.duration,
-      width: (message.media_metadata as any)?.width,
-      height: (message.media_metadata as any)?.height,
-    };
-
-    setMediaViewerFiles([mediaFile]);
-    setMediaViewerIndex(0);
-    setIsMediaViewerVisible(true);
-  };
 
   const handleBack = () => {
     navigation.goBack();
@@ -1482,17 +1238,6 @@ const ConversationScreen: React.FC = () => {
       messageType: messageData.message_type,
     });
 
-    // Render file message if it's a file type
-    if (messageData.message_type === 'file') {
-      return (
-        <FileMessageBubble
-          message={messageData}
-          isOwn={isOwn}
-          onPress={() => handleMessagePress(messageData)}
-          onLongPress={() => handleMessageLongPress(messageData)}
-        />
-      );
-    }
 
     return (
       <MessageBubble
@@ -1503,7 +1248,6 @@ const ConversationScreen: React.FC = () => {
         isGroupChat={chat?.type === 'group'}
         onPress={() => handleMessagePress(messageData)}
         onLongPress={() => handleMessageLongPress(messageData)}
-        onMediaPress={handleMediaPress}
       />
     );
   };
@@ -1695,12 +1439,10 @@ const ConversationScreen: React.FC = () => {
           >
             <ChatInput
               onSendMessage={handleSendMessage}
-              onMediaSelected={handleMediaSelected}
               replyToMessage={replyToMessage || undefined}
               onCancelReply={() => setReplyToMessage(null)}
               disabled={false}
               keyboardHeight={keyboardHeight}
-              isKeyboardVisible={isKeyboardVisible}
               onStartTyping={handleStartTyping}
               onStopTyping={handleStopTyping}
               screenInfo={screenInfo}
@@ -1710,12 +1452,6 @@ const ConversationScreen: React.FC = () => {
       </KeyboardAvoidingView>
 
 
-        <MediaViewer
-          visible={isMediaViewerVisible}
-          onClose={() => setIsMediaViewerVisible(false)}
-          mediaFiles={mediaViewerFiles}
-          initialIndex={mediaViewerIndex}
-        />
       </CustomSafeAreaView>
     );
   };

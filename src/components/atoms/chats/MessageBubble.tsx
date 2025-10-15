@@ -6,8 +6,6 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
-import OptimizedIcon from '@/components/atoms/ui/OptimizedIcon';
-import PersistentImage from '@/components/atoms/ui/PersistentImage';
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 import { MessageData } from '@/services/chatService';
@@ -24,7 +22,6 @@ interface MessageBubbleProps {
   onReply?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
-  onMediaPress?: (message: MessageData) => void;
 }
 
 const MessageBubble: React.FC<MessageBubbleProps> = memo(({
@@ -38,7 +35,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
   onReply,
   onEdit,
   onDelete,
-  onMediaPress,
 }) => {
   const { colors } = useTheme();
 
@@ -103,143 +99,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
             </View>
           );
 
-        case 'image':
-          return (
-            <TouchableOpacity
-              onPress={() => onMediaPress?.(message)}
-              activeOpacity={0.85}
-            >
-              <PersistentImage
-                source={{ uri: message.media_url || '' }}
-                style={styles.mediaImage}
-                resizeMode="cover"
-                showLoadingIndicator={true}
-                onPersistenceResult={(result) => {
-                  if (result.success) {
-                    console.log('🖼️ [MessageBubble] Image persisted successfully');
-                  } else {
-                    console.log('🖼️ [MessageBubble] Image persistence failed, using original URL');
-                  }
-                }}
-              />
-              {message.content ? (
-                <Text
-                  style={[
-                    styles.messageText,
-                    { color: isOwn ? colors.textOnPrimary : colors.text },
-                  ]}
-                >
-                  {String(message.content)}
-                </Text>
-              ) : null}
-            </TouchableOpacity>
-          );
 
-        case 'video':
-          return (
-            <TouchableOpacity
-              onPress={() => onMediaPress?.(message)}
-              activeOpacity={0.85}
-            >
-              <View style={[styles.mediaPlaceholder, { borderColor: isOwn ? colors.chatBubble : colors.chatBubbleOther }]}>
-                <OptimizedIcon name="play-circle" size={moderateScale(40)} color={isOwn ? colors.textOnPrimary : colors.accent} />
-                <Text
-                  style={[
-                    styles.mediaText,
-                    { color: isOwn ? colors.textOnPrimary : colors.text },
-                  ]}
-                >
-                  📹 Video
-                </Text>
-                {message.media_metadata?.duration && (
-                  <Text
-                    style={[
-                      styles.mediaDuration,
-                      { color: isOwn ? colors.textOnPrimary : colors.textSecondary },
-                    ]}
-                  >
-                    {Math.floor(message.media_metadata.duration / 1000)}s
-                  </Text>
-                )}
-              </View>
-              {message.content ? (
-                <Text
-                  style={[
-                    styles.messageText,
-                    { color: isOwn ? colors.textOnPrimary : colors.text },
-                  ]}
-                >
-                  {String(message.content)}
-                </Text>
-              ) : null}
-            </TouchableOpacity>
-          );
-
-        case 'audio':
-          return (
-            <TouchableOpacity
-              onPress={() => onMediaPress?.(message)}
-              activeOpacity={0.85}
-            >
-              <View style={[styles.mediaPlaceholder, { borderColor: isOwn ? colors.chatBubble : colors.chatBubbleOther }]}>
-                <OptimizedIcon name="musical-notes" size={moderateScale(40)} color={isOwn ? colors.textOnPrimary : colors.accent} />
-                <Text
-                  style={[
-                    styles.mediaText,
-                    { color: isOwn ? colors.textOnPrimary : colors.text },
-                  ]}
-                >
-                  🎵 Audio
-                </Text>
-                {message.media_metadata?.duration && (
-                  <Text
-                    style={[
-                      styles.mediaDuration,
-                      { color: isOwn ? colors.textOnPrimary : colors.textSecondary },
-                    ]}
-                  >
-                    {Math.floor(message.media_metadata.duration / 1000)}s
-                  </Text>
-                )}
-              </View>
-              {message.content ? (
-                <Text
-                  style={[
-                    styles.messageText,
-                    { color: isOwn ? colors.textOnPrimary : colors.text },
-                  ]}
-                >
-                  {String(message.content)}
-                </Text>
-              ) : null}
-            </TouchableOpacity>
-          );
-
-        case 'file':
-          return (
-            <View>
-              <View style={[styles.mediaPlaceholder, { borderColor: isOwn ? colors.chatBubble : colors.chatBubbleOther }]}>
-                <Text
-                  style={[
-                    styles.mediaText,
-                    { color: isOwn ? colors.textOnPrimary : colors.text },
-                  ]}
-                >
-                  📄 {message.media_metadata?.filename || 'File'}
-                </Text>
-              </View>
-              {message.content ? (
-                <Text
-                  style={[
-                    styles.messageText,
-                    { color: isOwn ? colors.textOnPrimary : colors.text },
-                  ]}
-                >
-                  {String(message.content)}
-                </Text>
-              ) : null}
-            </View>
-          );
 
         default:
           return (
@@ -453,32 +313,6 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
 
-  /* Media styling - responsive */
-  mediaImage: {
-    width: wp(60), // larger on wider screens but constrained by maxWidth of bubble
-    height: hp(24),
-    borderRadius: moderateScale(8),
-    marginBottom: hp(0.4),
-    maxWidth: '100%',
-  },
-  mediaPlaceholder: {
-    padding: moderateScale(12),
-    borderRadius: moderateScale(8),
-    backgroundColor: 'rgba(0,0,0,0.06)',
-    marginBottom: 0,
-    borderWidth: 1,
-  },
-  mediaText: {
-    fontSize: moderateScale(14),
-    textAlign: 'center',
-  },
-  mediaDuration: {
-    fontSize: moderateScale(12),
-    textAlign: 'center',
-    marginTop: moderateScale(4),
-    opacity: 0.8,
-    marginBottom: 0,
-  },
 
   /* TWO-ROW LAYOUT: ensures bubble wraps content and metadata stays close */
   messageContentContainer: {

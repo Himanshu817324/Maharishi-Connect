@@ -192,9 +192,9 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   logoContainer: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
+    width: 150,
+    height: 150,
+    borderRadius: 125,
     backgroundColor: LightColors.card,
     justifyContent: "center",
     alignItems: "center",
@@ -211,8 +211,8 @@ const styles = StyleSheet.create({
     borderColor: LightColors.background,
   },
   logo: {
-    width: 100,
-    height: 100,
+    width: 150,
+    height: 150,
     resizeMode: "contain",
   },
   logoSubtext: {

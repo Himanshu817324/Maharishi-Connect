@@ -1,6 +1,7 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import React from 'react';
 import { Platform, View, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import OptimizedIcon from '@/components/atoms/ui/OptimizedIcon';
 import { useTheme } from '@/theme';
 import { moderateScale } from '@/theme/responsive';
@@ -45,9 +46,9 @@ const TabBarIcon = ({ route, color, focused }: { route: any; color: string; focu
   );
 };
 
-
 export default function TabNavigator() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <View style={styles.container}>
@@ -71,9 +72,9 @@ export default function TabNavigator() {
               backgroundColor: colors.tabBarBG,
               borderTopColor: colors.tabBarBG,
               borderTopWidth: 0,
-              height: Platform.OS === 'ios' ? moderateScale(85) : moderateScale(65),
-              paddingBottom: Platform.OS === 'ios' ? moderateScale(25) : moderateScale(10),
-              paddingTop: 0, // Removed extra top padding
+              height: Platform.OS === 'ios' ? moderateScale(85) + insets.bottom : moderateScale(65) + insets.bottom,
+              paddingBottom: Platform.OS === 'ios' ? moderateScale(25) + insets.bottom : moderateScale(10) + insets.bottom,
+              paddingTop: moderateScale(8),
               elevation: 8,
               shadowColor: colors.tabBarBG,
               shadowOffset: {
@@ -86,11 +87,12 @@ export default function TabNavigator() {
             tabBarLabelStyle: {
               fontSize: moderateScale(12),
               fontWeight: '600',
-              marginTop: 0, // Removed extra top margin
+              marginTop: moderateScale(2),
+              marginBottom: moderateScale(2),
             },
-            tabBarIcon: function TabIcon({ color, focused }) {
-              return <TabBarIcon route={route} color={color} focused={focused} />;
-            },
+            tabBarIcon: ({ color, focused }) => (
+              <TabBarIcon route={route} color={color} focused={focused} />
+            ),
           })}
         >
           <Tab.Screen 

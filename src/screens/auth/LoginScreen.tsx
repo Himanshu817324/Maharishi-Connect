@@ -54,9 +54,9 @@ const LoginScreen = () => {
       alignItems: 'center',
     },
     iconContainer: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
+      width: 100,
+      height: 100,
+      borderRadius: 50,
       backgroundColor: LightColors.card,
       justifyContent: 'center',
       alignItems: 'center',
@@ -70,10 +70,11 @@ const LoginScreen = () => {
       elevation: 15,
       borderWidth: 3,
       borderColor: LightColors.background,
+      marginBottom: 20,
     },
     logo: {
-      width: 50,
-      height: 50,
+      width: 100,
+      height: 100,
       resizeMode: 'contain',
     },
     logoSubtext: {

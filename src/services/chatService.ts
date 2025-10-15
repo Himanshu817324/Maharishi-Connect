@@ -807,54 +807,6 @@ class ChatService {
     }
   }
 
-  // Send file message to chat
-  async sendFileMessage(
-    chatId: string,
-    fileData: {
-      fileId: string;
-      fileName: string;
-      fileSize: number;
-      fileType: string;
-      s3Key: string;
-      mediaUrl: string;
-    },
-    message?: string
-  ): Promise<{ status: string; message: MessageData }> {
-    try {
-      console.log(`📁 Sending file message to chat ${chatId}:`, fileData);
-
-      const response = await this.makeRequest<{
-        status: string;
-        message: MessageData;
-      }>(`/chat/${chatId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          content: message || '',
-          messageType: 'file',
-          mediaUrl: fileData.mediaUrl,
-          mediaMetadata: {
-            fileId: fileData.fileId,
-            fileName: fileData.fileName,
-            fileSize: fileData.fileSize,
-            fileType: fileData.fileType,
-            s3Key: fileData.s3Key,
-            filename: fileData.fileName, // Keep for backward compatibility
-            size: fileData.fileSize,
-            mimeType: fileData.fileType,
-          },
-        }),
-      });
-
-      console.log(`✅ File message sent successfully:`, response.message.id);
-      return response;
-    } catch (error) {
-      console.error('Error sending file message:', error);
-      throw error;
-    }
-  }
 
   // Message status management methods
   async updateMessageStatus(

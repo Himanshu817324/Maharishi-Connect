@@ -1,6 +1,5 @@
 import { Platform } from 'react-native';
 import { permissionHelper } from '@/services/permissionHelper';
-import { mediaService } from '@/services/mediaService';
 import { manifestPermissionManager } from '@/services/manifestPermissionManager';
 
 export interface PermissionTestResult {
@@ -36,8 +35,6 @@ export class PermissionTestUtils {
     // Test 5: Test camera permissions
     results.push(await this.testCameraPermissions());
     
-    // Test 6: Test media service integration
-    results.push(await this.testMediaServiceIntegration());
     
     console.log('🧪 Permission tests completed');
     return results;
@@ -229,43 +226,6 @@ export class PermissionTestUtils {
     }
   }
 
-  /**
-   * Test media service integration
-   */
-  private static async testMediaServiceIntegration(): Promise<PermissionTestResult> {
-    try {
-      // Test if media service can be instantiated and methods exist
-      const hasPickImages = typeof mediaService.pickImages === 'function';
-      const hasPickVideos = typeof mediaService.pickVideos === 'function';
-      const hasPickAudioFiles = typeof mediaService.pickAudioFiles === 'function';
-      const hasPickFiles = typeof mediaService.pickFiles === 'function';
-      const hasTakePhoto = typeof mediaService.takePhoto === 'function';
-      const hasRecordVideo = typeof mediaService.recordVideo === 'function';
-
-      const allMethodsExist = hasPickImages && hasPickVideos && hasPickAudioFiles && 
-                             hasPickFiles && hasTakePhoto && hasRecordVideo;
-
-      return {
-        testName: 'Media Service Integration',
-        success: allMethodsExist,
-        details: {
-          hasPickImages,
-          hasPickVideos,
-          hasPickAudioFiles,
-          hasPickFiles,
-          hasTakePhoto,
-          hasRecordVideo
-        },
-        error: allMethodsExist ? undefined : 'Some media service methods are missing'
-      };
-    } catch (error) {
-      return {
-        testName: 'Media Service Integration',
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
-  }
 
   /**
    * Format test results for display

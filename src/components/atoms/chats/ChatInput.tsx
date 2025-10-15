@@ -5,21 +5,17 @@ import {
   TouchableOpacity,
   StyleSheet,
   Text,
-  TouchableWithoutFeedback,
   Platform,
-  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
-import { mediaService, MediaFile } from '@/services/mediaService';
 
 interface ChatInputProps {
   onSendMessage: (
     content: string,
     messageType?: 'text' | 'image' | 'video' | 'audio' | 'file',
   ) => void;
-  onMediaSelected: (type: string, files: MediaFile[]) => void;
   placeholder?: string;
   disabled?: boolean;
   replyToMessage?: {
@@ -29,7 +25,6 @@ interface ChatInputProps {
   };
   onCancelReply?: () => void;
   keyboardHeight?: number;
-  isKeyboardVisible?: boolean;
   onStartTyping?: () => void;
   onStopTyping?: () => void;
   screenInfo?: {
@@ -44,20 +39,17 @@ interface ChatInputProps {
 
 const ChatInput: React.FC<ChatInputProps> = ({
   onSendMessage,
-  onMediaSelected,
   placeholder = 'Type a message...',
   disabled = false,
   replyToMessage,
   onCancelReply,
   keyboardHeight: _keyboardHeight = 0,
-  isKeyboardVisible = false,
   onStartTyping,
   onStopTyping,
   screenInfo,
 }) => {
   const { colors } = useTheme();
   const [message, setMessage] = useState('');
-  const [showMediaMenu, setShowMediaMenu] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
@@ -102,113 +94,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
-  const handleMediaPress = async (
-    type: 'camera' | 'gallery' | 'video' | 'audio' | 'file',
-  ) => {
-    setShowMediaMenu(false); // Close menu after selection
-    
-    try {
-      switch (type) {
-        case 'camera':
-          await takePhoto();
-          break;
-        case 'gallery':
-          await pickImages();
-          break;
-        case 'video':
-          await pickVideos();
-          break;
-        case 'audio':
-          await pickAudio();
-          break;
-        case 'file':
-          await pickFiles();
-          break;
-      }
-    } catch (error) {
-      console.error('Media selection error:', error);
-      Alert.alert('Error', 'Failed to select media. Please try again.');
-    }
-  };
-
-  const takePhoto = async () => {
-    try {
-      const result = await mediaService.takePhoto();
-      
-      if (result.success && result.files.length > 0) {
-        onMediaSelected('image', result.files);
-      } else if (result.error) {
-        Alert.alert('Error', result.error);
-      }
-    } catch (error) {
-      console.error('Camera error:', error);
-      throw error;
-    }
-  };
-
-  const pickImages = async () => {
-    try {
-      const result = await mediaService.pickImages(10);
-      
-      if (result.success && result.files.length > 0) {
-        onMediaSelected('image', result.files);
-      } else if (result.error) {
-        Alert.alert('Error', result.error);
-      }
-    } catch (error) {
-      console.error('Image picker error:', error);
-      throw error;
-    }
-  };
-
-  const pickVideos = async () => {
-    try {
-      const result = await mediaService.pickVideos(5);
-      
-      if (result.success && result.files.length > 0) {
-        onMediaSelected('video', result.files);
-      } else if (result.error) {
-        Alert.alert('Error', result.error);
-      }
-    } catch (error) {
-      console.error('Video picker error:', error);
-      throw error;
-    }
-  };
-
-  const pickAudio = async () => {
-    try {
-      const result = await mediaService.pickAudioFiles(5);
-      
-      if (result.success && result.files.length > 0) {
-        onMediaSelected('audio', result.files);
-      } else if (result.error) {
-        Alert.alert('Error', result.error);
-      }
-    } catch (error) {
-      console.error('Audio picker error:', error);
-      throw error;
-    }
-  };
-
-  const pickFiles = async () => {
-    try {
-      const result = await mediaService.pickFiles(5);
-      
-      if (result.success && result.files.length > 0) {
-        onMediaSelected('file', result.files);
-      } else if (result.error) {
-        Alert.alert('Error', result.error);
-      }
-    } catch (error) {
-      console.error('File picker error:', error);
-      throw error;
-    }
-  };
-
-  const toggleMediaMenu = () => {
-    setShowMediaMenu(!showMediaMenu);
-  };
 
   return (
     <View
@@ -252,24 +137,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
       )}
 
       <View style={styles.inputContainer}>
-        <TouchableOpacity
-          style={[
-            styles.mediaButton,
-            {
-              backgroundColor: showMediaMenu ? colors.accent : colors.surface,
-              borderColor: colors.border,
-            },
-            styles.mediaButtonBorder,
-          ]}
-          onPress={toggleMediaMenu}
-          disabled={disabled}
-        >
-          <Icon
-            name={showMediaMenu ? 'close' : 'add'}
-            size={moderateScale(24)}
-            color={showMediaMenu ? colors.textOnPrimary : colors.tabBarBG}
-          />
-        </TouchableOpacity>
 
         <View
           style={[
@@ -287,9 +154,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
             multiline
             maxLength={1000}
             editable={!disabled}
-            onFocus={() => {
-              setShowMediaMenu(false); // Close media menu when focusing on input
-            }}
           />
         </View>
 
@@ -311,132 +175,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
         </TouchableOpacity>
       </View>
 
-      {showMediaMenu && (
-        <TouchableWithoutFeedback onPress={() => setShowMediaMenu(false)}>
-          <View
-            style={[
-              styles.mediaMenu,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
-          >
-            <View style={styles.mediaMenuRow}>
-              <TouchableOpacity
-                style={styles.mediaOption}
-                onPress={() => handleMediaPress('camera')}
-                disabled={disabled}
-              >
-                <View
-                  style={[
-                    styles.mediaOptionIcon,
-                    { backgroundColor: colors.accent + '15' },
-                  ]}
-                >
-                  <Icon
-                    name="camera"
-                    size={moderateScale(24)}
-                    color={colors.accent}
-                  />
-                </View>
-                <Text style={[styles.mediaOptionText, { color: colors.text }]}>
-                  Camera
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.mediaOption}
-                onPress={() => handleMediaPress('gallery')}
-                disabled={disabled}
-              >
-                <View
-                  style={[
-                    styles.mediaOptionIcon,
-                    { backgroundColor: colors.accent + '15' },
-                  ]}
-                >
-                  <Icon
-                    name="image"
-                    size={moderateScale(24)}
-                    color={colors.accent}
-                  />
-                </View>
-                <Text style={[styles.mediaOptionText, { color: colors.text }]}>
-                  Gallery
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.mediaOption}
-                onPress={() => handleMediaPress('video')}
-                disabled={disabled}
-              >
-                <View
-                  style={[
-                    styles.mediaOptionIcon,
-                    { backgroundColor: colors.accent + '15' },
-                  ]}
-                >
-                  <Icon
-                    name="videocam"
-                    size={moderateScale(24)}
-                    color={colors.accent}
-                  />
-                </View>
-                <Text style={[styles.mediaOptionText, { color: colors.text }]}>
-                  Video
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.mediaMenuRow}>
-              <TouchableOpacity
-                style={styles.mediaOption}
-                onPress={() => handleMediaPress('audio')}
-                disabled={disabled}
-              >
-                <View
-                  style={[
-                    styles.mediaOptionIcon,
-                    { backgroundColor: colors.accent + '15' },
-                  ]}
-                >
-                  <Icon
-                    name="mic"
-                    size={moderateScale(24)}
-                    color={colors.accent}
-                  />
-                </View>
-                <Text style={[styles.mediaOptionText, { color: colors.text }]}>
-                  Audio
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.mediaOption}
-                onPress={() => handleMediaPress('file')}
-                disabled={disabled}
-              >
-                <View
-                  style={[
-                    styles.mediaOptionIcon,
-                    { backgroundColor: colors.accent + '15' },
-                  ]}
-                >
-                  <Icon
-                    name="document"
-                    size={moderateScale(24)}
-                    color={colors.accent}
-                  />
-                </View>
-                <Text style={[styles.mediaOptionText, { color: colors.text }]}>
-                  File
-                </Text>
-              </TouchableOpacity>
-
-              <View style={styles.mediaOption} />
-            </View>
-          </View>
-        </TouchableWithoutFeedback>
-      )}
     </View>
   );
 };
@@ -487,17 +225,6 @@ const createStyles = (screenInfo?: ChatInputProps['screenInfo']) => StyleSheet.c
     // ✅ FIX: Ensure proper alignment on Android
     justifyContent: 'space-between',
   },
-  mediaButton: {
-    width: moderateScale(40),
-    height: moderateScale(40),
-    borderRadius: moderateScale(20),
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: wp(2),
-  },
-  mediaButtonBorder: {
-    borderWidth: 1,
-  },
   textInputContainer: {
     flex: 1,
     borderWidth: 1,
@@ -537,34 +264,6 @@ const createStyles = (screenInfo?: ChatInputProps['screenInfo']) => StyleSheet.c
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: wp(2), // Use responsive margin
-  },
-  mediaMenu: {
-    borderTopWidth: 1,
-    paddingHorizontal: wp(4),
-    paddingVertical: hp(2),
-  },
-  mediaMenuRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: hp(1.5),
-  },
-  mediaOption: {
-    alignItems: 'center',
-    flex: 1,
-    paddingVertical: hp(1),
-  },
-  mediaOptionIcon: {
-    width: moderateScale(50),
-    height: moderateScale(50),
-    borderRadius: moderateScale(25),
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: hp(0.5),
-  },
-  mediaOptionText: {
-    fontSize: responsiveFont(12),
-    fontWeight: '500',
-    textAlign: 'center',
   },
 });
 

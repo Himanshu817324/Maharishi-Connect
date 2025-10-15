@@ -12,9 +12,6 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 import { permissionHelper } from '@/services/permissionHelper';
-import { mediaService } from '@/services/mediaService';
-import { testDocumentPicker } from '@/utils/documentPickerTest';
-import DocumentPickerTest from '@/components/DocumentPickerTest';
 import PermissionTestUtils from '@/utils/permissionTestUtils';
 
 interface PermissionTestProps {
@@ -25,7 +22,6 @@ interface PermissionTestProps {
 const PermissionTest: React.FC<PermissionTestProps> = ({ visible, onClose }) => {
   const { colors } = useTheme();
   const [testResults, setTestResults] = useState<Record<string, boolean>>({});
-  const [showDocumentPickerTest, setShowDocumentPickerTest] = useState(false);
 
   const runPermissionTest = async (testName: string, testFunction: () => Promise<boolean>) => {
     try {
@@ -51,40 +47,6 @@ const PermissionTest: React.FC<PermissionTestProps> = ({ visible, onClose }) => 
     return result.granted;
   };
 
-  const testImagePicking = async () => {
-    const result = await mediaService.pickImages(1);
-    return result.success;
-  };
-
-  const testVideoPicking = async () => {
-    const result = await mediaService.pickVideos(1);
-    return result.success;
-  };
-
-  const testAudioPicking = async () => {
-    const result = await mediaService.pickAudioFiles(1);
-    return result.success;
-  };
-
-  const testFilePicking = async () => {
-    const result = await mediaService.pickFiles(1);
-    return result.success;
-  };
-
-  const testCameraPhoto = async () => {
-    const result = await mediaService.takePhoto();
-    return result.success;
-  };
-
-  const testCameraVideo = async () => {
-    const result = await mediaService.recordVideo();
-    return result.success;
-  };
-
-  const testDocumentPickerLib = async () => {
-    const result = await testDocumentPicker();
-    return result.success;
-  };
 
   const runComprehensiveTest = async () => {
     try {
@@ -145,25 +107,11 @@ const PermissionTest: React.FC<PermissionTestProps> = ({ visible, onClose }) => 
             <Text style={styles.runAllText}>Run Comprehensive Test</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.runAllButton, { backgroundColor: colors.textSecondary, marginTop: hp(1) }]}
-            onPress={() => setShowDocumentPickerTest(true)}
-          >
-            <Icon name="document-outline" size={moderateScale(20)} color="#FFFFFF" />
-            <Text style={styles.runAllText}>Test DocumentPicker</Text>
-          </TouchableOpacity>
 
           <View style={styles.testList}>
             {[
               'Camera Permissions',
               'Storage Permissions',
-              'Image Picking',
-              'Video Picking',
-              'Audio Picking',
-              'File Picking',
-              'Camera Photo',
-              'Camera Video',
-              'Document Picker',
             ].map((testName) => (
               <TouchableOpacity
                 key={testName}
@@ -192,25 +140,6 @@ const PermissionTest: React.FC<PermissionTestProps> = ({ visible, onClose }) => 
         </ScrollView>
       </View>
 
-      {/* DocumentPicker Test Modal */}
-      <Modal
-        visible={showDocumentPickerTest}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowDocumentPickerTest(false)}
-      >
-        <View style={[styles.container, { backgroundColor: colors.background }]}>
-          <View style={[styles.header, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.title, { color: colors.text }]}>
-              DocumentPicker Test
-            </Text>
-            <TouchableOpacity onPress={() => setShowDocumentPickerTest(false)}>
-              <Icon name="close" size={moderateScale(24)} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-          <DocumentPickerTest />
-        </View>
-      </Modal>
     </View>
   );
 };

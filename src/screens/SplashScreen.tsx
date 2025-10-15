@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StatusBar, StyleSheet, Text, View, Image } from 'react-native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthPersistence } from '../hooks/useAuthPersistence';
+import { moderateScale, responsiveFont, wp } from '../theme/responsive';
 
 export default function SplashScreen() {
   console.log('🎬 SplashScreen component rendered');
@@ -84,9 +85,22 @@ export default function SplashScreen() {
         backgroundColor="#ffffff"
         barStyle="dark-content"
       />
-      <Text style={styles.title}>Maharishi Connect</Text>
-      <ActivityIndicator size="large" color="#007AFF" />
       
+      {/* Logo Section - Takes up most of the screen */}
+      <View style={styles.logoSection}>
+        <Image
+          source={require('../assets/logo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+        <Text style={styles.title}>Maharishi Connect</Text>
+      </View>
+      
+      {/* Loading Section */}
+      <View style={styles.loadingSection}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
     </View>
   );
 }
@@ -94,15 +108,35 @@ export default function SplashScreen() {
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    justifyContent: "center", 
-    alignItems: "center",
     backgroundColor: "#ffffff",
   },
+  logoSection: {
+    flex: 0.8,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: moderateScale(40),
+  },
+  logo: {
+    width: wp(60), // 60% of screen width
+    height: wp(60), // Maintain aspect ratio
+    marginBottom: moderateScale(20),
+  },
   title: { 
-    fontSize: 24, 
+    fontSize: responsiveFont(28), 
     fontWeight: "bold", 
-    marginBottom: 10,
     color: "#000000",
+    textAlign: "center",
+  },
+  loadingSection: {
+    flex: 0.2,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingBottom: moderateScale(40),
+  },
+  loadingText: {
+    marginTop: moderateScale(10),
+    fontSize: responsiveFont(16),
+    color: "#333333",
   },
   subtitle: {
     fontSize: 16,
