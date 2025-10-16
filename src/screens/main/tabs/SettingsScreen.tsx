@@ -1,5 +1,5 @@
 import { useNavigation } from '@react-navigation/native';
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Alert,
   ScrollView,
@@ -9,13 +9,15 @@ import {
   View,
   Image,
   Switch,
+  BackHandler,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useDispatch, useSelector } from 'react-redux';
-import { logout } from '@/store/slices/authSlice';
+import { logout, updateUserProfile } from '@/store/slices/authSlice';
 import { RootState } from '@/store';
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
+import { apiService } from '@/services/apiService';
 
 export default function SettingsScreen() {
   const { colors, isDark, toggleTheme, isSystemTheme, setIsSystemTheme } =
@@ -27,6 +29,102 @@ export default function SettingsScreen() {
   console.log('🔍 SettingsScreen - Current user data:', user);
   console.log('🔍 SettingsScreen - Profile picture:', user?.profilePicture);
   console.log('🔍 SettingsScreen - Avatar:', user?.avatar);
+
+  // Function to fetch fresh profile data from server
+  const fetchProfileData = useCallback(async () => {
+    if (!user?.id || !user?.token) {
+      return;
+    }
+
+    // Check if we need to fetch fresh data (missing profile data)
+    const needsRefresh =
+      !user.fullName || !user.country || !user.state || !user.status;
+
+    if (!needsRefresh) {
+      console.log(
+        '📱 SettingsScreen - Profile data is complete, no need to fetch',
+      );
+      return;
+    }
+
+    try {
+      console.log(
+        '📱 SettingsScreen - Fetching fresh profile data from server...',
+      );
+
+      const profileData = await apiService.getUserProfile(user.id, user.token);
+      console.log('📱 SettingsScreen - Profile API response:', profileData);
+
+      if (profileData.user || profileData.data) {
+        const userProfile = profileData.user || profileData.data;
+        const location = userProfile.location || {};
+
+        console.log('📱 SettingsScreen - Extracted user profile:', {
+          fullName: userProfile.fullName,
+          country: location.country,
+          state: location.state,
+          status: userProfile.status,
+          profilePicture: userProfile.profilePicture,
+        });
+
+        // Update user profile data in Redux
+        dispatch(
+          updateUserProfile({
+            fullName: userProfile.fullName || user.fullName || '',
+            avatar: userProfile.profilePicture || user.avatar || '',
+            profilePicture:
+              userProfile.profilePicture || user.profilePicture || '',
+            country: location.country || user.country || '',
+            state: location.state || user.state || '',
+            status: userProfile.status || user.status || '',
+            isVerified:
+              userProfile.isVerified !== undefined
+                ? userProfile.isVerified
+                : user.isVerified,
+          }),
+        );
+
+        console.log('✅ SettingsScreen - Profile data updated successfully');
+      } else {
+        console.log(
+          '⚠️ SettingsScreen - No user profile data found in API response',
+        );
+      }
+    } catch (error) {
+      console.error('❌ SettingsScreen - Error fetching user profile:', error);
+      // Don't show error to user, just log it - they can still see cached data
+    }
+  }, [user, dispatch]);
+
+  // Fetch profile data on mount
+  useEffect(() => {
+    fetchProfileData();
+  }, [fetchProfileData]);
+
+  // Handle back button press
+  useEffect(() => {
+    const backAction = () => {
+      Alert.alert('Exit App', 'Are you sure you want to close the app?', [
+        {
+          text: 'Cancel',
+          onPress: () => null,
+          style: 'cancel',
+        },
+        {
+          text: 'Exit',
+          onPress: () => BackHandler.exitApp(),
+        },
+      ]);
+      return true; // Prevent default behavior
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction,
+    );
+
+    return () => backHandler.remove();
+  }, []);
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [

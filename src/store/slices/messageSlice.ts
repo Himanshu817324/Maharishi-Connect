@@ -32,7 +32,7 @@ const findDuplicateMessage = (messages: MessageData[], message: MessageData): nu
   return messages.findIndex(m => {
     // Primary check: exact ID match
     if (m.id === message.id) return true;
-    
+
     // Secondary check: same content, sender, and timestamp (within 1 second)
     const timeDiff = Math.abs(new Date(m.created_at).getTime() - new Date(message.created_at).getTime());
     return (
@@ -69,8 +69,8 @@ export const fetchChatMessages = createAsyncThunk(
           beforeMessageId: params.beforeMessageId,
         }
       );
-      return { 
-        chatId: params.chatId, 
+      return {
+        chatId: params.chatId,
         messages: response.messages,
         pagination: response.pagination || { hasMore: false, limit: 0, offset: 0 }
       };
@@ -253,18 +253,18 @@ const messageSlice = createSlice({
     setCurrentChatMessages: (state, action: PayloadAction<string>) => {
       const chatId = action.payload;
       state.currentChatId = chatId;
-      
+
       // Get messages for this chat and remove duplicates
       const messages = state.messages[chatId] || [];
       const uniqueMessages = removeDuplicateMessages(messages);
-      
+
       console.log('🔄 [setCurrentChatMessages] Setting current chat messages:', {
         chatId: chatId,
         originalCount: messages.length,
         uniqueCount: uniqueMessages.length,
         removedDuplicates: messages.length - uniqueMessages.length
       });
-      
+
       state.currentChatMessages = uniqueMessages;
     },
     clearCurrentChatMessages: (state) => {
@@ -560,24 +560,24 @@ const messageSlice = createSlice({
       .addCase(fetchChatMessages.fulfilled, (state, action) => {
         state.loading = false;
         const { chatId, messages, pagination } = action.payload;
-        
+
         // Initialize messages array if it doesn't exist
         if (!state.messages[chatId]) {
           state.messages[chatId] = [];
         }
-        
+
         // Enhanced duplicate detection for fetched messages
         const newMessages: MessageData[] = [];
-        
+
         for (const message of messages) {
           const mappedMessage = {
             ...message,
             status: message.status ? mapServerStatusToClient(message.status) : 'sent'
           };
-          
+
           // Check if message already exists using enhanced detection
           const existingIndex = findDuplicateMessage(state.messages[chatId], message);
-          
+
           if (existingIndex >= 0) {
             console.log('🔄 [fetchChatMessages] Updating existing message:', message.id);
             // Update existing message
@@ -587,7 +587,7 @@ const messageSlice = createSlice({
             newMessages.push(mappedMessage);
           }
         }
-        
+
         // Add new messages and sort by created_at (only if needed)
         if (newMessages.length > 0) {
           state.messages[chatId] = [...state.messages[chatId], ...newMessages];
@@ -596,16 +596,16 @@ const messageSlice = createSlice({
             state.messages[chatId].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
           }
         }
-        
+
         // Update pagination state
         state.pagination[chatId] = {
           hasMore: pagination.hasMore,
           isLoadingOlder: false,
         };
-        
+
         state.lastFetch[chatId] = Date.now();
         state.error = null;
-        
+
       })
       .addCase(fetchChatMessages.rejected, (state, action) => {
         state.loading = false;

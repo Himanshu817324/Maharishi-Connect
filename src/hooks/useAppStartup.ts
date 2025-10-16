@@ -19,19 +19,37 @@ export const useAppStartup = () => {
     });
 
     const initializeApp = useCallback(async () => {
+        console.log('🚀 [useAppStartup] Starting app initialization...');
+        console.log('🚀 [useAppStartup] Current user:', currentUser ? 'exists' : 'null');
+        console.log('🚀 [useAppStartup] User ID:', currentUser?.id);
+        console.log('🚀 [useAppStartup] User token:', currentUser?.token ? 'exists' : 'missing');
+        
         if (!currentUser?.id || !currentUser?.token) {
             console.log('🚀 [useAppStartup] No user authenticated, skipping initialization');
             return;
         }
 
         // Check if we have complete profile data, if not, fetch it
-        if (currentUser.id && currentUser.token && (!currentUser.fullName || !currentUser.country)) {
+        // More comprehensive check for missing profile data
+        const needsProfileRefresh = !currentUser.fullName || 
+                                   !currentUser.country || 
+                                   !currentUser.state || 
+                                   !currentUser.status ||
+                                   !currentUser.profilePicture;
+        
+        // Always try to fetch profile data if we have user ID and token
+        // This ensures we get the latest data from server even if cache is cleared
+        if (currentUser.id && currentUser.token) {
             try {
                 console.log('🚀 [useAppStartup] Fetching complete user profile data...');
+                console.log('🚀 [useAppStartup] Profile refresh needed:', needsProfileRefresh);
                 console.log('🚀 [useAppStartup] Current user data:', {
                     id: currentUser.id,
                     fullName: currentUser.fullName,
                     country: currentUser.country,
+                    state: currentUser.state,
+                    status: currentUser.status,
+                    profilePicture: currentUser.profilePicture,
                     hasToken: !!currentUser.token
                 });
 
@@ -52,14 +70,15 @@ export const useAppStartup = () => {
                         profilePicture: userProfile.profilePicture
                     });
 
-                    // Update user profile data in Redux
+                    // Update user profile data in Redux with comprehensive data
                     dispatch(updateUserProfile({
-                        fullName: userProfile.fullName || '',
-                        avatar: userProfile.profilePicture || '',
-                        country: location.country || '',
-                        state: location.state || '',
-                        status: userProfile.status || '',
-                        isVerified: userProfile.isVerified || currentUser.isVerified,
+                        fullName: userProfile.fullName || currentUser.fullName || '',
+                        avatar: userProfile.profilePicture || currentUser.avatar || '',
+                        profilePicture: userProfile.profilePicture || currentUser.profilePicture || '',
+                        country: location.country || currentUser.country || '',
+                        state: location.state || currentUser.state || '',
+                        status: userProfile.status || currentUser.status || '',
+                        isVerified: userProfile.isVerified !== undefined ? userProfile.isVerified : currentUser.isVerified,
                     }));
 
                     console.log('✅ [useAppStartup] User profile data updated successfully');
@@ -71,7 +90,7 @@ export const useAppStartup = () => {
                 console.log('⚠️ [useAppStartup] Continuing with existing user data');
             }
         } else {
-            console.log('ℹ️ [useAppStartup] User already has complete profile data, skipping fetch');
+            console.log('ℹ️ [useAppStartup] No user ID or token available, skipping profile fetch');
         }
 
         try {

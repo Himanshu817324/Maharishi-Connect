@@ -22,13 +22,15 @@ const MainStackContent: React.FC = () => {
 
   // Prevent navigation back to auth screens when logged in
   useEffect(() => {
-    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+    const unsubscribe = navigation.addListener('beforeRemove', e => {
       // If user is logged in and trying to go back to auth screens, prevent it
       if (isLoggedIn && user) {
         const targetRoute = e.data.action.payload?.name;
         if (targetRoute === 'AuthStack' || targetRoute === 'OnboardingStack') {
           e.preventDefault();
-          console.log('🚫 Navigation to auth screens blocked - user is logged in');
+          console.log(
+            '🚫 Navigation to auth screens blocked - user is logged in',
+          );
         }
       }
     });
@@ -47,10 +49,16 @@ const MainStackContent: React.FC = () => {
         <Stack.Screen name="Tabs" component={TabNavigator} />
         <Stack.Screen name="UserInfoScreen" component={UserInfoScreen} />
         <Stack.Screen name="EditProfileScreen" component={EditProfileScreen} />
-        <Stack.Screen name="ConversationScreen" component={ConversationScreen} />
-        <Stack.Screen name="FilteredContactsScreen" component={FilteredContactsScreen} />
+        <Stack.Screen
+          name="ConversationScreen"
+          component={ConversationScreen}
+        />
+        <Stack.Screen
+          name="FilteredContactsScreen"
+          component={FilteredContactsScreen}
+        />
       </Stack.Navigator>
-      
+
       {/* Side Drawer - Renders over everything */}
       <SideDrawer
         visible={isDrawerVisible}

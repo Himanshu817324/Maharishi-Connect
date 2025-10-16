@@ -85,6 +85,82 @@ export default function EditProfileScreen() {
     loadLocations();
   }, [user?.country]);
 
+  // Fetch fresh profile data if needed
+  useEffect(() => {
+    const fetchProfileData = async () => {
+      if (!user?.id || !user?.token) {
+        return;
+      }
+
+      // Check if we need to fetch fresh data (missing profile data)
+      const needsRefresh =
+        !user.fullName || !user.country || !user.state || !user.status;
+
+      if (!needsRefresh) {
+        console.log(
+          '📱 EditProfileScreen - Profile data is complete, no need to fetch',
+        );
+        return;
+      }
+
+      try {
+        console.log(
+          '📱 EditProfileScreen - Fetching fresh profile data from server...',
+        );
+
+        const profileData = await apiService.getUserProfile(
+          user.id,
+          user.token,
+        );
+        console.log(
+          '📱 EditProfileScreen - Profile API response:',
+          profileData,
+        );
+
+        if (profileData.user || profileData.data) {
+          const userProfile = profileData.user || profileData.data;
+          const location = userProfile.location || {};
+
+          console.log('📱 EditProfileScreen - Extracted user profile:', {
+            fullName: userProfile.fullName,
+            country: location.country,
+            state: location.state,
+            status: userProfile.status,
+            profilePicture: userProfile.profilePicture,
+          });
+
+          // Update form state with fresh data
+          setFullName(userProfile.fullName || user.fullName || '');
+          setSelectedCountry(location.country || user.country || '');
+          setSelectedState(location.state || user.state || '');
+          setSelectedStatus(userProfile.status || user.status || '');
+          setProfileImage(
+            userProfile.profilePicture ||
+              user.profilePicture ||
+              user.avatar ||
+              null,
+          );
+
+          console.log(
+            '✅ EditProfileScreen - Form state updated with fresh data',
+          );
+        } else {
+          console.log(
+            '⚠️ EditProfileScreen - No user profile data found in API response',
+          );
+        }
+      } catch (error) {
+        console.error(
+          '❌ EditProfileScreen - Error fetching user profile:',
+          error,
+        );
+        // Don't show error to user, just log it - they can still edit with cached data
+      }
+    };
+
+    fetchProfileData();
+  }, [user]);
+
   const openImageLibrary = async () => {
     try {
       console.log('🖼️ Opening image library...');

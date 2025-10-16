@@ -1,4 +1,10 @@
-import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+  useMemo,
+} from 'react';
 import {
   View,
   StyleSheet,
@@ -52,39 +58,46 @@ import { useKeyboardHeight } from '@/hooks/useKeyboardHeight';
 const formatDateForSeparator = (dateString: string): string => {
   const messageDate = new Date(dateString);
   const now = new Date();
-  
+
   // Get local date strings in YYYY-MM-DD format for comparison
-  const messageDateStr = messageDate.getFullYear() + '-' + 
-    String(messageDate.getMonth() + 1).padStart(2, '0') + '-' + 
+  const messageDateStr =
+    messageDate.getFullYear() +
+    '-' +
+    String(messageDate.getMonth() + 1).padStart(2, '0') +
+    '-' +
     String(messageDate.getDate()).padStart(2, '0');
-  
-  const todayStr = now.getFullYear() + '-' + 
-    String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+
+  const todayStr =
+    now.getFullYear() +
+    '-' +
+    String(now.getMonth() + 1).padStart(2, '0') +
+    '-' +
     String(now.getDate()).padStart(2, '0');
-  
+
   // Calculate yesterday
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.getFullYear() + '-' + 
-    String(yesterday.getMonth() + 1).padStart(2, '0') + '-' + 
+  const yesterdayStr =
+    yesterday.getFullYear() +
+    '-' +
+    String(yesterday.getMonth() + 1).padStart(2, '0') +
+    '-' +
     String(yesterday.getDate()).padStart(2, '0');
-  
-  
+
   if (messageDateStr === todayStr) {
     return 'Today';
   } else if (messageDateStr === yesterdayStr) {
     return 'Yesterday';
   } else {
     // Format as "Sunday 23 September" or similar
-    const options: Intl.DateTimeFormatOptions = { 
-      weekday: 'long', 
-      day: 'numeric', 
-      month: 'long' 
+    const options: Intl.DateTimeFormatOptions = {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
     };
     return messageDate.toLocaleDateString('en-US', options);
   }
 };
-
 
 // Interface for grouped message items
 interface GroupedMessageItem {
@@ -142,7 +155,6 @@ const ConversationScreen: React.FC = () => {
 
   const chat = routeChat || currentChat;
 
-
   // Auto-scroll to bottom when chat changes or messages are first loaded
   useEffect(() => {
     if (currentChatMessages.length > 0) {
@@ -169,7 +181,7 @@ const ConversationScreen: React.FC = () => {
           flatListRef.current.scrollToEnd({ animated: false });
         }
       };
-      
+
       // Try multiple times with increasing delays to ensure content is rendered
       const timeout1 = setTimeout(scrollToBottom, 100);
       const timeout2 = setTimeout(scrollToBottom, 300);
@@ -177,7 +189,7 @@ const ConversationScreen: React.FC = () => {
         scrollToBottom();
         setHasInitiallyScrolled(true);
       }, 500);
-      
+
       return () => {
         clearTimeout(timeout1);
         clearTimeout(timeout2);
@@ -224,61 +236,91 @@ const ConversationScreen: React.FC = () => {
           currentUserId: user?.id || user?.firebaseUid,
           content: message.content,
         });
-        
+
         if (message.chat_id === chat?.id) {
           console.log(
             '📨 [ConversationScreen] Incoming message received:',
             message.id,
           );
-          
+
           // Check if this is a message we sent (replace optimistic message)
-          const isFromCurrentUser = message.sender_id === user?.id || message.sender_id === user?.firebaseUid;
+          const isFromCurrentUser =
+            message.sender_id === user?.id ||
+            message.sender_id === user?.firebaseUid;
           console.log('🔍 Is from current user:', isFromCurrentUser);
-          
+
           if (isFromCurrentUser) {
             // This is our message coming back from server
-            console.log('🔄 Socket message received from current user:', message.id);
-            
+            console.log(
+              '🔄 Socket message received from current user:',
+              message.id,
+            );
+
             // Check if we already have this message (from REST API)
             const currentMessages = currentChatMessagesRef.current;
-            const existingMessage = currentMessages.find(m => 
-              m.id === message.id || 
-              (m.content === message.content && 
-               m.sender_id === message.sender_id &&
-               Math.abs(new Date(m.created_at).getTime() - new Date(message.created_at).getTime()) < 2000) // Within 2 seconds
+            const existingMessage = currentMessages.find(
+              m =>
+                m.id === message.id ||
+                (m.content === message.content &&
+                  m.sender_id === message.sender_id &&
+                  Math.abs(
+                    new Date(m.created_at).getTime() -
+                      new Date(message.created_at).getTime(),
+                  ) < 2000), // Within 2 seconds
             );
-            
+
             if (existingMessage) {
-              console.log('🔄 Message already exists, updating status:', existingMessage.id);
+              console.log(
+                '🔄 Message already exists, updating status:',
+                existingMessage.id,
+              );
               // Just update the status if needed
               if (existingMessage.status === 'sending') {
-                dispatch(updateMessage({
-                  ...existingMessage,
-                  status: 'sent',
-                }));
+                dispatch(
+                  updateMessage({
+                    ...existingMessage,
+                    status: 'sent',
+                  }),
+                );
               }
             } else {
               // Find optimistic message to replace
-              const optimisticMessage = currentMessages.find(m => 
-                m.content === message.content && 
-                m.sender_id === message.sender_id &&
-                m.id.startsWith('temp_') &&
-                Math.abs(new Date(m.created_at).getTime() - new Date(message.created_at).getTime()) < 5000 // Within 5 seconds
+              const optimisticMessage = currentMessages.find(
+                m =>
+                  m.content === message.content &&
+                  m.sender_id === message.sender_id &&
+                  m.id.startsWith('temp_') &&
+                  Math.abs(
+                    new Date(m.created_at).getTime() -
+                      new Date(message.created_at).getTime(),
+                  ) < 5000, // Within 5 seconds
               );
-              
+
               if (optimisticMessage) {
-                console.log('🔄 Replacing optimistic message with socket message:', optimisticMessage.id);
-                dispatch(removeMessage({ messageId: optimisticMessage.id, chatId: message.chat_id }));
-                dispatch(addMessage({
-                  ...message,
-                  status: 'sent' as const,
-                }));
+                console.log(
+                  '🔄 Replacing optimistic message with socket message:',
+                  optimisticMessage.id,
+                );
+                dispatch(
+                  removeMessage({
+                    messageId: optimisticMessage.id,
+                    chatId: message.chat_id,
+                  }),
+                );
+                dispatch(
+                  addMessage({
+                    ...message,
+                    status: 'sent' as const,
+                  }),
+                );
               } else {
                 console.log('🔄 Adding new socket message:', message.id);
-                dispatch(addMessage({
-                  ...message,
-                  status: 'sent' as const,
-                }));
+                dispatch(
+                  addMessage({
+                    ...message,
+                    status: 'sent' as const,
+                  }),
+                );
               }
             }
           } else {
@@ -382,7 +424,10 @@ const ConversationScreen: React.FC = () => {
           '📊 [ConversationScreen] Chat IDs match:',
           data.chatId === chat?.id,
         );
-        console.log('📊 [ConversationScreen] Socket connected:', socketService.isSocketConnected());
+        console.log(
+          '📊 [ConversationScreen] Socket connected:',
+          socketService.isSocketConnected(),
+        );
 
         if (data.chatId === chat?.id) {
           console.log(
@@ -424,7 +469,10 @@ const ConversationScreen: React.FC = () => {
           '📬 [ConversationScreen] Chat IDs match:',
           data.chatId === chat?.id,
         );
-        console.log('📬 [ConversationScreen] Socket connected:', socketService.isSocketConnected());
+        console.log(
+          '📬 [ConversationScreen] Socket connected:',
+          socketService.isSocketConnected(),
+        );
 
         if (data.chatId === chat?.id) {
           console.log(
@@ -538,7 +586,7 @@ const ConversationScreen: React.FC = () => {
 
   const loadOlderMessages = useCallback(async () => {
     if (!chat || currentChatMessages.length === 0) return;
-    
+
     const chatPagination = pagination[chat.id];
     if (!chatPagination?.hasMore || chatPagination.isLoadingOlder) return;
 
@@ -546,7 +594,7 @@ const ConversationScreen: React.FC = () => {
       dispatch(setLoadingOlderMessages({ chatId: chat.id, isLoading: true }));
       console.log('📱 Loading older messages for chat:', chat.id);
       const oldestMessage = currentChatMessages[0];
-      
+
       const result = await dispatch(
         fetchChatMessages({
           chatId: chat.id,
@@ -554,9 +602,9 @@ const ConversationScreen: React.FC = () => {
           beforeMessageId: oldestMessage.id,
         }),
       ).unwrap();
-      
+
       console.log('📱 Older messages loaded:', result);
-      
+
       // Update current chat messages after loading older ones
       dispatch(setCurrentChatMessages(chat.id));
     } catch (error) {
@@ -598,22 +646,26 @@ const ConversationScreen: React.FC = () => {
   useEffect(() => {
     if (isKeyboardVisible) {
       // ✅ FIX: Screen-aware animation duration and type
-      const animationDuration = screenInfo.isSmall ? 200 : screenInfo.isTablet ? 300 : 250;
-      
+      const animationDuration = screenInfo.isSmall
+        ? 200
+        : screenInfo.isTablet
+        ? 300
+        : 250;
+
       if (Platform.OS === 'android') {
         LayoutAnimation.configureNext({
           duration: animationDuration,
-          create: { 
-            type: 'easeInEaseOut', 
+          create: {
+            type: 'easeInEaseOut',
             property: 'opacity',
             springDamping: screenInfo.isSmall ? 0.8 : 0.9,
           },
-          update: { 
+          update: {
             type: 'easeInEaseOut',
             springDamping: screenInfo.isSmall ? 0.8 : 0.9,
           },
-          delete: { 
-            type: 'easeInEaseOut', 
+          delete: {
+            type: 'easeInEaseOut',
             property: 'opacity',
             springDamping: screenInfo.isSmall ? 0.8 : 0.9,
           },
@@ -621,30 +673,41 @@ const ConversationScreen: React.FC = () => {
       } else {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       }
-      
+
       // ✅ FIX: Screen-aware scroll timing - use minimal animation
-      const scrollDelay = screenInfo.isSmall ? 50 : screenInfo.isTablet ? 100 : 75;
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: false });
-      }, Platform.OS === 'android' ? scrollDelay : 50);
+      const scrollDelay = screenInfo.isSmall
+        ? 50
+        : screenInfo.isTablet
+        ? 100
+        : 75;
+      setTimeout(
+        () => {
+          flatListRef.current?.scrollToEnd({ animated: false });
+        },
+        Platform.OS === 'android' ? scrollDelay : 50,
+      );
     } else {
       // ✅ FIX: Screen-aware animation for keyboard hide
-      const animationDuration = screenInfo.isSmall ? 200 : screenInfo.isTablet ? 300 : 250;
-      
+      const animationDuration = screenInfo.isSmall
+        ? 200
+        : screenInfo.isTablet
+        ? 300
+        : 250;
+
       if (Platform.OS === 'android') {
         LayoutAnimation.configureNext({
           duration: animationDuration,
-          create: { 
-            type: 'easeInEaseOut', 
+          create: {
+            type: 'easeInEaseOut',
             property: 'opacity',
             springDamping: screenInfo.isSmall ? 0.8 : 0.9,
           },
-          update: { 
+          update: {
             type: 'easeInEaseOut',
             springDamping: screenInfo.isSmall ? 0.8 : 0.9,
           },
-          delete: { 
-            type: 'easeInEaseOut', 
+          delete: {
+            type: 'easeInEaseOut',
             property: 'opacity',
             springDamping: screenInfo.isSmall ? 0.8 : 0.9,
           },
@@ -655,18 +718,22 @@ const ConversationScreen: React.FC = () => {
     }
   }, [isKeyboardVisible, screenInfo]);
 
-  const scrollToBottom = useCallback((force = false, animated = true) => {
-    if (force || shouldAutoScroll) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated });
-      }, 50);
-    }
-  }, [shouldAutoScroll]);
+  const scrollToBottom = useCallback(
+    (force = false, animated = true) => {
+      if (force || shouldAutoScroll) {
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated });
+        }, 50);
+      }
+    },
+    [shouldAutoScroll],
+  );
 
   const handleScroll = (event: any) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    const isAtBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 20;
-    
+    const isAtBottom =
+      contentOffset.y + layoutMeasurement.height >= contentSize.height - 20;
+
     if (isAtBottom) {
       setShouldAutoScroll(true);
       setIsUserScrolling(false);
@@ -695,7 +762,7 @@ const ConversationScreen: React.FC = () => {
         size: number;
         mimeType: string;
       };
-    }
+    },
   ) => {
     if (!chat || !content.trim()) return;
 
@@ -726,7 +793,10 @@ const ConversationScreen: React.FC = () => {
         };
 
         // Add optimistic message to Redux store immediately
-        console.log('🔄 Adding optimistic message to Redux store:', optimisticMessage.id);
+        console.log(
+          '🔄 Adding optimistic message to Redux store:',
+          optimisticMessage.id,
+        );
         dispatch(addMessage(optimisticMessage));
 
         // Update the chat's last message optimistically
@@ -767,32 +837,48 @@ const ConversationScreen: React.FC = () => {
 
           if (response && response.data) {
             console.log('💾 Message persisted to server:', response.data.id);
-            
+
             // Check if we already have this message (from socket)
             const currentMessages = currentChatMessagesRef.current;
-            const existingMessage = currentMessages.find(m => 
-              m.id === response.data.id || 
-              (m.content === response.data.content && 
-               m.sender_id === response.data.sender_id &&
-               Math.abs(new Date(m.created_at).getTime() - new Date(response.data.created_at).getTime()) < 2000) // Within 2 seconds
+            const existingMessage = currentMessages.find(
+              m =>
+                m.id === response.data.id ||
+                (m.content === response.data.content &&
+                  m.sender_id === response.data.sender_id &&
+                  Math.abs(
+                    new Date(m.created_at).getTime() -
+                      new Date(response.data.created_at).getTime(),
+                  ) < 2000), // Within 2 seconds
             );
-            
+
             if (existingMessage) {
-              console.log('🔄 Message already exists from socket, updating status:', existingMessage.id);
+              console.log(
+                '🔄 Message already exists from socket, updating status:',
+                existingMessage.id,
+              );
               // Just update the status if needed
               if (existingMessage.status === 'sending') {
-                dispatch(updateMessage({
-                  ...existingMessage,
-                  status: 'sent',
-                }));
+                dispatch(
+                  updateMessage({
+                    ...existingMessage,
+                    status: 'sent',
+                  }),
+                );
               }
             } else {
               // Remove optimistic message and add real one from server
-              dispatch(removeMessage({ messageId: optimisticMessage.id, chatId: chat.id }));
-              dispatch(addMessage({
-                ...response.data,
-                status: 'sent' as const,
-              }));
+              dispatch(
+                removeMessage({
+                  messageId: optimisticMessage.id,
+                  chatId: chat.id,
+                }),
+              );
+              dispatch(
+                addMessage({
+                  ...response.data,
+                  status: 'sent' as const,
+                }),
+              );
             }
 
             // Update the chat's last message with server data
@@ -807,16 +893,18 @@ const ConversationScreen: React.FC = () => {
                 },
               }),
             );
-            
+
             console.log('✅ Message successfully persisted and updated');
           }
         } catch (restError) {
           console.error('❌ REST API persistence failed:', restError);
           // Update optimistic message to failed status
-          dispatch(updateMessage({
-            ...optimisticMessage,
-            status: 'failed',
-          }));
+          dispatch(
+            updateMessage({
+              ...optimisticMessage,
+              status: 'failed',
+            }),
+          );
         }
       } else {
         console.log('📤 Sending message via REST API (socket not connected)');
@@ -1013,73 +1101,86 @@ const ConversationScreen: React.FC = () => {
     );
   };
 
-
   // Function to group messages with day separators - memoized for performance
-  const groupMessagesWithSeparators = useCallback((messages: MessageData[]): GroupedMessageItem[] => {
-    if (messages.length === 0) return [];
-    
-    // Sort messages by created_at in ascending order (oldest first) for proper display
-    const sortedMessages = [...messages].sort((a, b) => 
-      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    );
-    
-    console.log('📱 [groupMessagesWithSeparators] Processing messages:', {
-      messageCount: sortedMessages.length,
-      messageIds: sortedMessages.map(m => m.id),
-      firstMessageTime: sortedMessages[0]?.created_at,
-      lastMessageTime: sortedMessages[sortedMessages.length - 1]?.created_at
-    });
-    
-    const groupedItems: GroupedMessageItem[] = [];
-    let lastDate = '';
-    
-    sortedMessages.forEach((message, index) => {
-      const messageDate = new Date(message.created_at);
-      // Get local date string in YYYY-MM-DD format
-      const currentDate = messageDate.getFullYear() + '-' + 
-        String(messageDate.getMonth() + 1).padStart(2, '0') + '-' + 
-        String(messageDate.getDate()).padStart(2, '0');
-      
-      // Add separator if this is a new day
-      if (currentDate !== lastDate) {
-        const formattedDate = formatDateForSeparator(message.created_at);
-        
+  const groupMessagesWithSeparators = useCallback(
+    (messages: MessageData[]): GroupedMessageItem[] => {
+      if (messages.length === 0) return [];
+
+      // Sort messages by created_at in ascending order (oldest first) for proper display
+      const sortedMessages = [...messages].sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      );
+
+      console.log('📱 [groupMessagesWithSeparators] Processing messages:', {
+        messageCount: sortedMessages.length,
+        messageIds: sortedMessages.map(m => m.id),
+        firstMessageTime: sortedMessages[0]?.created_at,
+        lastMessageTime: sortedMessages[sortedMessages.length - 1]?.created_at,
+      });
+
+      const groupedItems: GroupedMessageItem[] = [];
+      let lastDate = '';
+
+      sortedMessages.forEach((message, index) => {
+        const messageDate = new Date(message.created_at);
+        // Get local date string in YYYY-MM-DD format
+        const currentDate =
+          messageDate.getFullYear() +
+          '-' +
+          String(messageDate.getMonth() + 1).padStart(2, '0') +
+          '-' +
+          String(messageDate.getDate()).padStart(2, '0');
+
+        // Add separator if this is a new day
+        if (currentDate !== lastDate) {
+          const formattedDate = formatDateForSeparator(message.created_at);
+
+          groupedItems.push({
+            type: 'separator',
+            data: {
+              date: currentDate,
+              formattedDate: formattedDate,
+            },
+          });
+          lastDate = currentDate;
+        }
+
+        // Add the message
         groupedItems.push({
-          type: 'separator',
-          data: {
-            date: currentDate,
-            formattedDate: formattedDate
-          }
+          type: 'message',
+          data: message,
         });
-        lastDate = currentDate;
-      }
-      
-      // Add the message
-      groupedItems.push({
-        type: 'message',
-        data: message
+
+        console.log(
+          `📱 [groupMessagesWithSeparators] Added message ${index + 1}/${
+            sortedMessages.length
+          }:`,
+          {
+            messageId: message.id,
+            content: message.content.substring(0, 50) + '...',
+            timestamp: message.created_at,
+          },
+        );
       });
-      
-      console.log(`📱 [groupMessagesWithSeparators] Added message ${index + 1}/${sortedMessages.length}:`, {
-        messageId: message.id,
-        content: message.content.substring(0, 50) + '...',
-        timestamp: message.created_at
+
+      console.log('📱 [groupMessagesWithSeparators] Final grouped items:', {
+        totalItems: groupedItems.length,
+        messageItems: groupedItems.filter(item => item.type === 'message')
+          .length,
+        separatorItems: groupedItems.filter(item => item.type === 'separator')
+          .length,
       });
-    });
-    
-    console.log('📱 [groupMessagesWithSeparators] Final grouped items:', {
-      totalItems: groupedItems.length,
-      messageItems: groupedItems.filter(item => item.type === 'message').length,
-      separatorItems: groupedItems.filter(item => item.type === 'separator').length
-    });
-    
-    return groupedItems;
-  }, []);
+
+      return groupedItems;
+    },
+    [],
+  );
 
   // Get grouped messages for rendering - memoized for performance
-  const groupedMessages = useMemo(() => 
-    groupMessagesWithSeparators(currentChatMessages), 
-    [groupMessagesWithSeparators, currentChatMessages]
+  const groupedMessages = useMemo(
+    () => groupMessagesWithSeparators(currentChatMessages),
+    [groupMessagesWithSeparators, currentChatMessages],
   );
 
   // Debug log for message grouping
@@ -1095,20 +1196,18 @@ const ConversationScreen: React.FC = () => {
       duplicateCheck: (() => {
         const messageIds = currentChatMessages.map(m => m.id);
         const uniqueIds = new Set(messageIds);
-        const duplicates = messageIds.filter((id, index) => messageIds.indexOf(id) !== index);
+        const duplicates = messageIds.filter(
+          (id, index) => messageIds.indexOf(id) !== index,
+        );
         return {
           hasDuplicates: duplicates.length > 0,
           duplicateIds: duplicates,
           totalUnique: uniqueIds.size,
-          totalMessages: messageIds.length
+          totalMessages: messageIds.length,
         };
-      })()
+      })(),
     });
   }, [groupedMessages, currentChatMessages, chat?.id]);
-
-
-
-
 
   const handleBack = () => {
     navigation.goBack();
@@ -1141,11 +1240,15 @@ const ConversationScreen: React.FC = () => {
   // Day separator component
   const renderDaySeparator = (formattedDate: string) => (
     <View style={styles.daySeparatorContainer}>
-      <View style={[styles.daySeparatorLine, { backgroundColor: colors.border }]} />
+      <View
+        style={[styles.daySeparatorLine, { backgroundColor: colors.border }]}
+      />
       <Text style={[styles.daySeparatorText, { color: colors.textSecondary }]}>
         {formattedDate}
       </Text>
-      <View style={[styles.daySeparatorLine, { backgroundColor: colors.border }]} />
+      <View
+        style={[styles.daySeparatorLine, { backgroundColor: colors.border }]}
+      />
     </View>
   );
 
@@ -1158,7 +1261,10 @@ const ConversationScreen: React.FC = () => {
   }) => {
     // Handle day separator
     if (item.type === 'separator') {
-      const separatorData = item.data as { date: string; formattedDate: string };
+      const separatorData = item.data as {
+        date: string;
+        formattedDate: string;
+      };
       return renderDaySeparator(separatorData.formattedDate);
     }
 
@@ -1169,7 +1275,7 @@ const ConversationScreen: React.FC = () => {
       messageData.sender_id === currentUserId ||
       messageData.sender_id === user?.id ||
       messageData.sender_id === user?.firebaseUid;
-    
+
     // Find previous message (skip separators)
     let previousMessage: MessageData | null = null;
     for (let i = index - 1; i >= 0; i--) {
@@ -1198,7 +1304,6 @@ const ConversationScreen: React.FC = () => {
       timestamp: messageData.created_at,
       messageType: messageData.message_type,
     });
-
 
     return (
       <MessageBubble
@@ -1284,7 +1389,7 @@ const ConversationScreen: React.FC = () => {
           onInfo={handleInfo}
           onMore={handleMore}
         />
-        
+
         <View style={[styles.container, styles.centerContainer]}>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.tabBarBG} />
@@ -1306,10 +1411,14 @@ const ConversationScreen: React.FC = () => {
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : (isKeyboardVisible ? 30 : 5)}
+        keyboardVerticalOffset={
+          Platform.OS === 'ios' ? 0 : isKeyboardVisible ? 30 : 5
+        }
         enabled={true}
       >
-        <View style={[styles.screen, { backgroundColor: colors.chatBackground }]}>
+        <View
+          style={[styles.screen, { backgroundColor: colors.chatBackground }]}
+        >
           <ChatHeader
             chat={chat}
             currentUserId={user?.id || user?.firebaseUid}
@@ -1322,17 +1431,20 @@ const ConversationScreen: React.FC = () => {
             backgroundColor={colors.chatBackground}
           />
 
-          <View 
+          <View
             style={[
               styles.messageListContainer,
-              Platform.OS === 'android' && isKeyboardVisible && {
-                paddingBottom: 10, // Small padding to prevent messages from touching input
-              },
+              Platform.OS === 'android' &&
+                isKeyboardVisible && {
+                  paddingBottom: 10, // Small padding to prevent messages from touching input
+                },
             ]}
           >
             {pagination[chat?.id || '']?.isLoadingOlder && (
               <View style={styles.loadingIndicator}>
-                <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+                <Text
+                  style={[styles.loadingText, { color: colors.textSecondary }]}
+                >
                   Loading older messages...
                 </Text>
               </View>
@@ -1342,7 +1454,9 @@ const ConversationScreen: React.FC = () => {
               data={groupedMessages}
               keyExtractor={(item, index) => {
                 if (item.type === 'separator') {
-                  return `separator-${(item.data as { date: string; formattedDate: string }).date}`;
+                  return `separator-${
+                    (item.data as { date: string; formattedDate: string }).date
+                  }`;
                 } else {
                   const message = item.data as MessageData;
                   // Use a combination of ID and index to ensure uniqueness
@@ -1363,11 +1477,13 @@ const ConversationScreen: React.FC = () => {
                   setTimeout(() => {
                     flatListRef.current?.scrollToEnd({ animated: false });
                     setHasInitiallyScrolled(true);
-                    console.log('📍 FlatList layout complete - scrolling to bottom');
+                    console.log(
+                      '📍 FlatList layout complete - scrolling to bottom',
+                    );
                   }, 100);
                 }
               }}
-              onScrollToIndexFailed={(info) => {
+              onScrollToIndexFailed={info => {
                 // Fallback to scrolling to end if scrollToIndex fails
                 console.log('ScrollToIndex failed:', info);
                 setTimeout(() => {
@@ -1405,11 +1521,9 @@ const ConversationScreen: React.FC = () => {
           </View>
         </View>
       </KeyboardAvoidingView>
-
-
-      </CustomSafeAreaView>
-    );
-  };
+    </CustomSafeAreaView>
+  );
+};
 
 const styles = StyleSheet.create({
   container: {

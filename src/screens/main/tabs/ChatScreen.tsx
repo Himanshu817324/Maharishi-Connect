@@ -10,6 +10,8 @@ import {
   TextInput,
   TouchableWithoutFeedback,
   ScrollView,
+  BackHandler,
+  Alert,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
@@ -17,7 +19,11 @@ import OptimizedIcon from '@/components/atoms/ui/OptimizedIcon';
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 import { RootState, AppDispatch } from '@/store';
-import { fetchUserChats, setCurrentChat, clearUnreadCount } from '@/store/slices/chatSlice';
+import {
+  fetchUserChats,
+  setCurrentChat,
+  clearUnreadCount,
+} from '@/store/slices/chatSlice';
 import { socketService } from '@/services/socketService';
 import { ChatData } from '@/services/chatService';
 import { useDrawer } from '@/contexts/DrawerContext';
@@ -26,19 +32,23 @@ import { useFilter } from '@/contexts/FilterContext';
 // Chat item separator component
 const ChatItemSeparator: React.FC = () => {
   const { colors } = useTheme();
-  return <View style={[styles.chatItemSeparator, { backgroundColor: colors.border }]} />;
+  return (
+    <View
+      style={[styles.chatItemSeparator, { backgroundColor: colors.border }]}
+    />
+  );
 };
 
 const ChatScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
-  console.log('🎨 ChatScreen colors:', { 
-    background: colors.background, 
-    isDark, 
-    text: colors.text 
+  console.log('🎨 ChatScreen colors:', {
+    background: colors.background,
+    isDark,
+    text: colors.text,
   });
   const navigation = useNavigation();
   const dispatch = useDispatch<AppDispatch>();
-  
+
   const { chats, loading } = useSelector((state: RootState) => state.chat);
   const { user } = useSelector((state: RootState) => state.auth);
   const { openDrawer } = useDrawer();
@@ -46,24 +56,29 @@ const ChatScreen: React.FC = () => {
   const [searchText, setSearchText] = useState('');
   const { activeFilter, setActiveFilter } = useFilter();
 
-  const getChatTitle = useCallback((chat: ChatData) => {
-    if (chat.type === 'group') {
-      return chat.name || 'Group Chat';
-    } else {
-      const otherParticipant = chat.participants.find(
-        p => p.user_id !== user?.id && p.user_id !== user?.firebaseUid
-      );
-      return otherParticipant?.userDetails?.localName || 
-             otherParticipant?.userDetails?.fullName || 
-             otherParticipant?.userDetails?.phoneNumber || 
-             'Unknown User';
-    }
-  }, [user?.id, user?.firebaseUid]);
+  const getChatTitle = useCallback(
+    (chat: ChatData) => {
+      if (chat.type === 'group') {
+        return chat.name || 'Group Chat';
+      } else {
+        const otherParticipant = chat.participants.find(
+          p => p.user_id !== user?.id && p.user_id !== user?.firebaseUid,
+        );
+        return (
+          otherParticipant?.userDetails?.localName ||
+          otherParticipant?.userDetails?.fullName ||
+          otherParticipant?.userDetails?.phoneNumber ||
+          'Unknown User'
+        );
+      }
+    },
+    [user?.id, user?.firebaseUid],
+  );
 
   // Filter chats based on active filter and search text - memoized for performance
   const filteredChats = useMemo(() => {
     let filtered = chats;
-    
+
     // Apply filter based on active filter
     switch (activeFilter) {
       case 'direct':
@@ -73,7 +88,9 @@ const ChatScreen: React.FC = () => {
         filtered = chats.filter(chat => chat.type === 'group');
         break;
       case 'unread':
-        filtered = chats.filter(chat => chat.unread_count && chat.unread_count > 0);
+        filtered = chats.filter(
+          chat => chat.unread_count && chat.unread_count > 0,
+        );
         break;
       case 'archived':
         // For now, we'll show chats that haven't been active recently
@@ -91,18 +108,20 @@ const ChatScreen: React.FC = () => {
         filtered = chats;
         break;
     }
-    
+
     // Apply search filter if search text exists
     if (searchText.trim()) {
       const searchLower = searchText.toLowerCase();
       filtered = filtered.filter(chat => {
         const chatTitle = getChatTitle(chat).toLowerCase();
         const lastMessage = chat.last_message?.content?.toLowerCase() || '';
-        
-        return chatTitle.includes(searchLower) || lastMessage.includes(searchLower);
+
+        return (
+          chatTitle.includes(searchLower) || lastMessage.includes(searchLower)
+        );
       });
     }
-    
+
     console.log('📱 [ChatScreen] Filtered chats updated:', {
       totalChats: chats.length,
       filteredCount: filtered.length,
@@ -113,10 +132,10 @@ const ChatScreen: React.FC = () => {
         name: getChatTitle(chat),
         unread_count: chat.unread_count || 0,
         last_message_time: chat.last_message?.created_at,
-        updated_at: chat.updated_at
-      }))
+        updated_at: chat.updated_at,
+      })),
     });
-    
+
     return filtered;
   }, [chats, activeFilter, searchText, getChatTitle]);
 
@@ -136,39 +155,54 @@ const ChatScreen: React.FC = () => {
     setSearchText('');
   }, []);
 
-  const loadChats = useCallback(async (forceRefresh: boolean = false) => {
-    try {
-      await dispatch(fetchUserChats(forceRefresh)).unwrap();
-    } catch (error) {
-      console.error('Error loading chats:', error);
-    }
-  }, [dispatch]);
+  const loadChats = useCallback(
+    async (forceRefresh: boolean = false) => {
+      try {
+        await dispatch(fetchUserChats(forceRefresh)).unwrap();
+      } catch (error) {
+        console.error('Error loading chats:', error);
+      }
+    },
+    [dispatch],
+  );
 
   const setupSocketListeners = useCallback(() => {
     // Listen for new chats being created
-    const removeChatCreatedListener = socketService.addChatCreatedListener((chat: ChatData) => {
-      console.log('💬 [ChatScreen] New chat created:', chat.id);
-      dispatch(setCurrentChat(chat));
-      // Force refresh chats when a new chat is created
-      loadChats(true);
-    });
-    
-    // Listen for new messages to update chat list
-    const removeMessageListener = socketService.addMessageListener((message: any) => {
-      console.log('📨 [ChatScreen] New message received for chat:', message.chat_id);
-      // Force refresh chats to update last message and unread count
-      loadChats(true);
-    });
-    
-    // Listen for connection status changes
-    const removeConnectionListener = socketService.addConnectionListener((connected: boolean) => {
-      console.log('🔌 [ChatScreen] Socket connection status changed:', connected);
-      if (connected) {
-        // Refresh chats when reconnected
+    const removeChatCreatedListener = socketService.addChatCreatedListener(
+      (chat: ChatData) => {
+        console.log('💬 [ChatScreen] New chat created:', chat.id);
+        dispatch(setCurrentChat(chat));
+        // Force refresh chats when a new chat is created
         loadChats(true);
-      }
-    });
-    
+      },
+    );
+
+    // Listen for new messages to update chat list
+    const removeMessageListener = socketService.addMessageListener(
+      (message: any) => {
+        console.log(
+          '📨 [ChatScreen] New message received for chat:',
+          message.chat_id,
+        );
+        // Force refresh chats to update last message and unread count
+        loadChats(true);
+      },
+    );
+
+    // Listen for connection status changes
+    const removeConnectionListener = socketService.addConnectionListener(
+      (connected: boolean) => {
+        console.log(
+          '🔌 [ChatScreen] Socket connection status changed:',
+          connected,
+        );
+        if (connected) {
+          // Refresh chats when reconnected
+          loadChats(true);
+        }
+      },
+    );
+
     return () => {
       removeChatCreatedListener();
       removeMessageListener();
@@ -179,13 +213,13 @@ const ChatScreen: React.FC = () => {
   useEffect(() => {
     loadChats();
     const cleanup = setupSocketListeners();
-    
+
     // Setup periodic refresh every 30 seconds (similar to reference implementation)
     const refreshInterval = setInterval(() => {
       console.log('🔄 [ChatScreen] Periodic chat list refresh');
       loadChats(true);
     }, 30000); // 30 seconds
-    
+
     return () => {
       if (cleanup) {
         cleanup();
@@ -197,59 +231,98 @@ const ChatScreen: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       loadChats(true); // Force refresh on focus
-    }, [loadChats])
+    }, [loadChats]),
   );
 
-  const handleChatPress = useCallback((chat: ChatData) => {
-    // Clear unread count immediately when chat is opened
-    if (chat.unread_count && chat.unread_count > 0) {
-      dispatch(clearUnreadCount(chat.id));
-    }
-    
-    dispatch(setCurrentChat(chat));
-    (navigation as any).navigate('ConversationScreen', { chat });
-  }, [dispatch, navigation]);
+  // Handle back button press
+  useEffect(() => {
+    const backAction = () => {
+      Alert.alert('Exit App', 'Are you sure you want to close the app?', [
+        {
+          text: 'Cancel',
+          onPress: () => null,
+          style: 'cancel',
+        },
+        {
+          text: 'Exit',
+          onPress: () => BackHandler.exitApp(),
+        },
+      ]);
+      return true; // Prevent default behavior
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction,
+    );
+
+    return () => backHandler.remove();
+  }, []);
+
+  const handleChatPress = useCallback(
+    (chat: ChatData) => {
+      // Clear unread count immediately when chat is opened
+      if (chat.unread_count && chat.unread_count > 0) {
+        dispatch(clearUnreadCount(chat.id));
+      }
+
+      dispatch(setCurrentChat(chat));
+      (navigation as any).navigate('ConversationScreen', { chat });
+    },
+    [dispatch, navigation],
+  );
 
   const handleCreateChat = useCallback(() => {
     (navigation as any).navigate('FilteredContactsScreen');
   }, [navigation]);
 
-  const getChatSubtitle = useCallback((chat: ChatData) => {
-    if (chat.last_message) {
-      const isFromCurrentUser = chat.last_message.sender_id === user?.id || chat.last_message.sender_id === user?.firebaseUid;
-      
-      // Get message type indicator
-      const getMessageTypeIndicator = (message: any) => {
-        if (!message.message_type) return '';
-        
-        switch (message.message_type) {
-          case 'image':
-            return '📷 ';
-          case 'video':
-            return '🎥 ';
-          case 'audio':
-            return '🎵 ';
-          case 'file':
-            return '📄 ';
-          default:
-            return '';
+  const getChatSubtitle = useCallback(
+    (chat: ChatData) => {
+      if (chat.last_message) {
+        const isFromCurrentUser =
+          chat.last_message.sender_id === user?.id ||
+          chat.last_message.sender_id === user?.firebaseUid;
+
+        // Get message type indicator
+        const getMessageTypeIndicator = (message: any) => {
+          if (!message.message_type) return '';
+
+          switch (message.message_type) {
+            case 'image':
+              return '📷 ';
+            case 'video':
+              return '🎥 ';
+            case 'audio':
+              return '🎵 ';
+            case 'file':
+              return '📄 ';
+            default:
+              return '';
+          }
+        };
+
+        const typeIndicator = getMessageTypeIndicator(chat.last_message);
+        const prefix = isFromCurrentUser ? 'You: ' : '';
+
+        // If it's a media message, show the type indicator
+        if (
+          chat.last_message.message_type &&
+          chat.last_message.message_type !== 'text'
+        ) {
+          return `${prefix}${typeIndicator}${
+            chat.last_message.content ||
+            getMediaTypeText(chat.last_message.message_type)
+          }`;
         }
-      };
-      
-      const typeIndicator = getMessageTypeIndicator(chat.last_message);
-      const prefix = isFromCurrentUser ? 'You: ' : '';
-      
-      // If it's a media message, show the type indicator
-      if (chat.last_message.message_type && chat.last_message.message_type !== 'text') {
-        return `${prefix}${typeIndicator}${chat.last_message.content || getMediaTypeText(chat.last_message.message_type)}`;
+
+        return `${prefix}${chat.last_message.content}`;
       }
-      
-      return `${prefix}${chat.last_message.content}`;
-    }
-    return chat.type === 'group' 
-      ? `${chat.participants.length} members`
-      : 'No messages yet';
-  }, [user?.id, user?.firebaseUid]);
+      return chat.type === 'group'
+        ? `${chat.participants.length} members`
+        : 'No messages yet';
+    },
+    [user?.id, user?.firebaseUid],
+  );
 
   const getMediaTypeText = (messageType: string) => {
     switch (messageType) {
@@ -266,28 +339,45 @@ const ChatScreen: React.FC = () => {
     }
   };
 
-  const getChatAvatarInitials = useCallback((chat: ChatData) => {
-    if (chat.type === 'group') {
-      return chat.name?.charAt(0).toUpperCase() || 'G';
-    } else {
-      const otherParticipant = chat.participants.find(
-        p => p.user_id !== user?.id && p.user_id !== user?.firebaseUid
-      );
-      const name = otherParticipant?.userDetails?.localName || otherParticipant?.userDetails?.fullName;
-      return name?.charAt(0).toUpperCase() || 'U';
-    }
-  }, [user?.id, user?.firebaseUid]);
+  const getChatAvatarInitials = useCallback(
+    (chat: ChatData) => {
+      if (chat.type === 'group') {
+        return chat.name?.charAt(0).toUpperCase() || 'G';
+      } else {
+        const otherParticipant = chat.participants.find(
+          p => p.user_id !== user?.id && p.user_id !== user?.firebaseUid,
+        );
+        const name =
+          otherParticipant?.userDetails?.localName ||
+          otherParticipant?.userDetails?.fullName;
+        return name?.charAt(0).toUpperCase() || 'U';
+      }
+    },
+    [user?.id, user?.firebaseUid],
+  );
 
-  const getAvatarColor = useCallback((chat: ChatData) => {
-    const avatarColors = [
-      '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', 
-      '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2',
-      '#F8B500', '#52B788', '#E63946', '#457B9D'
-    ];
-    const title = getChatTitle(chat);
-    const index = title.charCodeAt(0) % avatarColors.length;
-    return avatarColors[index];
-  }, [getChatTitle]);
+  const getAvatarColor = useCallback(
+    (chat: ChatData) => {
+      const avatarColors = [
+        '#FF6B6B',
+        '#4ECDC4',
+        '#45B7D1',
+        '#FFA07A',
+        '#98D8C8',
+        '#F7DC6F',
+        '#BB8FCE',
+        '#85C1E2',
+        '#F8B500',
+        '#52B788',
+        '#E63946',
+        '#457B9D',
+      ];
+      const title = getChatTitle(chat);
+      const index = title.charCodeAt(0) % avatarColors.length;
+      return avatarColors[index];
+    },
+    [getChatTitle],
+  );
 
   const formatLastMessageTime = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -310,107 +400,138 @@ const ChatScreen: React.FC = () => {
     }
   };
 
-  const renderChatItem = useCallback(({ item }: { item: ChatData }) => {
-    const avatarColor = getAvatarColor(item);
-    const hasUnread = item.unread_count && item.unread_count > 0;
-    
+  const renderChatItem = useCallback(
+    ({ item }: { item: ChatData }) => {
+      const avatarColor = getAvatarColor(item);
+      const hasUnread = item.unread_count && item.unread_count > 0;
 
-    const chatItemStyle = [
-      styles.chatItem,
-      { 
-        borderLeftColor: hasUnread ? colors.accent : 'transparent'
-      }
-    ];
+      const chatItemStyle = [
+        styles.chatItem,
+        {
+          borderLeftColor: hasUnread ? colors.accent : 'transparent',
+        },
+      ];
 
-    return (
-      <TouchableOpacity
-        style={chatItemStyle}
-        onPress={() => handleChatPress(item)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.avatar}>
-          {(() => {
-            if (item.type === 'group') {
-              return (
-                <View style={[styles.avatarPlaceholder, { backgroundColor: avatarColor }]}>
-                  <Text style={styles.avatarText}>
-                    {getChatAvatarInitials(item)}
-                  </Text>
-                  <View style={styles.groupBadge}>
-                    <OptimizedIcon name="people" size={moderateScale(10)} color="#FFFFFF" />
-                  </View>
-                </View>
-              );
-            } else {
-              const otherParticipant = item.participants.find(
-                p => p.user_id !== user?.id && p.user_id !== user?.firebaseUid
-              );
-              const profilePicture = otherParticipant?.userDetails?.localProfilePicture || 
-                                   otherParticipant?.userDetails?.profilePicture;
-
-              if (profilePicture) {
+      return (
+        <TouchableOpacity
+          style={chatItemStyle}
+          onPress={() => handleChatPress(item)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.avatar}>
+            {(() => {
+              if (item.type === 'group') {
                 return (
-                  <Image
-                    source={{ uri: profilePicture }}
-                    style={styles.avatarImage}
-                    defaultSource={require('@/assets/logo.png')}
-                  />
-                );
-              } else {
-                return (
-                  <View style={[styles.avatarPlaceholder, { backgroundColor: avatarColor }]}>
+                  <View
+                    style={[
+                      styles.avatarPlaceholder,
+                      { backgroundColor: avatarColor },
+                    ]}
+                  >
                     <Text style={styles.avatarText}>
                       {getChatAvatarInitials(item)}
                     </Text>
+                    <View style={styles.groupBadge}>
+                      <OptimizedIcon
+                        name="people"
+                        size={moderateScale(10)}
+                        color="#FFFFFF"
+                      />
+                    </View>
                   </View>
                 );
+              } else {
+                const otherParticipant = item.participants.find(
+                  p =>
+                    p.user_id !== user?.id && p.user_id !== user?.firebaseUid,
+                );
+                const profilePicture =
+                  otherParticipant?.userDetails?.localProfilePicture ||
+                  otherParticipant?.userDetails?.profilePicture;
+
+                if (profilePicture) {
+                  return (
+                    <Image
+                      source={{ uri: profilePicture }}
+                      style={styles.avatarImage}
+                      defaultSource={require('@/assets/logo.png')}
+                    />
+                  );
+                } else {
+                  return (
+                    <View
+                      style={[
+                        styles.avatarPlaceholder,
+                        { backgroundColor: avatarColor },
+                      ]}
+                    >
+                      <Text style={styles.avatarText}>
+                        {getChatAvatarInitials(item)}
+                      </Text>
+                    </View>
+                  );
+                }
               }
-            }
-          })()}
-        </View>
-        
-        <View style={styles.chatContent}>
-          <View style={styles.chatHeader}>
-            <Text 
-              style={[
-                styles.chatTitle, 
-                { color: colors.text },
-                hasUnread ? styles.chatTitleUnread : null
-              ]} 
-              numberOfLines={1}
-            >
-              {getChatTitle(item)}
-            </Text>
-            {item.last_message && (
-              <Text style={styles.chatTime}>
-                {formatLastMessageTime(item.last_message.created_at)}
+            })()}
+          </View>
+
+          <View style={styles.chatContent}>
+            <View style={styles.chatHeader}>
+              <Text
+                style={[
+                  styles.chatTitle,
+                  { color: colors.text },
+                  hasUnread ? styles.chatTitleUnread : null,
+                ]}
+                numberOfLines={1}
+              >
+                {getChatTitle(item)}
               </Text>
-            )}
-          </View>
-          
-          <View style={styles.chatSubtitle}>
-            <Text 
-              style={[
-                styles.chatSubtitleText, 
-                { color: colors.textSecondary },
-                hasUnread ? styles.chatSubtitleUnread : null
-              ]} 
-              numberOfLines={2}
-            >
-              {getChatSubtitle(item)}
-            </Text>
-            {hasUnread && (
-              <View style={[styles.unreadBadge, { backgroundColor: colors.primary }]}>
-                <Text style={styles.unreadText}>
-                  {(item.unread_count || 0) > 99 ? '99+' : item.unread_count}
+              {item.last_message && (
+                <Text style={styles.chatTime}>
+                  {formatLastMessageTime(item.last_message.created_at)}
                 </Text>
-              </View>
-            )}
+              )}
+            </View>
+
+            <View style={styles.chatSubtitle}>
+              <Text
+                style={[
+                  styles.chatSubtitleText,
+                  { color: colors.textSecondary },
+                  hasUnread ? styles.chatSubtitleUnread : null,
+                ]}
+                numberOfLines={2}
+              >
+                {getChatSubtitle(item)}
+              </Text>
+              {hasUnread && (
+                <View
+                  style={[
+                    styles.unreadBadge,
+                    { backgroundColor: colors.primary },
+                  ]}
+                >
+                  <Text style={styles.unreadText}>
+                    {(item.unread_count || 0) > 99 ? '99+' : item.unread_count}
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
-        </View>
-      </TouchableOpacity>
-    );
-  }, [user, colors, getAvatarColor, getChatAvatarInitials, getChatSubtitle, getChatTitle, handleChatPress]);
+        </TouchableOpacity>
+      );
+    },
+    [
+      user,
+      colors,
+      getAvatarColor,
+      getChatAvatarInitials,
+      getChatSubtitle,
+      getChatTitle,
+      handleChatPress,
+    ],
+  );
 
   const renderEmptyState = useCallback(() => {
     const getEmptyStateContent = () => {
@@ -452,8 +573,17 @@ const ChatScreen: React.FC = () => {
 
     return (
       <View style={styles.emptyContainer}>
-        <View style={[styles.emptyIconContainer, { backgroundColor: colors.background }]}>
-          <OptimizedIcon name={emptyContent.icon} size={moderateScale(56)} color={colors.textSecondary} />
+        <View
+          style={[
+            styles.emptyIconContainer,
+            { backgroundColor: colors.background },
+          ]}
+        >
+          <OptimizedIcon
+            name={emptyContent.icon}
+            size={moderateScale(56)}
+            color={colors.textSecondary}
+          />
         </View>
         <Text style={[styles.emptyTitle, { color: colors.text }]}>
           {emptyContent.title}
@@ -466,7 +596,11 @@ const ChatScreen: React.FC = () => {
             style={[styles.emptyButton, { backgroundColor: colors.tabBarBG }]}
             onPress={handleCreateChat}
           >
-            <OptimizedIcon name="add-circle-outline" size={moderateScale(20)} color="#FFFFFF" />
+            <OptimizedIcon
+              name="add-circle-outline"
+              size={moderateScale(20)}
+              color="#FFFFFF"
+            />
             <Text style={styles.emptyButtonText}>Start Chatting</Text>
           </TouchableOpacity>
         )}
@@ -474,10 +608,15 @@ const ChatScreen: React.FC = () => {
     );
   }, [colors, handleCreateChat, activeFilter]);
 
-
   if (loading && chats.length === 0) {
     return (
-      <View style={[styles.container, styles.centerContainer, { backgroundColor: colors.background }]}>
+      <View
+        style={[
+          styles.container,
+          styles.centerContainer,
+          { backgroundColor: colors.background },
+        ]}
+      >
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.tabBarBG} />
           <Text style={[styles.loadingText, { color: colors.tabBarBG }]}>
@@ -491,197 +630,305 @@ const ChatScreen: React.FC = () => {
   return (
     <TouchableWithoutFeedback onPress={hideSearch}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Custom Header with Maharishi Connect */}
-      <View style={[styles.header, { backgroundColor: colors.background }]}>
-        <TouchableOpacity 
-          style={styles.headerButton}
-          onPress={openDrawer}
-        >
-          <OptimizedIcon name="menu-outline" size={moderateScale(24)} color={colors.text} />
-        </TouchableOpacity>
-        
-        <Text style={[styles.headerTitle, { color: colors.text }]}>
-          Maharishi Connect
-        </Text>
-        
-        <TouchableOpacity 
-          style={styles.headerButton}
-          onPress={toggleSearch}
-        >
-          <OptimizedIcon name="search-outline" size={moderateScale(24)} color={colors.text} />
-        </TouchableOpacity>
-      </View>
-      
-      {/* Search Bar */}
-      {isSearchVisible && (
-        <View style={[styles.searchContainer, { backgroundColor: colors.background }]}>
-          <View style={[styles.searchInputContainer, { backgroundColor: colors.background }]}>
-            <OptimizedIcon name="search-outline" size={moderateScale(20)} color={colors.textSecondary} style={styles.searchIcon} />
-            <TextInput
-              style={[styles.searchInput, { color: colors.text }]}
-              placeholder="Search chats..."
-              placeholderTextColor={colors.textSecondary}
-              value={searchText}
-              onChangeText={handleSearchTextChange}
-              autoFocus={true}
-              returnKeyType="search"
+        {/* Custom Header with Maharishi Connect */}
+        <View style={[styles.header, { backgroundColor: colors.background }]}>
+          <TouchableOpacity style={styles.headerButton} onPress={openDrawer}>
+            <OptimizedIcon
+              name="menu-outline"
+              size={moderateScale(24)}
+              color={colors.text}
             />
-            {searchText.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchText('')} style={styles.clearButton}>
-                <OptimizedIcon name="close-circle" size={moderateScale(20)} color={colors.textSecondary} />
-              </TouchableOpacity>
-            )}
-          </View>
+          </TouchableOpacity>
+
+          <Text style={[styles.headerTitle, { color: colors.text }]}>
+            Maharishi Connect
+          </Text>
+
+          <TouchableOpacity style={styles.headerButton} onPress={toggleSearch}>
+            <OptimizedIcon
+              name="search-outline"
+              size={moderateScale(24)}
+              color={colors.text}
+            />
+          </TouchableOpacity>
         </View>
-      )}
-      
-      {/* Filter Buttons */}
-      <View style={[styles.filterContainer, { backgroundColor: colors.background }]}>
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterScrollContent}
+
+        {/* Search Bar */}
+        {isSearchVisible && (
+          <View
+            style={[
+              styles.searchContainer,
+              { backgroundColor: colors.background },
+            ]}
+          >
+            <View
+              style={[
+                styles.searchInputContainer,
+                { backgroundColor: colors.background },
+              ]}
+            >
+              <OptimizedIcon
+                name="search-outline"
+                size={moderateScale(20)}
+                color={colors.textSecondary}
+                style={styles.searchIcon}
+              />
+              <TextInput
+                style={[styles.searchInput, { color: colors.text }]}
+                placeholder="Search chats..."
+                placeholderTextColor={colors.textSecondary}
+                value={searchText}
+                onChangeText={handleSearchTextChange}
+                autoFocus={true}
+                returnKeyType="search"
+              />
+              {searchText.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setSearchText('')}
+                  style={styles.clearButton}
+                >
+                  <OptimizedIcon
+                    name="close-circle"
+                    size={moderateScale(20)}
+                    color={colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Filter Buttons */}
+        <View
+          style={[
+            styles.filterContainer,
+            { backgroundColor: colors.background },
+          ]}
         >
-          <TouchableOpacity
-            style={[
-              styles.filterButton,
-              { 
-                backgroundColor: activeFilter === 'all' ? colors.primary : colors.background,
-                borderColor: activeFilter === 'all' ? colors.primary : colors.border,
-              }
-            ]}
-            onPress={() => setActiveFilter('all')}
-            activeOpacity={0.7}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterScrollContent}
           >
-            <OptimizedIcon 
-              name="chatbubbles-outline" 
-              size={moderateScale(16)} 
-              color={activeFilter === 'all' ? colors.textOnPrimary : colors.textSecondary} 
-            />
-            <Text style={[
-              styles.filterButtonText,
-              { color: activeFilter === 'all' ? colors.textOnPrimary : colors.text }
-            ]}>
-              All
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[
-              styles.filterButton,
-              { 
-                backgroundColor: activeFilter === 'direct' ? colors.primary : colors.background,
-                borderColor: activeFilter === 'direct' ? colors.primary : colors.border,
-              }
-            ]}
-            onPress={() => setActiveFilter('direct')}
-            activeOpacity={0.7}
-          >
-            <OptimizedIcon 
-              name="person-outline" 
-              size={moderateScale(16)} 
-              color={activeFilter === 'direct' ? colors.textOnPrimary : colors.textSecondary} 
-            />
-            <Text style={[
-              styles.filterButtonText,
-              { color: activeFilter === 'direct' ? colors.textOnPrimary : colors.text }
-            ]}>
-              Direct
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[
-              styles.filterButton,
-              { 
-                backgroundColor: activeFilter === 'groups' ? colors.primary : colors.background,
-                borderColor: activeFilter === 'groups' ? colors.primary : colors.border,
-              }
-            ]}
-            onPress={() => setActiveFilter('groups')}
-            activeOpacity={0.7}
-          >
-            <OptimizedIcon 
-              name="people-outline" 
-              size={moderateScale(16)} 
-              color={activeFilter === 'groups' ? colors.textOnPrimary : colors.textSecondary} 
-            />
-            <Text style={[
-              styles.filterButtonText,
-              { color: activeFilter === 'groups' ? colors.textOnPrimary : colors.text }
-            ]}>
-              Groups
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[
-              styles.filterButton,
-              { 
-                backgroundColor: activeFilter === 'unread' ? colors.primary : colors.background,
-                borderColor: activeFilter === 'unread' ? colors.primary : colors.border,
-              }
-            ]}
-            onPress={() => setActiveFilter('unread')}
-            activeOpacity={0.7}
-          >
-            <OptimizedIcon 
-              name="mail-unread-outline" 
-              size={moderateScale(16)} 
-              color={activeFilter === 'unread' ? colors.textOnPrimary : colors.textSecondary} 
-            />
-            <Text style={[
-              styles.filterButtonText,
-              { color: activeFilter === 'unread' ? colors.textOnPrimary : colors.text }
-            ]}>
-              Unread
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[
-              styles.filterButton,
-              { 
-                backgroundColor: activeFilter === 'archived' ? colors.accent : colors.background,
-                borderColor: activeFilter === 'archived' ? colors.accent : colors.border,
-              }
-            ]}
-            onPress={() => setActiveFilter('archived')}
-            activeOpacity={0.7}
-          >
-            <OptimizedIcon 
-              name="archive-outline" 
-              size={moderateScale(16)} 
-              color={activeFilter === 'archived' ? colors.textOnPrimary : colors.textSecondary} 
-            />
-            <Text style={[
-              styles.filterButtonText,
-              { color: activeFilter === 'archived' ? colors.textOnPrimary : colors.text }
-            ]}>
-              Archived
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                {
+                  backgroundColor:
+                    activeFilter === 'all' ? colors.primary : colors.background,
+                  borderColor:
+                    activeFilter === 'all' ? colors.primary : colors.border,
+                },
+              ]}
+              onPress={() => setActiveFilter('all')}
+              activeOpacity={0.7}
+            >
+              <OptimizedIcon
+                name="chatbubbles-outline"
+                size={moderateScale(16)}
+                color={
+                  activeFilter === 'all'
+                    ? colors.textOnPrimary
+                    : colors.textSecondary
+                }
+              />
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  {
+                    color:
+                      activeFilter === 'all'
+                        ? colors.textOnPrimary
+                        : colors.text,
+                  },
+                ]}
+              >
+                All
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                {
+                  backgroundColor:
+                    activeFilter === 'direct'
+                      ? colors.primary
+                      : colors.background,
+                  borderColor:
+                    activeFilter === 'direct' ? colors.primary : colors.border,
+                },
+              ]}
+              onPress={() => setActiveFilter('direct')}
+              activeOpacity={0.7}
+            >
+              <OptimizedIcon
+                name="person-outline"
+                size={moderateScale(16)}
+                color={
+                  activeFilter === 'direct'
+                    ? colors.textOnPrimary
+                    : colors.textSecondary
+                }
+              />
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  {
+                    color:
+                      activeFilter === 'direct'
+                        ? colors.textOnPrimary
+                        : colors.text,
+                  },
+                ]}
+              >
+                Direct
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                {
+                  backgroundColor:
+                    activeFilter === 'groups'
+                      ? colors.primary
+                      : colors.background,
+                  borderColor:
+                    activeFilter === 'groups' ? colors.primary : colors.border,
+                },
+              ]}
+              onPress={() => setActiveFilter('groups')}
+              activeOpacity={0.7}
+            >
+              <OptimizedIcon
+                name="people-outline"
+                size={moderateScale(16)}
+                color={
+                  activeFilter === 'groups'
+                    ? colors.textOnPrimary
+                    : colors.textSecondary
+                }
+              />
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  {
+                    color:
+                      activeFilter === 'groups'
+                        ? colors.textOnPrimary
+                        : colors.text,
+                  },
+                ]}
+              >
+                Groups
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                {
+                  backgroundColor:
+                    activeFilter === 'unread'
+                      ? colors.primary
+                      : colors.background,
+                  borderColor:
+                    activeFilter === 'unread' ? colors.primary : colors.border,
+                },
+              ]}
+              onPress={() => setActiveFilter('unread')}
+              activeOpacity={0.7}
+            >
+              <OptimizedIcon
+                name="mail-unread-outline"
+                size={moderateScale(16)}
+                color={
+                  activeFilter === 'unread'
+                    ? colors.textOnPrimary
+                    : colors.textSecondary
+                }
+              />
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  {
+                    color:
+                      activeFilter === 'unread'
+                        ? colors.textOnPrimary
+                        : colors.text,
+                  },
+                ]}
+              >
+                Unread
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                {
+                  backgroundColor:
+                    activeFilter === 'archived'
+                      ? colors.accent
+                      : colors.background,
+                  borderColor:
+                    activeFilter === 'archived' ? colors.accent : colors.border,
+                },
+              ]}
+              onPress={() => setActiveFilter('archived')}
+              activeOpacity={0.7}
+            >
+              <OptimizedIcon
+                name="archive-outline"
+                size={moderateScale(16)}
+                color={
+                  activeFilter === 'archived'
+                    ? colors.textOnPrimary
+                    : colors.textSecondary
+                }
+              />
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  {
+                    color:
+                      activeFilter === 'archived'
+                        ? colors.textOnPrimary
+                        : colors.text,
+                  },
+                ]}
+              >
+                Archived
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+
+        <FlatList
+          data={filteredChats}
+          keyExtractor={item => item.id}
+          renderItem={renderChatItem}
+          ItemSeparatorComponent={ChatItemSeparator}
+          ListEmptyComponent={renderEmptyState}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={
+            chats.length === 0 ? styles.emptyListContainer : styles.listContent
+          }
+        />
+
+        <TouchableOpacity
+          style={[styles.fab, { backgroundColor: colors.tabBarBG }]}
+          onPress={handleCreateChat}
+          activeOpacity={0.85}
+        >
+          <OptimizedIcon
+            name="create-outline"
+            size={moderateScale(28)}
+            color="#FFFFFF"
+          />
+        </TouchableOpacity>
       </View>
-      
-      <FlatList
-        data={filteredChats}
-        keyExtractor={(item) => item.id}
-        renderItem={renderChatItem}
-        ItemSeparatorComponent={ChatItemSeparator}
-        ListEmptyComponent={renderEmptyState}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={chats.length === 0 ? styles.emptyListContainer : styles.listContent}
-      />
-      
-      <TouchableOpacity
-        style={[styles.fab, { backgroundColor: colors.tabBarBG }]}
-        onPress={handleCreateChat}
-        activeOpacity={0.85}
-      >
-        <OptimizedIcon name="create-outline" size={moderateScale(28)} color="#FFFFFF" />
-      </TouchableOpacity>
-    </View>
     </TouchableWithoutFeedback>
   );
 };

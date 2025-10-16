@@ -1,5 +1,5 @@
 import { useNavigation } from '@react-navigation/native';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useSelector, useDispatch } from 'react-redux';
@@ -14,7 +15,7 @@ import { RootState } from '../../../../store';
 import { useTheme } from '../../../../theme';
 import CustomHeader from '../../../../components/atoms/ui/CustomHeader';
 import AvatarWithInitials from '../../../../components/atoms/ui/AvatarWithInitials';
-import { logout } from '../../../../store/slices/authSlice';
+import { logout, updateUserProfile } from '../../../../store/slices/authSlice';
 import {
   moderateScale,
   responsiveFont,
@@ -23,6 +24,7 @@ import {
 } from '../../../../theme/responsive';
 import { LightColors } from '../../../../theme/colors';
 import { useFocusEffect } from '@react-navigation/native';
+import { apiService } from '../../../../services/apiService';
 
 export default function UserInfoScreen() {
   const navigation = useNavigation();
@@ -32,19 +34,118 @@ export default function UserInfoScreen() {
   const profileCompleted = useSelector(
     (state: RootState) => state.auth.profileCompleted,
   );
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+  const [hasAttemptedFetch, setHasAttemptedFetch] = useState(false);
 
   console.log('🔍 UserInfoScreen - Current user data:', user);
   console.log('🔍 UserInfoScreen - Profile completed:', profileCompleted);
   console.log('🔍 UserInfoScreen - Profile picture:', user?.profilePicture);
   console.log('🔍 UserInfoScreen - Avatar:', user?.avatar);
 
-  // Refresh data when screen comes into focus
+  // Function to fetch fresh profile data from server
+  const fetchProfileData = useCallback(async () => {
+    if (!user?.id || !user?.token || isLoadingProfile || hasAttemptedFetch) {
+      return;
+    }
+
+    // Check if we need to fetch fresh data (missing profile data)
+    const needsRefresh =
+      !user.fullName || !user.country || !user.state || !user.status;
+
+    if (!needsRefresh) {
+      console.log(
+        '📱 UserInfoScreen - Profile data is complete, no need to fetch',
+      );
+      return;
+    }
+
+    try {
+      console.log(
+        '📱 UserInfoScreen - Fetching fresh profile data from server...',
+      );
+      setIsLoadingProfile(true);
+      setHasAttemptedFetch(true);
+
+      const profileData = await apiService.getUserProfile(user.id, user.token);
+      console.log('📱 UserInfoScreen - Profile API response:', profileData);
+
+      if (profileData.user || profileData.data) {
+        const userProfile = profileData.user || profileData.data;
+        const location = userProfile.location || {};
+
+        console.log('📱 UserInfoScreen - Extracted user profile:', {
+          fullName: userProfile.fullName,
+          country: location.country,
+          state: location.state,
+          status: userProfile.status,
+          profilePicture: userProfile.profilePicture,
+        });
+
+        // Update user profile data in Redux
+        dispatch(
+          updateUserProfile({
+            fullName: userProfile.fullName || user.fullName || '',
+            avatar: userProfile.profilePicture || user.avatar || '',
+            profilePicture:
+              userProfile.profilePicture || user.profilePicture || '',
+            country: location.country || user.country || '',
+            state: location.state || user.state || '',
+            status: userProfile.status || user.status || '',
+            isVerified:
+              userProfile.isVerified !== undefined
+                ? userProfile.isVerified
+                : user.isVerified,
+          }),
+        );
+
+        console.log('✅ UserInfoScreen - Profile data updated successfully');
+      } else {
+        console.log(
+          '⚠️ UserInfoScreen - No user profile data found in API response',
+        );
+        // If API is not available, don't try again
+        if (
+          profileData.status === 'error' &&
+          profileData.message === 'Profile endpoint not available'
+        ) {
+          console.log(
+            '📱 UserInfoScreen - Profile API not available, skipping future attempts',
+          );
+          setHasAttemptedFetch(true);
+        }
+      }
+    } catch (error) {
+      console.error('❌ UserInfoScreen - Error fetching user profile:', error);
+      // Don't show error to user, just log it - they can still see cached data
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  }, [
+    user?.id,
+    user?.token,
+    user?.fullName,
+    user?.country,
+    user?.state,
+    user?.status,
+    dispatch,
+    isLoadingProfile,
+    hasAttemptedFetch,
+  ]);
+
+  // Fetch profile data when screen comes into focus
   useFocusEffect(
-    React.useCallback(() => {
-      console.log('🔍 UserInfoScreen - Screen focused, refreshing data...');
-      console.log('🔍 UserInfoScreen - Updated user data:', user);
-    }, [user]),
+    useCallback(() => {
+      console.log(
+        '🔍 UserInfoScreen - Screen focused, checking if refresh needed...',
+      );
+      fetchProfileData();
+    }, [fetchProfileData]),
   );
+
+  // Also fetch on initial mount
+  useEffect(() => {
+    fetchProfileData();
+  }, [fetchProfileData]);
 
   const infoSections = [
     {
@@ -149,6 +250,15 @@ export default function UserInfoScreen() {
         showBackButton={true}
         onBackPress={() => navigation.goBack()}
       />
+
+      {isLoadingProfile && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color={colors.accent} />
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+            Refreshing profile data...
+          </Text>
+        </View>
+      )}
 
       <ScrollView
         style={styles.scrollView}
@@ -336,6 +446,19 @@ export default function UserInfoScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: hp(1),
+    paddingHorizontal: wp(5),
+    backgroundColor: 'rgba(0, 122, 255, 0.1)',
+  },
+  loadingText: {
+    fontSize: responsiveFont(14),
+    fontWeight: '500',
+    marginLeft: wp(2),
   },
   scrollView: {
     flex: 1,
