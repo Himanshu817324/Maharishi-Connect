@@ -131,6 +131,15 @@ const authSlice = createSlice({
           ...action.payload,
         };
         
+        // Ensure both avatar and profilePicture fields are synchronized
+        if (action.payload.profilePicture) {
+          updatedUser.avatar = action.payload.profilePicture;
+          updatedUser.profilePicture = action.payload.profilePicture;
+        } else if (action.payload.avatar) {
+          updatedUser.profilePicture = action.payload.avatar;
+          updatedUser.avatar = action.payload.avatar;
+        }
+        
         // Merge the new data with existing user data
         state.user = updatedUser;
         

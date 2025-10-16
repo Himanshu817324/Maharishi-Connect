@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import { useTheme } from '@/theme';
 import { responsiveFont, wp, hp, moderateScale } from '@/theme/responsive';
 import CustomStatusBar from './StatusBar';
@@ -17,7 +17,7 @@ const CustomHeader: React.FC<CustomHeaderProps> = ({
   title,
   backgroundColor,
   showBackButton = false,
-  onBackPress: _onBackPress,
+  onBackPress,
   rightComponent,
 }) => {
   const { colors } = useTheme();
@@ -33,13 +33,17 @@ const CustomHeader: React.FC<CustomHeaderProps> = ({
       <View style={styles.headerContent}>
         <View style={styles.leftSection}>
           {showBackButton && (
-            <Text style={[styles.backButton, { color: colors.textOnPrimary }]}>
+            <TouchableOpacity 
+              style={styles.backButton} 
+              onPress={onBackPress}
+              activeOpacity={0.7}
+            >
               <Icon
                 name="arrow-back"
                 size={moderateScale(24)}
-                color={colors.text}
+                color={colors.textOnPrimary}
               />
-            </Text>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -92,8 +96,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   backButton: {
-    fontSize: responsiveFont(24),
-    fontWeight: 'bold',
+    padding: moderateScale(8),
+    borderRadius: moderateScale(8),
   },
 });
 

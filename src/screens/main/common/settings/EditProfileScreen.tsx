@@ -44,7 +44,7 @@ export default function EditProfileScreen() {
 
   // Image upload state
   const [profileImage, setProfileImage] = useState<string | null>(
-    (user as any)?.profilePicture || null,
+    user?.profilePicture || user?.avatar || null,
   );
   const [uploading, setUploading] = useState(false);
   const [uploadTempId, setUploadTempId] = useState<string | null>(null);
@@ -61,7 +61,7 @@ export default function EditProfileScreen() {
         setLoadingLocations(true);
         const countriesData = await locationsService.getCountries();
         setCountries(countriesData);
-        
+
         if (user?.country) {
           const statesData = await locationsService.getStates(user.country);
           setStates(statesData);
@@ -69,7 +69,13 @@ export default function EditProfileScreen() {
       } catch (error) {
         console.error('Error loading locations:', error);
         // Use fallback data
-        setCountries(['India', 'United States', 'United Kingdom', 'Canada', 'Australia']);
+        setCountries([
+          'India',
+          'United States',
+          'United Kingdom',
+          'Canada',
+          'Australia',
+        ]);
         setStates(['Delhi', 'Mumbai', 'Bangalore', 'Chennai', 'Kolkata']);
       } finally {
         setLoadingLocations(false);
@@ -84,9 +90,9 @@ export default function EditProfileScreen() {
       console.log('🖼️ Opening image library...');
       setUploading(true);
       const result = await lightweightImagePicker.pickImages(1);
-      
+
       console.log('🖼️ Image picker result:', result);
-      
+
       if (result.success && result.files.length > 0) {
         const file = result.files[0];
         console.log('🖼️ Selected file:', file);
@@ -115,9 +121,9 @@ export default function EditProfileScreen() {
     try {
       console.log('📷 Opening camera...');
       const result = await lightweightImagePicker.takePhoto();
-      
+
       console.log('📷 Camera result:', result);
-      
+
       if (result.success && result.files.length > 0) {
         const file = result.files[0];
         console.log('📷 Captured file:', file);
@@ -152,12 +158,15 @@ export default function EditProfileScreen() {
       });
 
       // Upload image
-      const uploadResult = await imageUploadService.uploadProfileImage(imageUri, user?.id || '');
-      
+      const uploadResult = await imageUploadService.uploadProfileImage(
+        imageUri,
+        user?.id || '',
+      );
+
       if (uploadResult.success) {
         setProfileImage(uploadResult.imageUrl || uploadResult.url || imageUri);
-        setUploadTempId(uploadResult.tempId);
-        
+        setUploadTempId(uploadResult.tempId || null);
+
         Toast.show({
           type: 'success',
           text1: '✅ Image uploaded successfully!',
@@ -184,16 +193,22 @@ export default function EditProfileScreen() {
       'Select Profile Picture',
       'Choose how you want to add a profile picture',
       [
-        { text: 'Camera', onPress: () => {
-          console.log('📷 Camera option selected');
-          openCamera();
-        }},
-        { text: 'Gallery', onPress: () => {
-          console.log('🖼️ Gallery option selected');
-          openImageLibrary();
-        }},
+        {
+          text: 'Camera',
+          onPress: () => {
+            console.log('📷 Camera option selected');
+            openCamera();
+          },
+        },
+        {
+          text: 'Gallery',
+          onPress: () => {
+            console.log('🖼️ Gallery option selected');
+            openImageLibrary();
+          },
+        },
         { text: 'Cancel', style: 'cancel' },
-      ]
+      ],
     );
   };
 
@@ -224,7 +239,10 @@ export default function EditProfileScreen() {
     }
 
     if (fullName.trim().length > 100) {
-      Alert.alert('Error', 'Full name must be no more than 100 characters long');
+      Alert.alert(
+        'Error',
+        'Full name must be no more than 100 characters long',
+      );
       return;
     }
 
@@ -263,26 +281,30 @@ export default function EditProfileScreen() {
 
       // Prepare data for API call - only include fields that have values
       const apiData: any = {};
-      
+
       if (profileData.fullName && profileData.fullName.trim()) {
         apiData.fullName = profileData.fullName.trim();
       }
-      
+
       if (profileData.status && profileData.status.trim()) {
         apiData.status = profileData.status.trim();
       }
-      
+
       if (profileData.country && profileData.country.trim()) {
         apiData.location = {
           country: profileData.country.trim(),
         };
-        
+
         // Only include state if it has a valid value (2+ characters)
-        if (profileData.state && profileData.state.trim() && profileData.state.trim().length >= 2) {
+        if (
+          profileData.state &&
+          profileData.state.trim() &&
+          profileData.state.trim().length >= 2
+        ) {
           apiData.location.state = profileData.state.trim();
         }
       }
-      
+
       if (profileData.profilePicture && profileData.profilePicture.trim()) {
         apiData.profilePicture = profileData.profilePicture.trim();
       }
@@ -299,52 +321,83 @@ export default function EditProfileScreen() {
         return;
       }
 
-      console.log('📝 [EditProfileScreen] Sending API data:', JSON.stringify(apiData, null, 2));
-      console.log('📝 [EditProfileScreen] Profile data before API call:', profileData);
+      console.log(
+        '📝 [EditProfileScreen] Sending API data:',
+        JSON.stringify(apiData, null, 2),
+      );
+      console.log(
+        '📝 [EditProfileScreen] Profile data before API call:',
+        profileData,
+      );
 
       // Update profile via API
       const response = await apiService.updateUserProfile(apiData);
-      
-      if (response.status === 'SUCCESS' && response.user) {
-        console.log('✅ [EditProfileScreen] Profile update successful, updating Redux store...');
-        console.log('✅ [EditProfileScreen] API response user:', response.user);
-        
-        // Update Redux store with the updated user data from API
-        dispatch(updateUserProfile({
-          fullName: response.user.fullName,
-          country: response.user.location?.country,
-          state: response.user.location?.state,
-          status: response.user.status,
-          profilePicture: response.user.profilePicture,
-        }));
 
-        console.log('✅ [EditProfileScreen] Redux store updated, showing success message...');
+      console.log('✅ [EditProfileScreen] API response:', response);
+
+      // Handle both response.user and response.data structures
+      const userData = response.user || response.data;
+
+      if (response.status === 'SUCCESS' && userData) {
+        console.log(
+          '✅ [EditProfileScreen] Profile update successful, updating Redux store...',
+        );
+        console.log('✅ [EditProfileScreen] API response user data:', userData);
+
+        // Handle location object structure from API response
+        const location = userData.location || {};
+        const country = location.country || userData.country;
+        const state = location.state || userData.state;
+
+        // Update Redux store with the updated user data from API
+        dispatch(
+          updateUserProfile({
+            fullName: userData.fullName,
+            country: country,
+            state: state,
+            status: userData.status,
+            profilePicture: userData.profilePicture,
+            avatar: userData.profilePicture, // Also update avatar field for consistency
+          }),
+        );
+
+        console.log(
+          '✅ [EditProfileScreen] Redux store updated, showing success message...',
+        );
 
         Toast.show({
           type: 'success',
           text1: 'Profile updated successfully',
         });
 
-        console.log('✅ [EditProfileScreen] Waiting for Redux state to update...');
+        console.log(
+          '✅ [EditProfileScreen] Waiting for Redux state to update...',
+        );
         // Add a small delay to ensure Redux state is properly updated
         setTimeout(() => {
           console.log('✅ [EditProfileScreen] Navigating back...');
           navigation.goBack();
         }, 100);
       } else {
+        console.error(
+          '❌ [EditProfileScreen] Profile update failed:',
+          response,
+        );
         throw new Error(response.message || 'Failed to update profile');
       }
     } catch (error) {
       console.error('Error updating profile:', error);
-      
+
       // Show more specific error messages
       let errorMessage = 'Failed to update profile. Please try again.';
-      
+
       if (error instanceof Error) {
         if (error.message.includes('State must be between 2-50 characters')) {
-          errorMessage = 'State must be between 2-50 characters. Please check your state field.';
+          errorMessage =
+            'State must be between 2-50 characters. Please check your state field.';
         } else if (error.message.includes('Full name must be between')) {
-          errorMessage = 'Full name must be between 2-100 characters. Please check your name.';
+          errorMessage =
+            'Full name must be between 2-100 characters. Please check your name.';
         } else if (error.message.includes('Authentication token not found')) {
           errorMessage = 'Please log in again to update your profile.';
         } else if (error.message.includes('Invalid input data')) {
@@ -353,7 +406,7 @@ export default function EditProfileScreen() {
           errorMessage = error.message;
         }
       }
-      
+
       Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
@@ -366,7 +419,7 @@ export default function EditProfileScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-      
+
       <CustomHeader
         title="Edit Profile"
         showBackButton={true}
@@ -389,24 +442,32 @@ export default function EditProfileScreen() {
             disabled={uploading}
           >
             {profileImage ? (
-              <Image source={{ uri: profileImage }} style={styles.profileImage} />
+              <Image
+                source={{ uri: profileImage }}
+                style={styles.profileImage}
+              />
             ) : (
-              <View style={[styles.imagePlaceholder, { backgroundColor: colors.accent }]}>
+              <View
+                style={[
+                  styles.imagePlaceholder,
+                  { backgroundColor: colors.accent },
+                ]}
+              >
                 <Icon name="camera" size={moderateScale(30)} color="#FFFFFF" />
               </View>
             )}
-            
+
             {uploading && (
               <View style={styles.uploadingOverlay}>
                 <ActivityIndicator size="small" color="#FFFFFF" />
               </View>
             )}
-            
+
             <View style={styles.editIconContainer}>
               <Icon name="camera" size={moderateScale(16)} color="#FFFFFF" />
             </View>
           </TouchableOpacity>
-          
+
           <Text style={[styles.imageLabel, { color: colors.text }]}>
             {uploading ? 'Uploading...' : 'Tap to change photo'}
           </Text>
@@ -416,12 +477,15 @@ export default function EditProfileScreen() {
         <View style={styles.formSection}>
           {/* Full Name Input */}
           <View style={styles.inputGroup}>
-            <Text style={[styles.inputLabel, { color: colors.text }]}>Full Name</Text>
+            <Text style={[styles.inputLabel, { color: colors.text }]}>
+              Full Name
+            </Text>
             <TextInput
               style={[
                 styles.textInput,
-                { 
-                  borderColor: focusedField === 'fullName' ? colors.accent : colors.border,
+                {
+                  borderColor:
+                    focusedField === 'fullName' ? colors.accent : colors.border,
                   backgroundColor: colors.surface,
                   color: colors.text,
                 },
@@ -439,10 +503,10 @@ export default function EditProfileScreen() {
           <ModernDropdown
             label="Country"
             emoji="🌍"
-            options={countries.map(country => ({ 
-              label: country, 
-              value: country, 
-              emoji: '🏳️' 
+            options={countries.map(country => ({
+              label: country,
+              value: country,
+              emoji: '🏳️',
             }))}
             selectedValue={selectedCountry}
             onValueChange={handleCountryChange}
@@ -454,10 +518,10 @@ export default function EditProfileScreen() {
           <ModernDropdown
             label="State/Region"
             emoji="📍"
-            options={states.map(state => ({ 
-              label: state, 
-              value: state, 
-              emoji: '🏛️' 
+            options={states.map(state => ({
+              label: state,
+              value: state,
+              emoji: '🏛️',
             }))}
             selectedValue={selectedState}
             onValueChange={value => setSelectedState(value)}

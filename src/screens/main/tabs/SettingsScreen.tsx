@@ -1,6 +1,15 @@
 import { useNavigation } from '@react-navigation/native';
 import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, Image, Switch } from 'react-native';
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  Image,
+  Switch,
+} from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '@/store/slices/authSlice';
@@ -9,59 +18,68 @@ import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 
 export default function SettingsScreen() {
-  const { colors, isDark, toggleTheme, isSystemTheme, setIsSystemTheme } = useTheme();
+  const { colors, isDark, toggleTheme, isSystemTheme, setIsSystemTheme } =
+    useTheme();
   const navigation = useNavigation();
   const dispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
 
+  console.log('🔍 SettingsScreen - Current user data:', user);
+  console.log('🔍 SettingsScreen - Profile picture:', user?.profilePicture);
+  console.log('🔍 SettingsScreen - Avatar:', user?.avatar);
+
   const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      {
+        text: 'Cancel',
+        style: 'cancel',
+      },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: () => {
+          console.log('🚪 User logging out...');
+          dispatch(logout());
+          // Reset navigation stack to prevent back navigation
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'SplashScreen' as never }],
+          });
         },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: () => {
-            console.log('🚪 User logging out...');
-            dispatch(logout());
-            // Reset navigation stack to prevent back navigation
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'SplashScreen' as never }],
-            });
-          },
-        },
-      ]
-    );
+      },
+    ]);
   };
 
   const themeItems = [
-    { 
-      title: 'Follow System', 
-      icon: 'phone-portrait-outline', 
+    {
+      title: 'Follow System',
+      icon: 'phone-portrait-outline',
       isSwitch: true,
       switchValue: isSystemTheme,
-      onSwitchChange: () => setIsSystemTheme(!isSystemTheme)
+      onSwitchChange: () => setIsSystemTheme(!isSystemTheme),
     },
-    { 
-      title: 'Dark Mode', 
-      icon: isDark ? 'moon' : 'sunny-outline', 
+    {
+      title: 'Dark Mode',
+      icon: isDark ? 'moon' : 'sunny-outline',
       isSwitch: true,
       switchValue: isDark,
       onSwitchChange: toggleTheme,
-      disabled: isSystemTheme
+      disabled: isSystemTheme,
     },
   ];
 
   const accountItems = [
-    { title: 'Account', icon: 'key-outline', onPress: () => navigation.navigate('UserInfoScreen' as never) },
+    {
+      title: 'Account',
+      icon: 'key-outline',
+      onPress: () => navigation.navigate('UserInfoScreen' as never),
+    },
     { title: 'Privacy', icon: 'lock-closed-outline', onPress: () => {} },
-    { title: 'Notifications', icon: 'notifications-outline', onPress: () => {} },
+    {
+      title: 'Notifications',
+      icon: 'notifications-outline',
+      onPress: () => {},
+    },
     { title: 'Backup', icon: 'cloud-outline', onPress: () => {} },
   ];
 
@@ -78,15 +96,17 @@ export default function SettingsScreen() {
       activeOpacity={0.7}
       disabled={item.isSwitch}
     >
-      <Icon 
-        name={item.icon} 
-        size={moderateScale(24)} 
-        color={item.disabled ? colors.textSecondary : colors.text} 
+      <Icon
+        name={item.icon}
+        size={moderateScale(24)}
+        color={item.disabled ? colors.textSecondary : colors.text}
       />
-      <Text style={[
-        styles.menuText, 
-        { color: item.disabled ? colors.textSecondary : colors.text }
-      ]}>
+      <Text
+        style={[
+          styles.menuText,
+          { color: item.disabled ? colors.textSecondary : colors.text },
+        ]}
+      >
         {item.title}
       </Text>
       {item.isSwitch ? (
@@ -98,7 +118,12 @@ export default function SettingsScreen() {
           disabled={item.disabled}
         />
       ) : (
-        <Icon name="chevron-forward" size={moderateScale(20)} color={colors.textSecondary} style={styles.arrowIcon} />
+        <Icon
+          name="chevron-forward"
+          size={moderateScale(20)}
+          color={colors.textSecondary}
+          style={styles.arrowIcon}
+        />
       )}
     </TouchableOpacity>
   );
@@ -107,11 +132,15 @@ export default function SettingsScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Custom Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-back" size={moderateScale(24)} color={colors.text} />
+          <Icon
+            name="arrow-back"
+            size={moderateScale(24)}
+            color={colors.text}
+          />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>
           Settings
@@ -125,21 +154,32 @@ export default function SettingsScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         {/* User Profile Section */}
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.profileSection}
           onPress={() => navigation.navigate('UserInfoScreen' as never)}
           activeOpacity={0.7}
         >
           <View style={styles.avatarContainer}>
-            {(user?.avatar || user?.profilePicture) ? (
+            {user?.profilePicture || user?.avatar ? (
               <Image
-                source={{ uri: user.avatar || user?.profilePicture }}
+                source={{ uri: user.profilePicture || user?.avatar }}
                 style={styles.avatar}
               />
             ) : (
-              <View style={[styles.avatarPlaceholder, { backgroundColor: colors.accent }]}>
-                <Text style={[styles.avatarText, { color: colors.textOnPrimary }]}>
-                  {user?.fullName ? user.fullName.charAt(0).toUpperCase() : user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+              <View
+                style={[
+                  styles.avatarPlaceholder,
+                  { backgroundColor: colors.accent },
+                ]}
+              >
+                <Text
+                  style={[styles.avatarText, { color: colors.textOnPrimary }]}
+                >
+                  {user?.fullName
+                    ? user.fullName.charAt(0).toUpperCase()
+                    : user?.name
+                    ? user.name.charAt(0).toUpperCase()
+                    : 'U'}
                 </Text>
               </View>
             )}
@@ -157,7 +197,11 @@ export default function SettingsScreen() {
               </Text>
             </TouchableOpacity>
           </View>
-          <Icon name="chevron-forward" size={moderateScale(20)} color={colors.textSecondary} />
+          <Icon
+            name="chevron-forward"
+            size={moderateScale(20)}
+            color={colors.textSecondary}
+          />
         </TouchableOpacity>
 
         {/* Theme Section */}
