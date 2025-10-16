@@ -25,12 +25,14 @@ const CustomSafeAreaView: React.FC<Props> = ({
   return (
     <View style={[{ flex: 1 }, style]} {...rest}>
       {/* Top area with primary color */}
-      <View 
-        style={{
-          height: insets.top,
-          backgroundColor: topBgColor,
-        }}
-      />
+      {insets.top > 0 && (
+        <View 
+          style={{
+            height: insets.top,
+            backgroundColor: topBgColor,
+          }}
+        />
+      )}
       {/* Main content area with background color */}
       <View 
         style={{
@@ -40,6 +42,15 @@ const CustomSafeAreaView: React.FC<Props> = ({
       >
         {children}
       </View>
+      {/* Bottom area with background color for safe area - reduced height */}
+      {insets.bottom > 0 && (
+        <View 
+          style={{
+            height: Math.max(insets.bottom - 8, 4), // Reduce by 8px but keep minimum 4px
+            backgroundColor: bottomBgColor,
+          }}
+        />
+      )}
     </View>
   );
 };

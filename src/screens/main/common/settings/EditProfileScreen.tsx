@@ -25,8 +25,8 @@ import { apiService } from '@/services/apiService';
 import { imageUploadService } from '@/services/imageUploadService';
 import { lightweightImagePicker } from '@/services/lightweightImagePicker';
 import { locationsService } from '@/services/locationsService';
-import ModernDropdown from '@/components/atoms/ui/ModernDropdown';
 import Toast from 'react-native-toast-message';
+import ModernDropdown from '@/components/atoms/ui/ModernDropdown';
 
 export default function EditProfileScreen() {
   const navigation = useNavigation();
@@ -217,8 +217,36 @@ export default function EditProfileScreen() {
       return;
     }
 
+    // Validate full name length (assuming similar validation as state)
+    if (fullName.trim().length < 2) {
+      Alert.alert('Error', 'Full name must be at least 2 characters long');
+      return;
+    }
+
+    if (fullName.trim().length > 100) {
+      Alert.alert('Error', 'Full name must be no more than 100 characters long');
+      return;
+    }
+
     if (!selectedCountry) {
       Alert.alert('Error', 'Please select your country');
+      return;
+    }
+
+    // Validate state field if provided (must be 2-50 characters)
+    if (selectedState && selectedState.trim().length < 2) {
+      Alert.alert('Error', 'State must be at least 2 characters long');
+      return;
+    }
+
+    if (selectedState && selectedState.trim().length > 50) {
+      Alert.alert('Error', 'State must be no more than 50 characters long');
+      return;
+    }
+
+    // Validate status field if provided
+    if (selectedStatus && selectedStatus.trim().length > 100) {
+      Alert.alert('Error', 'Status must be no more than 100 characters long');
       return;
     }
 
@@ -233,32 +261,100 @@ export default function EditProfileScreen() {
         profilePicture: uploadTempId,
       };
 
-      // Update profile via API
-      const response = await apiService.updateUserProfile(user?.id!, profileData);
+      // Prepare data for API call - only include fields that have values
+      const apiData: any = {};
       
-      if (response.success) {
-        // Update Redux store
+      if (profileData.fullName && profileData.fullName.trim()) {
+        apiData.fullName = profileData.fullName.trim();
+      }
+      
+      if (profileData.status && profileData.status.trim()) {
+        apiData.status = profileData.status.trim();
+      }
+      
+      if (profileData.country && profileData.country.trim()) {
+        apiData.location = {
+          country: profileData.country.trim(),
+        };
+        
+        // Only include state if it has a valid value (2+ characters)
+        if (profileData.state && profileData.state.trim() && profileData.state.trim().length >= 2) {
+          apiData.location.state = profileData.state.trim();
+        }
+      }
+      
+      if (profileData.profilePicture && profileData.profilePicture.trim()) {
+        apiData.profilePicture = profileData.profilePicture.trim();
+      }
+
+      // Check if we have at least one field to update
+      if (Object.keys(apiData).length === 0) {
+        Alert.alert('Error', 'Please fill in at least one field to update');
+        return;
+      }
+
+      // Ensure we have required fields for validation
+      if (!apiData.fullName) {
+        Alert.alert('Error', 'Full name is required');
+        return;
+      }
+
+      console.log('📝 [EditProfileScreen] Sending API data:', JSON.stringify(apiData, null, 2));
+      console.log('📝 [EditProfileScreen] Profile data before API call:', profileData);
+
+      // Update profile via API
+      const response = await apiService.updateUserProfile(apiData);
+      
+      if (response.status === 'SUCCESS' && response.user) {
+        console.log('✅ [EditProfileScreen] Profile update successful, updating Redux store...');
+        console.log('✅ [EditProfileScreen] API response user:', response.user);
+        
+        // Update Redux store with the updated user data from API
         dispatch(updateUserProfile({
-          fullName: profileData.fullName,
-          country: profileData.country,
-          state: profileData.state,
-          status: profileData.status,
-          profilePicture: profileData.profilePicture,
+          fullName: response.user.fullName,
+          country: response.user.location?.country,
+          state: response.user.location?.state,
+          status: response.user.status,
+          profilePicture: response.user.profilePicture,
         }));
+
+        console.log('✅ [EditProfileScreen] Redux store updated, showing success message...');
 
         Toast.show({
           type: 'success',
           text1: 'Profile updated successfully',
         });
 
-        // Navigate back
-        navigation.goBack();
+        console.log('✅ [EditProfileScreen] Waiting for Redux state to update...');
+        // Add a small delay to ensure Redux state is properly updated
+        setTimeout(() => {
+          console.log('✅ [EditProfileScreen] Navigating back...');
+          navigation.goBack();
+        }, 100);
       } else {
         throw new Error(response.message || 'Failed to update profile');
       }
     } catch (error) {
       console.error('Error updating profile:', error);
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
+      
+      // Show more specific error messages
+      let errorMessage = 'Failed to update profile. Please try again.';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('State must be between 2-50 characters')) {
+          errorMessage = 'State must be between 2-50 characters. Please check your state field.';
+        } else if (error.message.includes('Full name must be between')) {
+          errorMessage = 'Full name must be between 2-100 characters. Please check your name.';
+        } else if (error.message.includes('Authentication token not found')) {
+          errorMessage = 'Please log in again to update your profile.';
+        } else if (error.message.includes('Invalid input data')) {
+          errorMessage = 'Please check all fields and try again.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }

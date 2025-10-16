@@ -2,8 +2,7 @@
 // This is a simplified version that can be extended based on needs
 
 import { Alert, Platform } from 'react-native';
-import { launchImageLibrary, launchCamera, ImagePickerResponse, MediaType } from 'react-native-image-picker';
-import { permissionService } from './permissionService';
+import { launchImageLibrary, launchCamera, ImagePickerResponse, MediaType, PhotoQuality, CameraType } from 'react-native-image-picker';
 
 export interface ImagePickerResult {
   success: boolean;
@@ -21,83 +20,107 @@ class LightweightImagePicker {
   async pickImages(maxCount: number = 1): Promise<ImagePickerResult> {
     try {
       console.log(`📸 Starting image picker for ${Platform.OS} ${Platform.Version}`);
+      console.log(`📸 Max count: ${maxCount}`);
       
       if (Platform.OS === 'web') {
-        return this.pickImagesWeb(maxCount);
+        console.log('📸 Web platform not supported');
+        return {
+          success: false,
+          files: [],
+          error: 'Web platform not supported for image picker'
+        };
       }
       
-      // For Android 13+, react-native-image-picker handles permissions internally
-      // For older versions, we still need to check storage permissions
-      if (Platform.OS === 'android' && Platform.Version < 33) {
-        console.log('🔐 Checking storage permissions for Android < 13');
-        const storagePermission = await permissionService.requestStoragePermissions();
-        if (!storagePermission.granted) {
-          console.log('❌ Storage permission denied');
-          return {
-            success: false,
-            files: [],
-            error: 'Storage permission is required to access photos'
-          };
-        }
-        console.log('✅ Storage permission granted');
-      } else {
-        console.log('🔐 Skipping storage permission check for Android 13+ or iOS');
-      }
+      // Permissions are handled by the calling component
+      console.log('🔐 Permissions handled by calling component');
       
       // Use react-native-image-picker for native platforms
       return new Promise((resolve) => {
         const options = {
           mediaType: 'photo' as MediaType,
-          quality: 0.8,
-          maxWidth: 1024,
-          maxHeight: 1024,
+          quality: 0.8 as PhotoQuality,
           selectionLimit: maxCount,
         };
-
-        launchImageLibrary(options, (response: ImagePickerResponse) => {
-          if (response.didCancel) {
-            resolve({
-              success: false,
-              files: [],
-              error: 'User cancelled image selection'
+        console.log('📸 Launching image library with options:', options);
+        
+        // Add timeout to detect if picker hangs
+        const timeout = setTimeout(() => {
+          console.log('📸 Image picker timeout - no response after 30 seconds');
+          resolve({
+            success: false,
+            files: [],
+            error: 'Image picker timeout - no response received'
+          });
+        }, 30000);
+        
+        try {
+          console.log('📸 About to call launchImageLibrary...');
+          launchImageLibrary(options, (response: ImagePickerResponse) => {
+            clearTimeout(timeout);
+            console.log('📸 Image picker response received:', {
+              didCancel: response.didCancel,
+              errorMessage: response.errorMessage,
+              assetsCount: response.assets?.length || 0,
+              response: response
             });
-            return;
-          }
 
-          if (response.errorMessage) {
-            console.error('Image picker error:', response.errorMessage);
-            resolve({
-              success: false,
-              files: [],
-              error: response.errorMessage.includes('permission') 
-                ? 'Permission denied. Please allow access to photos in app settings.'
-                : response.errorMessage
-            });
-            return;
-          }
+            if (response.didCancel) {
+              console.log('📸 User cancelled image selection');
+              resolve({
+                success: false,
+                files: [],
+                error: 'User cancelled image selection'
+              });
+              return;
+            }
 
-          if (response.assets && response.assets.length > 0) {
-            const files = response.assets.map(asset => ({
-              uri: asset.uri || '',
-              name: asset.fileName || `image_${Date.now()}.jpg`,
-              size: asset.fileSize || 0,
-              type: asset.type || 'image/jpeg',
-            }));
+            if (response.errorMessage) {
+              console.error('📸 Image picker error:', response.errorMessage);
+              resolve({
+                success: false,
+                files: [],
+                error: response.errorMessage.includes('permission') 
+                  ? 'Permission denied. Please allow access to photos in app settings.'
+                  : response.errorMessage
+              });
+              return;
+            }
 
-            resolve({
-              success: true,
-              files: files
-            });
-          } else {
-            resolve({
-              success: false,
-              files: [],
-              error: 'No images selected'
-            });
-          }
-        });
+            if (response.assets && response.assets.length > 0) {
+              console.log('📸 Processing selected images:', response.assets.length);
+              const files = response.assets.map(asset => ({
+                uri: asset.uri || '',
+                name: asset.fileName || `image_${Date.now()}.jpg`,
+                size: asset.fileSize || 0,
+                type: asset.type || 'image/jpeg',
+              }));
+
+              console.log('📸 Mapped files:', files);
+              resolve({
+                success: true,
+                files: files
+              });
+            } else {
+              console.log('📸 No assets in response');
+              resolve({
+                success: false,
+                files: [],
+                error: 'No images selected'
+              });
+            }
+          });
+        } catch (error) {
+          clearTimeout(timeout);
+          console.error('📸 Error calling launchImageLibrary:', error);
+          resolve({
+            success: false,
+            files: [],
+            error: error instanceof Error ? error.message : 'Failed to launch image library'
+          });
+        }
       });
     } catch (error) {
+      console.error('📸 Image picker exception:', error);
       return {
         success: false,
         files: [],
@@ -106,30 +129,99 @@ class LightweightImagePicker {
     }
   }
 
-  private async pickImagesWeb(maxCount: number): Promise<ImagePickerResult> {
-    return new Promise((resolve) => {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.multiple = maxCount > 1;
+
+  // Video picker
+  async pickVideos(maxCount: number = 1): Promise<ImagePickerResult> {
+    try {
+      console.log(`🎥 Starting video picker for ${Platform.OS} ${Platform.Version}`);
+      console.log(`🎥 Max count: ${maxCount}`);
       
-      input.onchange = (event) => {
-        const files = Array.from((event.target as HTMLInputElement).files || []);
-        const result: ImagePickerResult = {
-          success: true,
-          files: files.map(file => ({
-            uri: URL.createObjectURL(file),
-            name: file.name,
-            size: file.size,
-            type: file.type,
-          }))
+      if (Platform.OS === 'web') {
+        console.log('🎥 Web platform not supported');
+        return {
+          success: false,
+          files: [],
+          error: 'Web platform not supported for video picker'
         };
-        resolve(result);
-      };
+      }
       
-      input.click();
-    });
+      // Permissions are handled by the calling component
+      console.log('🔐 Permissions handled by calling component');
+      
+      // Use react-native-image-picker for native platforms
+      return new Promise((resolve) => {
+        const options = {
+          mediaType: 'video' as MediaType,
+          quality: 0.8 as PhotoQuality,
+          selectionLimit: maxCount,
+        };
+
+        console.log('🎥 Launching video library with options:', options);
+        
+        launchImageLibrary(options, (response: ImagePickerResponse) => {
+          console.log('🎥 Video picker response received:', {
+            didCancel: response.didCancel,
+            errorMessage: response.errorMessage,
+            assetsCount: response.assets?.length || 0,
+            response: response
+          });
+
+          if (response.didCancel) {
+            console.log('🎥 User cancelled video selection');
+            resolve({
+              success: false,
+              files: [],
+              error: 'User cancelled video selection'
+            });
+            return;
+          }
+
+          if (response.errorMessage) {
+            console.error('🎥 Video picker error:', response.errorMessage);
+            resolve({
+              success: false,
+              files: [],
+              error: response.errorMessage.includes('permission') 
+                ? 'Permission denied. Please allow access to videos in app settings.'
+                : response.errorMessage
+            });
+            return;
+          }
+
+          if (response.assets && response.assets.length > 0) {
+            console.log('🎥 Processing selected videos:', response.assets.length);
+            const files = response.assets.map(asset => ({
+              uri: asset.uri || '',
+              name: asset.fileName || `video_${Date.now()}.mp4`,
+              size: asset.fileSize || 0,
+              type: asset.type || 'video/mp4',
+            }));
+
+            console.log('🎥 Mapped files:', files);
+            resolve({
+              success: true,
+              files: files
+            });
+          } else {
+            console.log('🎥 No assets in response');
+            resolve({
+              success: false,
+              files: [],
+              error: 'No videos selected'
+            });
+          }
+        });
+      });
+    } catch (error) {
+      console.error('🎥 Video picker exception:', error);
+      return {
+        success: false,
+        files: [],
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
   }
+
 
   // Camera capture (simplified)
   async takePhoto(): Promise<ImagePickerResult> {
@@ -144,27 +236,17 @@ class LightweightImagePicker {
         };
       }
 
-      // Check camera permissions
-      console.log('🔐 Checking camera permissions');
-      const cameraPermission = await permissionService.requestCameraPermission();
-      if (!cameraPermission.granted) {
-        console.log('❌ Camera permission denied');
-        return {
-          success: false,
-          files: [],
-          error: 'Camera permission is required to take photos'
-        };
-      }
-      console.log('✅ Camera permission granted');
+      // Permissions are handled by the calling component
+      console.log('🔐 Permissions handled by calling component');
 
       // Use react-native-image-picker for camera
       return new Promise((resolve) => {
         const options = {
           mediaType: 'photo' as MediaType,
-          quality: 0.8,
+          quality: 0.8 as PhotoQuality,
           maxWidth: 1024,
           maxHeight: 1024,
-          cameraType: 'back',
+          cameraType: 'back' as CameraType,
         };
 
         launchCamera(options, (response: ImagePickerResponse) => {

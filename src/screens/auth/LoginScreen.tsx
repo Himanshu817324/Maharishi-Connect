@@ -581,6 +581,9 @@ const LoginScreen = () => {
             permissionError,
           );
         }
+        
+        // Navigate to MainStack for existing users
+        navigation.navigate('MainStack');
       }
     } catch (err: any) {
       const safeError = {

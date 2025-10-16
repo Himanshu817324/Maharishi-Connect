@@ -18,6 +18,20 @@ const Stack = createStackNavigator<RootStackParamList>();
 export default function RootNavigator() {
   console.log('🚀 RootNavigator rendered');
   
+  const { user, isLoggedIn, profileCompleted, hasSeenOnboarding } = useSelector((state: RootState) => state.auth);
+  
+  console.log('🔐 Auth state:', { 
+    isLoggedIn, 
+    hasUser: !!user, 
+    profileCompleted,
+    hasSeenOnboarding,
+    userDetails: user ? {
+      id: user.id,
+      fullName: user.fullName,
+      firebaseUid: user.firebaseUid
+    } : null
+  });
+  
   try {
     return (
       <NavigationContainer>

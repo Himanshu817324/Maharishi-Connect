@@ -35,12 +35,22 @@ class ApiService {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), NETWORK_CONFIG.TIMEOUT);
 
+      console.log('🌐 [ApiService] Making request to:', url);
+      console.log('🌐 [ApiService] Request config:', {
+        method: config.method,
+        headers: config.headers,
+        body: config.body ? JSON.parse(config.body as string) : 'No body'
+      });
+
       const response = await fetch(url, {
         ...config,
         signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
+      
+      console.log('🌐 [ApiService] Response status:', response.status);
+      console.log('🌐 [ApiService] Response headers:', Object.fromEntries(response.headers.entries()));
 
       // Check if response is JSON
       const contentType = response.headers.get('content-type');
@@ -71,6 +81,12 @@ class ApiService {
 
       if (!response.ok) {
         const errorMessage = data.message || `HTTP ${response.status}: ${response.statusText}`;
+        console.error('❌ [ApiService] API Error Response:', {
+          status: response.status,
+          statusText: response.statusText,
+          data: data,
+          message: errorMessage
+        });
         throw new Error(errorMessage);
       }
 
@@ -340,6 +356,53 @@ class ApiService {
     return this.makeFormDataRequest("/upload/image", formData);
   }
 
+  /**
+   * Update user profile
+   * @param profileData - Profile data to update
+   * @returns Updated user profile
+   */
+  async updateUserProfile(profileData: {
+    fullName?: string;
+    status?: string;
+    location?: {
+      country: string;
+      state: string;
+    };
+    profilePicture?: string;
+  }): Promise<ApiResponse> {
+    // Get auth token from AsyncStorage
+    const token = await this.getAuthToken();
+    
+    if (!token) {
+      throw new Error('Authentication token not found. Please log in again.');
+    }
+
+    console.log('🔧 [ApiService] updateUserProfile called with:', JSON.stringify(profileData, null, 2));
+    console.log('🔧 [ApiService] Auth token exists:', !!token);
+
+    return this.makeRequest("/auth/profile", {
+      method: "PUT",
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(profileData),
+    });
+  }
+
+  /**
+   * Get authentication token from AsyncStorage
+   * @returns Auth token or null
+   */
+  private async getAuthToken(): Promise<string | null> {
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      return await AsyncStorage.getItem('auth_token');
+    } catch (error) {
+      console.error('Error getting auth token:', error);
+      return null;
+    }
+  }
 
   // Debug method to test server connectivity
   async testServerConnectivity(): Promise<boolean> {

@@ -73,7 +73,7 @@ export default function TabNavigator() {
               borderTopColor: colors.tabBarBG,
               borderTopWidth: 0,
               height: Platform.OS === 'ios' ? moderateScale(85) + insets.bottom : moderateScale(65) + insets.bottom,
-              paddingBottom: Platform.OS === 'ios' ? moderateScale(25) + insets.bottom : moderateScale(10) + insets.bottom,
+              paddingBottom: Platform.OS === 'ios' ? moderateScale(15) + insets.bottom : moderateScale(10) + insets.bottom,
               paddingTop: moderateScale(8),
               elevation: 8,
               shadowColor: colors.tabBarBG,

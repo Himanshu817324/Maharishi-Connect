@@ -1,4 +1,5 @@
-import { Platform, PermissionsAndroid, Alert, Linking } from 'react-native';
+import { Platform, Alert, Linking } from 'react-native';
+import { check, request, PERMISSIONS, RESULTS, Permission } from 'react-native-permissions';
 
 export interface PermissionResult {
   granted: boolean;
@@ -9,158 +10,271 @@ export interface PermissionResult {
 class PermissionService {
   // Request camera permission
   async requestCameraPermission(): Promise<PermissionResult> {
-    if (Platform.OS === 'android') {
-      try {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.CAMERA,
-          {
-            title: 'Camera Permission',
-            message: 'This app needs access to camera to take photos and videos',
-            buttonNeutral: 'Ask Me Later',
-            buttonNegative: 'Cancel',
-            buttonPositive: 'OK',
-          }
-        );
+    try {
+      console.log('🔐 Requesting camera permission...');
+      
+      const permission: Permission = Platform.OS === 'android' 
+        ? PERMISSIONS.ANDROID.CAMERA 
+        : PERMISSIONS.IOS.CAMERA;
+      
+      // First check if permission is already granted
+      const currentStatus = await check(permission);
+      console.log('🔐 Current camera permission status:', currentStatus);
+      
+      if (currentStatus === RESULTS.GRANTED) {
+        console.log('✅ Camera permission already granted');
+        return { granted: true, canAskAgain: true };
+      }
+      
+      if (currentStatus === RESULTS.DENIED) {
+        console.log('📱 Requesting camera permission...');
+        const result = await request(permission);
+        console.log('🔐 Camera permission request result:', result);
+        
+        const isGranted = result === RESULTS.GRANTED;
+        const canAskAgain = result !== RESULTS.BLOCKED && result !== RESULTS.UNAVAILABLE;
+        
+        console.log('🔐 Camera permission final result:', { isGranted, canAskAgain });
 
         return {
-          granted: granted === PermissionsAndroid.RESULTS.GRANTED,
-          canAskAgain: granted !== PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN,
-        };
-      } catch (error) {
-        console.error('Error requesting camera permission:', error);
-        return {
-          granted: false,
-          canAskAgain: false,
-          message: 'Error requesting camera permission',
+          granted: isGranted,
+          canAskAgain,
+          message: !isGranted ? 'Camera permission is required to take photos' : undefined,
         };
       }
+      
+      // Permission is blocked or unavailable
+      console.log('❌ Camera permission is blocked or unavailable:', currentStatus);
+      return {
+        granted: false,
+        canAskAgain: currentStatus === RESULTS.BLOCKED ? false : true,
+        message: 'Camera permission is required to take photos',
+      };
+    } catch (error) {
+      console.error('❌ Error requesting camera permission:', error);
+      return {
+        granted: false,
+        canAskAgain: false,
+        message: 'Error requesting camera permission',
+      };
     }
-    
-    // iOS permissions are handled automatically
-    return { granted: true, canAskAgain: true };
   }
 
   // Request storage permissions
   async requestStoragePermissions(): Promise<PermissionResult> {
-    if (Platform.OS === 'android') {
-      try {
-        // Check Android version for appropriate permissions
+    try {
+      console.log('🔐 Requesting storage permissions...');
+      
+      let permissions: Permission[] = [];
+      
+      if (Platform.OS === 'android') {
         const androidVersion = Platform.Version;
-        let permissionsToRequest: string[] = [];
         
         if (androidVersion >= 33) {
           // Android 13+ (API 33+) - Use new media permissions
-          permissionsToRequest = [
-            PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
-            PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO,
+          permissions = [
+            PERMISSIONS.ANDROID.READ_MEDIA_IMAGES,
+            PERMISSIONS.ANDROID.READ_MEDIA_VIDEO,
+            PERMISSIONS.ANDROID.READ_MEDIA_AUDIO,
           ];
         } else {
           // Android 12 and below - Use legacy storage permissions
-          permissionsToRequest = [
-            PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
-            PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+          permissions = [
+            PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE,
+            PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE,
           ];
         }
-
-        console.log(`🔐 Requesting storage permissions for Android ${androidVersion}:`, permissionsToRequest);
-        
-        const granted = await PermissionsAndroid.requestMultiple(permissionsToRequest);
-        
-        // Check if all requested permissions are granted
-        const allGranted = permissionsToRequest.every(permission => 
-          granted[permission] === PermissionsAndroid.RESULTS.GRANTED
-        );
-        
-        const canAskAgain = permissionsToRequest.every(permission => 
-          granted[permission] !== PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
-        );
-
-        console.log(`🔐 Storage permissions result:`, { allGranted, canAskAgain, granted });
-
-        return {
-          granted: allGranted,
-          canAskAgain,
-          message: !allGranted ? 'Storage permissions are required to access photos and files' : undefined,
-        };
-      } catch (error) {
-        console.error('Error requesting storage permissions:', error);
-        return {
-          granted: false,
-          canAskAgain: false,
-          message: 'Error requesting storage permissions',
-        };
+      } else {
+        // iOS permissions
+        permissions = [
+          PERMISSIONS.IOS.PHOTO_LIBRARY,
+          PERMISSIONS.IOS.CAMERA,
+        ];
       }
+
+      console.log(`🔐 Requesting storage permissions for ${Platform.OS}:`, permissions);
+      
+      // Check current status of all permissions
+      const checkResults = await Promise.all(
+        permissions.map(permission => check(permission))
+      );
+      
+      console.log('🔐 Current storage permission statuses:', checkResults);
+      
+      const alreadyGranted = checkResults.every(status => status === RESULTS.GRANTED);
+      if (alreadyGranted) {
+        console.log('✅ Storage permissions already granted');
+        return { granted: true, canAskAgain: true };
+      }
+      
+      // Request permissions that are not granted
+      const requestPromises = permissions.map(async (permission, index) => {
+        const currentStatus = checkResults[index];
+        if (currentStatus === RESULTS.DENIED) {
+          console.log(`📱 Requesting permission: ${permission}`);
+          return await request(permission);
+        }
+        return currentStatus;
+      });
+      
+      const results = await Promise.all(requestPromises);
+      console.log('🔐 Storage permission request results:', results);
+      
+      const allGranted = results.every(result => result === RESULTS.GRANTED);
+      const canAskAgain = results.every(result => 
+        result !== RESULTS.BLOCKED && result !== RESULTS.UNAVAILABLE
+      );
+
+      console.log(`🔐 Storage permissions final result:`, { allGranted, canAskAgain });
+
+      return {
+        granted: allGranted,
+        canAskAgain,
+        message: !allGranted ? 'Storage permissions are required to access photos and files' : undefined,
+      };
+    } catch (error) {
+      console.error('❌ Error requesting storage permissions:', error);
+      return {
+        granted: false,
+        canAskAgain: false,
+        message: 'Error requesting storage permissions',
+      };
     }
-    
-    // iOS permissions are handled automatically
-    return { granted: true, canAskAgain: true };
+  }
+
+  // Request file access permissions (for document picker)
+  async requestFileAccessPermissions(): Promise<PermissionResult> {
+    try {
+      console.log('🔐 Requesting file access permissions...');
+      
+      let permissions: Permission[] = [];
+      
+      if (Platform.OS === 'android') {
+        const androidVersion = Platform.Version;
+        
+        if (androidVersion >= 33) {
+          // Android 13+ - Use new media permissions for all file types
+          permissions = [
+            PERMISSIONS.ANDROID.READ_MEDIA_IMAGES,
+            PERMISSIONS.ANDROID.READ_MEDIA_VIDEO,
+            PERMISSIONS.ANDROID.READ_MEDIA_AUDIO,
+          ];
+        } else {
+          // Android 12 and below - Use legacy storage permissions
+          permissions = [
+            PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE,
+            PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE,
+          ];
+        }
+      } else {
+        // iOS permissions
+        permissions = [
+          PERMISSIONS.IOS.PHOTO_LIBRARY,
+        ];
+      }
+
+      console.log(`🔐 Requesting file access permissions for ${Platform.OS}:`, permissions);
+      
+      // Check current status of all permissions
+      const checkResults = await Promise.all(
+        permissions.map(permission => check(permission))
+      );
+      
+      console.log('🔐 Current file access permission statuses:', checkResults);
+      
+      const alreadyGranted = checkResults.every(status => status === RESULTS.GRANTED);
+      if (alreadyGranted) {
+        console.log('✅ File access permissions already granted');
+        return { granted: true, canAskAgain: true };
+      }
+      
+      // Request permissions that are not granted
+      const requestPromises = permissions.map(async (permission, index) => {
+        const currentStatus = checkResults[index];
+        if (currentStatus === RESULTS.DENIED) {
+          console.log(`📱 Requesting permission: ${permission}`);
+          return await request(permission);
+        }
+        return currentStatus;
+      });
+      
+      const results = await Promise.all(requestPromises);
+      console.log('🔐 File access permission request results:', results);
+      
+      const allGranted = results.every(result => result === RESULTS.GRANTED);
+      const canAskAgain = results.every(result => 
+        result !== RESULTS.BLOCKED && result !== RESULTS.UNAVAILABLE
+      );
+
+      console.log(`🔐 File access permissions final result:`, { allGranted, canAskAgain });
+
+      return {
+        granted: allGranted,
+        canAskAgain,
+        message: !allGranted ? 'File access permissions are required to select and share files' : undefined,
+      };
+    } catch (error) {
+      console.error('❌ Error requesting file access permissions:', error);
+      return {
+        granted: false,
+        canAskAgain: false,
+        message: 'Error requesting file access permissions',
+      };
+    }
   }
 
   // Request microphone permission
   async requestMicrophonePermission(): Promise<PermissionResult> {
-    if (Platform.OS === 'android') {
-      try {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-          {
-            title: 'Microphone Permission',
-            message: 'This app needs access to microphone to record audio',
-            buttonNeutral: 'Ask Me Later',
-            buttonNegative: 'Cancel',
-            buttonPositive: 'OK',
-          }
-        );
+    try {
+      console.log('🔐 Requesting microphone permission...');
+      
+      const permission: Permission = Platform.OS === 'android' 
+        ? PERMISSIONS.ANDROID.RECORD_AUDIO 
+        : PERMISSIONS.IOS.MICROPHONE;
+      
+      // First check if permission is already granted
+      const currentStatus = await check(permission);
+      console.log('🔐 Current microphone permission status:', currentStatus);
+      
+      if (currentStatus === RESULTS.GRANTED) {
+        console.log('✅ Microphone permission already granted');
+        return { granted: true, canAskAgain: true };
+      }
+      
+      if (currentStatus === RESULTS.DENIED) {
+        console.log('📱 Requesting microphone permission...');
+        const result = await request(permission);
+        console.log('🔐 Microphone permission request result:', result);
+        
+        const isGranted = result === RESULTS.GRANTED;
+        const canAskAgain = result !== RESULTS.BLOCKED && result !== RESULTS.UNAVAILABLE;
+        
+        console.log('🔐 Microphone permission final result:', { isGranted, canAskAgain });
 
         return {
-          granted: granted === PermissionsAndroid.RESULTS.GRANTED,
-          canAskAgain: granted !== PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN,
-        };
-      } catch (error) {
-        console.error('Error requesting microphone permission:', error);
-        return {
-          granted: false,
-          canAskAgain: false,
-          message: 'Error requesting microphone permission',
+          granted: isGranted,
+          canAskAgain,
+          message: !isGranted ? 'Microphone permission is required to record audio' : undefined,
         };
       }
-    }
-    
-    // iOS permissions are handled automatically
-    return { granted: true, canAskAgain: true };
-  }
-
-  // Request gallery permission
-  async requestGalleryPermission(): Promise<PermissionResult> {
-    if (Platform.OS === 'android') {
-      try {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-          {
-            title: 'Gallery Permission',
-            message: 'This app needs access to save images to your gallery',
-            buttonNeutral: 'Ask Me Later',
-            buttonNegative: 'Cancel',
-            buttonPositive: 'OK',
-          }
-        );
-
-        return {
-          granted: granted === PermissionsAndroid.RESULTS.GRANTED,
-          canAskAgain: granted !== PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN,
-        };
-      } catch (error) {
-        console.error('Error requesting gallery permission:', error);
-        return {
-          granted: false,
-          canAskAgain: false,
-          message: 'Failed to request gallery permission',
-        };
-      }
-    } else {
-      // iOS doesn't need explicit permission for saving to gallery
-      return { granted: true, canAskAgain: true };
+      
+      // Permission is blocked or unavailable
+      console.log('❌ Microphone permission is blocked or unavailable:', currentStatus);
+      return {
+        granted: false,
+        canAskAgain: currentStatus === RESULTS.BLOCKED ? false : true,
+        message: 'Microphone permission is required to record audio',
+      };
+    } catch (error) {
+      console.error('❌ Error requesting microphone permission:', error);
+      return {
+        granted: false,
+        canAskAgain: false,
+        message: 'Error requesting microphone permission',
+      };
     }
   }
+
 
   // Request all media permissions (camera + storage + microphone)
   async requestAllMediaPermissions(): Promise<{
@@ -189,35 +303,38 @@ class PermissionService {
     storage: boolean;
     microphone: boolean;
   }> {
-    if (Platform.OS === 'android') {
-      try {
-        const [camera, storage, microphone] = await Promise.all([
-          PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA),
-          PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE),
-          PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO),
-        ]);
+    try {
+      const cameraPermission: Permission = Platform.OS === 'android' 
+        ? PERMISSIONS.ANDROID.CAMERA 
+        : PERMISSIONS.IOS.CAMERA;
+      
+      const storagePermission: Permission = Platform.OS === 'android' 
+        ? PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE 
+        : PERMISSIONS.IOS.PHOTO_LIBRARY;
+      
+      const microphonePermission: Permission = Platform.OS === 'android' 
+        ? PERMISSIONS.ANDROID.RECORD_AUDIO 
+        : PERMISSIONS.IOS.MICROPHONE;
 
-        return {
-          camera,
-          storage,
-          microphone,
-        };
-      } catch (error) {
-        console.error('Error checking permissions:', error);
-        return {
-          camera: false,
-          storage: false,
-          microphone: false,
-        };
-      }
+      const [camera, storage, microphone] = await Promise.all([
+        check(cameraPermission),
+        check(storagePermission),
+        check(microphonePermission),
+      ]);
+
+      return {
+        camera: camera === RESULTS.GRANTED,
+        storage: storage === RESULTS.GRANTED,
+        microphone: microphone === RESULTS.GRANTED,
+      };
+    } catch (error) {
+      console.error('❌ Error checking permissions:', error);
+      return {
+        camera: false,
+        storage: false,
+        microphone: false,
+      };
     }
-    
-    // iOS permissions are handled automatically
-    return {
-      camera: true,
-      storage: true,
-      microphone: true,
-    };
   }
 
   // Show permission denied alert with settings option
@@ -308,22 +425,47 @@ class PermissionService {
     storage: { granted: boolean; canAskAgain: boolean };
     microphone: { granted: boolean; canAskAgain: boolean };
   }> {
-    const permissions = await this.checkPermissions();
-    
-    return {
-      camera: {
-        granted: permissions.camera,
-        canAskAgain: true, // We can't determine this without requesting
-      },
-      storage: {
-        granted: permissions.storage,
-        canAskAgain: true,
-      },
-      microphone: {
-        granted: permissions.microphone,
-        canAskAgain: true,
-      },
-    };
+    try {
+      const cameraPermission: Permission = Platform.OS === 'android' 
+        ? PERMISSIONS.ANDROID.CAMERA 
+        : PERMISSIONS.IOS.CAMERA;
+      
+      const storagePermission: Permission = Platform.OS === 'android' 
+        ? PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE 
+        : PERMISSIONS.IOS.PHOTO_LIBRARY;
+      
+      const microphonePermission: Permission = Platform.OS === 'android' 
+        ? PERMISSIONS.ANDROID.RECORD_AUDIO 
+        : PERMISSIONS.IOS.MICROPHONE;
+
+      const [camera, storage, microphone] = await Promise.all([
+        check(cameraPermission),
+        check(storagePermission),
+        check(microphonePermission),
+      ]);
+
+      return {
+        camera: {
+          granted: camera === RESULTS.GRANTED,
+          canAskAgain: camera !== RESULTS.BLOCKED && camera !== RESULTS.UNAVAILABLE,
+        },
+        storage: {
+          granted: storage === RESULTS.GRANTED,
+          canAskAgain: storage !== RESULTS.BLOCKED && storage !== RESULTS.UNAVAILABLE,
+        },
+        microphone: {
+          granted: microphone === RESULTS.GRANTED,
+          canAskAgain: microphone !== RESULTS.BLOCKED && microphone !== RESULTS.UNAVAILABLE,
+        },
+      };
+    } catch (error) {
+      console.error('❌ Error getting permission status:', error);
+      return {
+        camera: { granted: false, canAskAgain: false },
+        storage: { granted: false, canAskAgain: false },
+        microphone: { granted: false, canAskAgain: false },
+      };
+    }
   }
 }
 

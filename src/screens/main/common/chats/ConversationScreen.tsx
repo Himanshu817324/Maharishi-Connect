@@ -85,14 +85,6 @@ const formatDateForSeparator = (dateString: string): string => {
   }
 };
 
-// Utility function to check if two dates are on the same day (currently unused but kept for future use)
-// const isSameDay = (date1: string, date2: string): boolean => {
-//   const d1 = new Date(date1);
-//   const d2 = new Date(date2);
-//   return d1.getFullYear() === d2.getFullYear() &&
-//          d1.getMonth() === d2.getMonth() &&
-//          d1.getDate() === d2.getDate();
-// };
 
 // Interface for grouped message items
 interface GroupedMessageItem {
@@ -112,7 +104,7 @@ const ConversationScreen: React.FC = () => {
 
   const { chat: routeChat } = route.params as RouteParams;
   const { currentChat } = useSelector((state: RootState) => state.chat);
-  const { currentChatMessages, currentChatId, pagination, loading } = useSelector(
+  const { currentChatMessages, pagination, loading } = useSelector(
     (state: RootState) => state.message,
   );
   const { user } = useSelector((state: RootState) => state.auth);
@@ -124,7 +116,7 @@ const ConversationScreen: React.FC = () => {
   } | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   // ✅ FIX: Use enhanced keyboard hook with dynamic calculations
-  const { keyboardHeight, isKeyboardVisible, adjustedKeyboardHeight, screenInfo } = useKeyboardHeight();
+  const { isKeyboardVisible, screenInfo } = useKeyboardHeight();
 
   // Typing indicators
   const [localTypingUsers, setLocalTypingUsers] = useState<
@@ -696,6 +688,14 @@ const ConversationScreen: React.FC = () => {
   const handleSendMessage = async (
     content: string,
     messageType: 'text' | 'image' | 'video' | 'audio' | 'file' = 'text',
+    mediaData?: {
+      mediaUrl?: string;
+      mediaMetadata?: {
+        filename: string;
+        size: number;
+        mimeType: string;
+      };
+    }
   ) => {
     if (!chat || !content.trim()) return;
 
@@ -746,6 +746,8 @@ const ConversationScreen: React.FC = () => {
         try {
           messageService.sendMessageImmediate(chat.id, content, messageType, {
             replyToMessageId: replyToMessage?.id,
+            mediaUrl: mediaData?.mediaUrl,
+            mediaMetadata: mediaData?.mediaMetadata,
           });
           console.log('📤 Message sent via socket successfully');
         } catch (error) {
@@ -759,6 +761,8 @@ const ConversationScreen: React.FC = () => {
             content,
             messageType,
             replyToMessageId: replyToMessage?.id,
+            mediaUrl: mediaData?.mediaUrl,
+            mediaMetadata: mediaData?.mediaMetadata,
           });
 
           if (response && response.data) {
@@ -1301,9 +1305,9 @@ const ConversationScreen: React.FC = () => {
     >
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-        enabled={Platform.OS === 'ios'}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : (isKeyboardVisible ? 30 : 5)}
+        enabled={true}
       >
         <View style={[styles.screen, { backgroundColor: colors.chatBackground }]}>
           <ChatHeader
@@ -1386,23 +1390,17 @@ const ConversationScreen: React.FC = () => {
 
           {renderTypingIndicator()}
 
-          <View 
-            style={[
-              styles.inputContainer,
-              Platform.OS === 'android' && isKeyboardVisible && {
-                marginBottom: Math.max(adjustedKeyboardHeight + 20, 30), // Ensure minimum 30px clearance
-              },
-            ]}
-          >
+          <View style={styles.inputContainer}>
             <ChatInput
               onSendMessage={handleSendMessage}
               replyToMessage={replyToMessage || undefined}
               onCancelReply={() => setReplyToMessage(null)}
               disabled={false}
-              keyboardHeight={keyboardHeight}
               onStartTyping={handleStartTyping}
               onStopTyping={handleStopTyping}
               screenInfo={screenInfo}
+              chatId={chat?.id}
+              userId={user?.firebaseUid || user?.id}
             />
           </View>
         </View>
@@ -1442,15 +1440,16 @@ const styles = StyleSheet.create({
     paddingBottom: hp(2),
   },
   inputContainer: {
-    // ✅ FIX: Better input container styling for Android
     backgroundColor: 'transparent',
     paddingHorizontal: 0,
     paddingVertical: 0,
     // Ensure proper positioning
     position: 'relative',
     zIndex: 1000,
-    // Ensure the input stays at the bottom
+    // Ensure the input stays at the bottom but above safe area
     alignSelf: 'stretch',
+    // The input will be positioned above the safe area by CustomSafeAreaView
+    marginBottom: 0,
   },
   centerContainer: {
     justifyContent: 'center',

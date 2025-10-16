@@ -419,7 +419,7 @@ const ProfileScreen = () => {
         console.error('❌ Error requesting contacts permission:', error);
       }
 
-      navigation.navigate('MainStack' as never);
+      navigation.navigate('MainStack');
     } catch (err: unknown) {
       console.error('❌ Profile save error:', err);
       console.error('Error type:', typeof err);

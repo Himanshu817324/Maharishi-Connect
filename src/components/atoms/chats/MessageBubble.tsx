@@ -1,15 +1,19 @@
-import React, { memo } from 'react';
+import React, { memo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Alert,
+  Image,
 } from 'react-native';
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 import { MessageData } from '@/services/chatService';
 import MessageStatusIndicator from '@/components/MessageStatusIndicator';
+import FileMessageBubble from '@/components/FileMessageBubble';
+import MediaPreview from '@/components/MediaPreview';
+import Icon from 'react-native-vector-icons/Ionicons';
 
 interface MessageBubbleProps {
   message: MessageData;
@@ -37,12 +41,187 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
   onDelete,
 }) => {
   const { colors } = useTheme();
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewFile, setPreviewFile] = useState<any>(null);
+  const [previewMediaType, setPreviewMediaType] = useState<'image' | 'video' | 'audio' | 'file'>('file');
 
   const formatTime = (timestamp: string) => {
     if (!timestamp) return '';
     const date = new Date(timestamp);
     if (isNaN(date.getTime())) return '';
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const renderImageMessage = () => {
+    const mediaUrl = message.media_url;
+    if (!mediaUrl) {
+      return (
+        <Text style={[styles.messageText, { color: isOwn ? colors.textOnPrimary : colors.text }]}>
+          Image not available
+        </Text>
+      );
+    }
+
+    return (
+      <View style={styles.mediaContainer}>
+        <TouchableOpacity
+          onPress={() => handleMediaPress(mediaUrl, 'image')}
+          style={styles.mediaButton}
+        >
+          <Image
+            source={{ uri: mediaUrl }}
+            style={styles.imagePreview}
+            resizeMode="cover"
+          />
+        </TouchableOpacity>
+        {message.content && (
+          <Text style={[styles.mediaCaption, { color: isOwn ? colors.textOnPrimary : colors.text }]}>
+            {message.content}
+          </Text>
+        )}
+      </View>
+    );
+  };
+
+  const renderVideoMessage = () => {
+    const mediaUrl = message.media_url;
+    if (!mediaUrl) {
+      return (
+        <Text style={[styles.messageText, { color: isOwn ? colors.textOnPrimary : colors.text }]}>
+          Video not available
+        </Text>
+      );
+    }
+
+    return (
+      <View style={styles.mediaContainer}>
+        <TouchableOpacity
+          onPress={() => handleMediaPress(mediaUrl, 'video')}
+          style={styles.mediaButton}
+        >
+          <View style={[styles.videoPreview, { backgroundColor: colors.border }]}>
+            <View style={styles.playButton}>
+              <Text style={styles.playIcon}>▶️</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+        {message.content && (
+          <Text style={[styles.mediaCaption, { color: isOwn ? colors.textOnPrimary : colors.text }]}>
+            {message.content}
+          </Text>
+        )}
+      </View>
+    );
+  };
+
+  const renderAudioMessage = () => {
+    const mediaUrl = message.media_url;
+    if (!mediaUrl) {
+      return (
+        <Text style={[styles.messageText, { color: isOwn ? colors.textOnPrimary : colors.text }]}>
+          Audio not available
+        </Text>
+      );
+    }
+
+    const audioContainerStyle = {
+      backgroundColor: isOwn ? 'rgba(255,255,255,0.1)' : colors.border,
+    };
+    const audioTextStyle = {
+      color: isOwn ? colors.textOnPrimary : colors.text,
+    };
+    const audioSubtextStyle = {
+      color: isOwn ? 'rgba(255,255,255,0.7)' : colors.textSecondary,
+    };
+
+    return (
+      <View style={styles.mediaContainer}>
+        <TouchableOpacity
+          onPress={() => handleMediaPress(mediaUrl, 'audio')}
+          style={[styles.audioContainer, audioContainerStyle]}
+        >
+          <View style={styles.audioInfo}>
+            <Text style={[styles.audioText, audioTextStyle]}>
+              Audio Message
+            </Text>
+            <Text style={[styles.audioSubtext, audioSubtextStyle]}>
+              Tap to play
+            </Text>
+          </View>
+        </TouchableOpacity>
+        {message.content && (
+          <Text style={[styles.mediaCaption, { color: isOwn ? colors.textOnPrimary : colors.text }]}>
+            {message.content}
+          </Text>
+        )}
+      </View>
+    );
+  };
+
+  const renderFileMessage = () => {
+    return (
+      <FileMessageBubble
+        message={message}
+        isOwn={isOwn}
+        onDownload={(url) => handleMediaPress(url, 'file')}
+        onPreview={(url, type) => handleMediaPress(url, type)}
+      />
+    );
+  };
+
+  const handleMediaPress = async (url: string, type: string) => {
+    try {
+      console.log(`📱 Opening ${type} media preview:`, url);
+      console.log('📱 Current previewVisible state:', previewVisible);
+      
+      // Create a file object for the preview
+      const file = {
+        uri: url,
+        name: message.content || `${type} file`,
+        type: getMimeTypeFromMessageType(type),
+        size: 0, // We don't have size info from the message
+      };
+
+      console.log('📱 Created file object:', file);
+      console.log('📱 Setting preview states...');
+
+      // Show preview instead of opening external link
+      setPreviewFile(file);
+      setPreviewMediaType(type as 'image' | 'video' | 'audio' | 'file');
+      setPreviewVisible(true);
+      
+      console.log('📱 States set, previewVisible should be true now');
+    } catch (error) {
+      console.error('Error opening media preview:', error);
+      Alert.alert('Error', 'Failed to open media preview');
+    }
+  };
+
+  const getMimeTypeFromMessageType = (messageType: string): string => {
+    switch (messageType) {
+      case 'image':
+        return 'image/jpeg';
+      case 'video':
+        return 'video/mp4';
+      case 'audio':
+        return 'audio/mpeg';
+      case 'file':
+        return 'application/octet-stream';
+      default:
+        return 'application/octet-stream';
+    }
+  };
+
+  const handlePreviewClose = () => {
+    setPreviewVisible(false);
+    setPreviewFile(null);
+  };
+
+  const handlePreviewConfirm = (_file: any) => {
+    // For chat messages, we don't need to do anything after preview
+    // The preview is just for viewing, not for sharing
+    setPreviewVisible(false);
+    setPreviewFile(null);
   };
 
   const handleLongPress = () => {
@@ -99,7 +278,17 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
             </View>
           );
 
+        case 'image':
+          return renderImageMessage();
 
+        case 'video':
+          return renderVideoMessage();
+
+        case 'audio':
+          return renderAudioMessage();
+
+        case 'file':
+          return renderFileMessage();
 
         default:
           return (
@@ -218,6 +407,20 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(({
           </View>
         </TouchableOpacity>
       </View>
+
+      {/* Media Preview Modal */}
+      {console.log('📱 Rendering MediaPreview with props:', {
+        visible: previewVisible,
+        file: previewFile,
+        mediaType: previewMediaType
+      })}
+      <MediaPreview
+        visible={previewVisible}
+        onClose={handlePreviewClose}
+        onConfirm={handlePreviewConfirm}
+        file={previewFile}
+        mediaType={previewMediaType}
+      />
     </View>
   );
 });
@@ -346,6 +549,91 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     opacity: 0.6,
     fontStyle: 'italic',
+  },
+
+  // Media message styles
+  mediaContainer: {
+    marginVertical: moderateScale(4),
+  },
+  mediaButton: {
+    position: 'relative',
+    borderRadius: moderateScale(8),
+    overflow: 'hidden',
+  },
+  imagePreview: {
+    width: wp(60),
+    height: wp(40),
+    borderRadius: moderateScale(8),
+  },
+  videoPreview: {
+    width: wp(60),
+    height: wp(40),
+    borderRadius: moderateScale(8),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playButton: {
+    width: moderateScale(50),
+    height: moderateScale(50),
+    borderRadius: moderateScale(25),
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playIcon: {
+    fontSize: moderateScale(20),
+    color: '#FFFFFF',
+  },
+  mediaOverlay: {
+    position: 'absolute',
+    top: moderateScale(8),
+    right: moderateScale(8),
+  },
+  mediaIconContainer: {
+    width: moderateScale(24),
+    height: moderateScale(24),
+    borderRadius: moderateScale(12),
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mediaIcon: {
+    fontSize: moderateScale(12),
+  },
+  mediaCaption: {
+    fontSize: responsiveFont(14),
+    marginTop: moderateScale(8),
+    lineHeight: responsiveFont(18),
+  },
+  audioContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: moderateScale(12),
+    borderRadius: moderateScale(8),
+    minWidth: wp(50),
+  },
+  audioIconContainer: {
+    width: moderateScale(40),
+    height: moderateScale(40),
+    borderRadius: moderateScale(20),
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: moderateScale(12),
+  },
+  audioIcon: {
+    fontSize: moderateScale(20),
+  },
+  audioInfo: {
+    flex: 1,
+  },
+  audioText: {
+    fontSize: responsiveFont(14),
+    fontWeight: '500',
+    marginBottom: moderateScale(2),
+  },
+  audioSubtext: {
+    fontSize: responsiveFont(12),
   },
 });
 

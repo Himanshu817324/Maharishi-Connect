@@ -122,6 +122,7 @@ const authSlice = createSlice({
     updateUserProfile: (state, action: PayloadAction<Partial<AuthUser>>) => {
       console.log('🔄 [updateUserProfile] Current state.user:', state.user);
       console.log('🔄 [updateUserProfile] Action payload:', action.payload);
+      console.log('🔄 [updateUserProfile] Current isLoggedIn:', state.isLoggedIn);
       
       if (state.user) {
         // Ensure we have a complete user object structure
@@ -133,7 +134,11 @@ const authSlice = createSlice({
         // Merge the new data with existing user data
         state.user = updatedUser;
         
+        // Ensure user remains logged in after profile update
+        state.isLoggedIn = true;
+        
         console.log('🔄 [updateUserProfile] Updated state.user:', state.user);
+        console.log('🔄 [updateUserProfile] Updated isLoggedIn:', state.isLoggedIn);
         
         // Check if profile is now complete
         const hasProfileData = state.user.fullName && state.user.country && state.user.state && state.user.status;

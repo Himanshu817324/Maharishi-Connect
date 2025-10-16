@@ -559,6 +559,9 @@ const LoginScreen = () => {
         } catch (permissionError) {
           console.error('❌ Error requesting contacts permission for existing user:', permissionError);
         }
+        
+        // Navigate to MainStack for existing users
+        navigation.navigate('MainStack');
       }
     } catch (err: any) {
       const safeError = {

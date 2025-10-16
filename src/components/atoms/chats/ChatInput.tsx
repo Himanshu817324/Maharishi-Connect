@@ -8,13 +8,26 @@ import {
   Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
+import MediaPickerModal from '../../MediaPickerModal';
+import FileSharingModal from '../../FileSharingModal';
+import { fileUploadService } from '@/services/fileUploadService';
+import Toast from 'react-native-toast-message';
 
 interface ChatInputProps {
   onSendMessage: (
     content: string,
     messageType?: 'text' | 'image' | 'video' | 'audio' | 'file',
+    mediaData?: {
+      mediaUrl?: string;
+      mediaMetadata?: {
+        filename: string;
+        size: number;
+        mimeType: string;
+      };
+    }
   ) => void;
   placeholder?: string;
   disabled?: boolean;
@@ -24,7 +37,6 @@ interface ChatInputProps {
     sender: string;
   };
   onCancelReply?: () => void;
-  keyboardHeight?: number;
   onStartTyping?: () => void;
   onStopTyping?: () => void;
   screenInfo?: {
@@ -35,6 +47,8 @@ interface ChatInputProps {
     isLarge: boolean;
     isTablet: boolean;
   };
+  chatId?: string;
+  userId?: string;
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
@@ -43,18 +57,23 @@ const ChatInput: React.FC<ChatInputProps> = ({
   disabled = false,
   replyToMessage,
   onCancelReply,
-  keyboardHeight: _keyboardHeight = 0,
   onStartTyping,
   onStopTyping,
   screenInfo,
+  chatId,
+  userId,
 }) => {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [message, setMessage] = useState('');
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [showFileSharing, setShowFileSharing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [inputHeight, setInputHeight] = useState(40); // Track container height
   const inputRef = useRef<TextInput>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
-  // ✅ FIX: Create dynamic styles based on screen info
-  const styles = createStyles(screenInfo);
+  const styles = createStyles(screenInfo, insets);
 
   const handleSend = () => {
     if (message.trim()) {
@@ -91,6 +110,96 @@ const ChatInput: React.FC<ChatInputProps> = ({
         clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = null;
       }
+    }
+  };
+
+  const handleContentSizeChange = (event: any) => {
+    const { height } = event.nativeEvent.contentSize;
+    
+    // Update container height based on TextInput content size
+    const minHeight = 40;
+    const maxHeight = 120; // Allow up to 5 lines
+    const newHeight = Math.min(Math.max(height + 16, minHeight), maxHeight); // Add padding
+    
+    setInputHeight(newHeight);
+  };
+
+  const handleFileSelected = async (file: any, _type: 'image' | 'video' | 'audio' | 'file') => {
+    try {
+      setIsUploading(true);
+
+      if (chatId && userId) {
+        // Upload and share file
+        const result = await fileUploadService.uploadAndShareFile(file, chatId, userId, message.trim());
+        
+        if (result.success) {
+          // File uploaded and shared successfully
+          Toast.show({
+            type: 'success',
+            text1: 'File Shared',
+            text2: `${file.name || file.fileName} shared successfully`,
+          });
+          setMessage('');
+        } else {
+          throw new Error(result.error || 'Upload failed');
+        }
+      } else {
+        // Send file as message
+        onSendMessage(message.trim() || 'Shared a file', _type, {
+          mediaUrl: file.uri,
+          mediaMetadata: {
+            filename: file.name || file.fileName || 'file',
+            size: file.size || 0,
+            mimeType: file.type || 'application/octet-stream',
+          },
+        });
+        setMessage('');
+      }
+    } catch (error) {
+      console.error('File upload error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Upload Failed',
+        text2: error instanceof Error ? error.message : 'Failed to upload file',
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleUploadAndShare = async (file: any, _type: 'image' | 'video' | 'audio' | 'file') => {
+    if (!chatId || !userId) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Chat ID or User ID not available',
+      });
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+      const result = await fileUploadService.uploadAndShareFile(file, chatId, userId, message.trim());
+      
+      if (result.success) {
+        Toast.show({
+          type: 'success',
+          text1: 'File Shared',
+          text2: `${file.name || file.fileName} shared successfully`,
+        });
+        setMessage('');
+      } else {
+        throw new Error(result.error || 'Upload failed');
+      }
+    } catch (error) {
+      console.error('Upload and share error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Upload Failed',
+        text2: error instanceof Error ? error.message : 'Failed to upload file',
+      });
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -136,27 +245,64 @@ const ChatInput: React.FC<ChatInputProps> = ({
         </View>
       )}
 
-      <View style={styles.inputContainer}>
+      <View style={[styles.inputContainer, { minHeight: inputHeight + 20 }]}>
+        {/* Attach Button */}
+        <TouchableOpacity
+          style={[
+            styles.attachButton,
+            { backgroundColor: colors.background, borderColor: colors.border },
+          ]}
+          onPress={() => setShowMediaPicker(true)}
+          disabled={disabled || isUploading}
+        >
+          <Icon name="add" size={moderateScale(20)} color={colors.text} />
+        </TouchableOpacity>
 
+        {/* Files Button */}
+        <TouchableOpacity
+          style={[
+            styles.filesButton,
+            { backgroundColor: colors.background, borderColor: colors.border },
+          ]}
+          onPress={() => setShowFileSharing(true)}
+          disabled={disabled || isUploading}
+        >
+          <Icon name="folder" size={moderateScale(20)} color={colors.text} />
+        </TouchableOpacity>
+
+        {/* Text Input */}
         <View
           style={[
             styles.textInputContainer,
-            { backgroundColor: colors.background, borderColor: colors.border },
+            { 
+              backgroundColor: colors.background, 
+              borderColor: colors.border,
+              height: inputHeight, // Use dynamic height
+            },
           ]}
         >
           <TextInput
             ref={inputRef}
-            style={[styles.textInput, { color: colors.text }]}
+            style={[
+              styles.textInput, 
+              { 
+                color: colors.text,
+              }
+            ]}
             value={message}
             onChangeText={handleTextChange}
+            onContentSizeChange={handleContentSizeChange}
             placeholder={placeholder}
             placeholderTextColor={colors.textSecondary}
-            multiline
+            multiline={true}
             maxLength={1000}
-            editable={!disabled}
+            editable={!disabled && !isUploading}
+            textAlignVertical="top"
+            scrollEnabled={false}
           />
         </View>
 
+        {/* Send Button */}
         <TouchableOpacity
           style={[
             styles.sendButton,
@@ -165,7 +311,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
             },
           ]}
           onPress={handleSend}
-          disabled={disabled || !message.trim()}
+          disabled={disabled || !message.trim() || isUploading}
         >
           <Icon
             name="send"
@@ -175,21 +321,42 @@ const ChatInput: React.FC<ChatInputProps> = ({
         </TouchableOpacity>
       </View>
 
+      {/* Media Picker Modal */}
+      <MediaPickerModal
+        visible={showMediaPicker}
+        onClose={() => setShowMediaPicker(false)}
+        onFileSelected={handleFileSelected}
+        onUploadAndShare={handleUploadAndShare}
+        chatId={chatId || ''}
+        userId={userId || ''}
+      />
+
+      {/* File Sharing Modal */}
+      <FileSharingModal
+        visible={showFileSharing}
+        onClose={() => setShowFileSharing(false)}
+        onFileShared={(_file) => {
+          // File is already shared, just close the modal
+          setShowFileSharing(false);
+        }}
+        chatId={chatId || ''}
+        userId={userId || ''}
+      />
     </View>
   );
 };
 
-const createStyles = (screenInfo?: ChatInputProps['screenInfo']) => StyleSheet.create({
+const createStyles = (screenInfo?: ChatInputProps['screenInfo'], _insets?: any) => StyleSheet.create({
   container: {
     borderTopWidth: 1,
-    minHeight: screenInfo?.isSmall ? hp(7) : screenInfo?.isTablet ? hp(9) : hp(8), // ✅ FIX: Screen-aware height
-    backgroundColor: 'transparent', // Ensure background is transparent
+    minHeight: moderateScale(50), // Minimum height
+    backgroundColor: 'transparent',
     paddingBottom: Platform.OS === 'android' 
-      ? (screenInfo?.isSmall ? hp(1) : screenInfo?.isTablet ? hp(2) : hp(1.5)) 
-      : hp(2), // ✅ FIX: Screen-aware Android padding
-    // ✅ FIX: Ensure proper positioning on Android
+      ? (screenInfo?.isSmall ? hp(0.5) : screenInfo?.isTablet ? hp(1) : hp(0.8)) 
+      : hp(1.5),
     position: 'relative',
     zIndex: 1000,
+    // Container will grow with inputHeight
   },
   replyContainer: {
     flexDirection: 'row',
@@ -214,48 +381,55 @@ const createStyles = (screenInfo?: ChatInputProps['screenInfo']) => StyleSheet.c
   },
   inputContainer: {
     flexDirection: 'row',
-    alignItems: 'center', // Center all items vertically
-    paddingHorizontal: screenInfo?.isSmall ? wp(3) : wp(4), // ✅ FIX: Screen-aware horizontal padding
+    alignItems: 'flex-end', // Changed from 'center' to 'flex-end' for better alignment with dynamic height
+    paddingHorizontal: screenInfo?.isSmall ? wp(3) : wp(4),
     paddingVertical: Platform.OS === 'android' 
-      ? (screenInfo?.isSmall ? hp(1) : screenInfo?.isTablet ? hp(1.5) : hp(1.2)) 
-      : hp(1.5), // ✅ FIX: Screen-aware Android padding
-    minHeight: Platform.OS === 'android' 
-      ? (screenInfo?.isSmall ? hp(6) : screenInfo?.isTablet ? hp(8) : hp(7)) 
-      : hp(8), // ✅ FIX: Screen-aware Android height
-    // ✅ FIX: Ensure proper alignment on Android
+      ? (screenInfo?.isSmall ? hp(0.5) : screenInfo?.isTablet ? hp(1) : hp(0.8)) 
+      : hp(1.2),
+    minHeight: moderateScale(50), // Fixed minimum height
     justifyContent: 'space-between',
+  },
+  attachButton: {
+    width: moderateScale(40),
+    height: moderateScale(40),
+    borderRadius: moderateScale(20),
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: moderateScale(8),
+  },
+  filesButton: {
+    width: moderateScale(40),
+    height: moderateScale(40),
+    borderRadius: moderateScale(20),
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: moderateScale(8),
   },
   textInputContainer: {
     flex: 1,
     borderWidth: 1,
     borderRadius: moderateScale(20),
-    paddingHorizontal: screenInfo?.isSmall ? wp(2.5) : wp(3), // ✅ FIX: Screen-aware horizontal padding
+    paddingHorizontal: screenInfo?.isSmall ? wp(2.5) : wp(3),
     paddingVertical: Platform.OS === 'android' 
       ? (screenInfo?.isSmall ? hp(0.8) : screenInfo?.isTablet ? hp(1.2) : hp(1)) 
-      : hp(1.2), // ✅ FIX: Screen-aware Android padding
-    maxHeight: Platform.OS === 'android' 
-      ? (screenInfo?.isSmall ? hp(8) : screenInfo?.isTablet ? hp(12) : hp(10)) 
-      : hp(12), // ✅ FIX: Screen-aware Android max height
-    minHeight: Platform.OS === 'android' 
-      ? (screenInfo?.isSmall ? hp(4) : screenInfo?.isTablet ? hp(5.5) : hp(4.5)) 
-      : hp(5), // ✅ FIX: Screen-aware Android min height
-    justifyContent: 'flex-start', // Start from top instead of center
-    alignItems: 'stretch', // Stretch to full width instead of center
+      : hp(1.2),
+    minHeight: moderateScale(40), // Minimum height for single line
+    justifyContent: 'flex-start',
+    alignItems: 'stretch',
+    // Height will be controlled dynamically by inputHeight state
   },
   textInput: {
-    fontSize: screenInfo?.isSmall ? responsiveFont(15) : responsiveFont(16), // ✅ FIX: Screen-aware font size
-    lineHeight: Platform.OS === 'android' 
-      ? (screenInfo?.isSmall ? responsiveFont(18) : screenInfo?.isTablet ? responsiveFont(22) : responsiveFont(20)) 
-      : responsiveFont(22), // ✅ FIX: Screen-aware Android line height
-    minHeight: Platform.OS === 'android' 
-      ? (screenInfo?.isSmall ? hp(2) : screenInfo?.isTablet ? hp(3.5) : hp(2.5)) 
-      : hp(3), // ✅ FIX: Screen-aware Android min height
-    textAlignVertical: 'top', // Start text from top instead of center
-    paddingVertical: 0, // Remove default padding to allow proper alignment
-    // ✅ FIX: Better Android text input styling
-    includeFontPadding: false, // Remove extra padding on Android
-    textAlign: 'left', // Ensure text starts from left
-    flex: 1, // Take full width of container
+    fontSize: screenInfo?.isSmall ? responsiveFont(15) : responsiveFont(16),
+    lineHeight: 24,
+    textAlignVertical: 'top',
+    paddingVertical: 0,
+    includeFontPadding: false,
+    textAlign: 'left',
+    flex: 1,
+    minHeight: 24,
+    // No maxHeight - let it fill the container
   },
   sendButton: {
     width: moderateScale(40),
@@ -263,7 +437,7 @@ const createStyles = (screenInfo?: ChatInputProps['screenInfo']) => StyleSheet.c
     borderRadius: moderateScale(20),
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: wp(2), // Use responsive margin
+    marginLeft: moderateScale(8),
   },
 });
 

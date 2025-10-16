@@ -139,8 +139,8 @@ export const LightColors = {
   
   // Chat specific - Light Mode
   chatBubble: "#7B1E3C", // Muted yellow for user messages
-  chatBubbleOther: "#242626", // Soft grey for incoming messages
-  chatBubbleText: "#ffffff",
+  chatBubbleOther: "#525100", // Soft grey for incoming messages
+  chatBubbleText: "#ffffff", 
   chatBubbleTextOther: "#ffffff",
   chatTime: "#757575",
   chatTimeOther: "#757575",
@@ -235,8 +235,8 @@ export const DarkColors = {
   ...(Platform.OS === 'android' ? platformColors.android : {}),
   
   // Chat specific - Dark Mode
-  chatBubble: "#2C0F18", // Subtle maroon tint for user messages
-  chatBubbleOther: "#1E1E1E", // Neutral dark for received messages
+  chatBubble: "#7B1E3C", // Subtle maroon tint for user messages
+  chatBubbleOther: "#525100", // Neutral dark for received messages
   chatBubbleText: "#EDEDED",
   chatBubbleTextOther: "#EDEDED",
   chatTime: "#9E9E9E",
