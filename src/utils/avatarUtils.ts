@@ -50,18 +50,47 @@ export const generateAvatarColor = (name: string): string => {
 };
 
 /**
+ * Construct profile picture URL from UUID or return existing URL
+ * @param profilePicture - Profile picture UUID or full URL
+ * @param userId - User ID for constructing the URL
+ * @returns Full profile picture URL
+ */
+export const constructProfilePictureUrl = (profilePicture: string | null | undefined, userId?: string): string | null => {
+  if (!profilePicture || profilePicture.trim() === '') {
+    return null;
+  }
+
+  // If it's already a full URL, return as is
+  if (profilePicture.startsWith('http')) {
+    return profilePicture;
+  }
+
+  // If it's just a UUID, construct the full URL
+  if (userId) {
+    const baseUrl = 'https://api.maharishiconnect.com';
+    return `${baseUrl}/profile-images/${userId}/${profilePicture}`;
+  }
+
+  // If no userId provided, return the original value
+  return profilePicture;
+};
+
+/**
  * Get avatar props for a user
  * @param user - User object with name and profilePicture
  * @returns Object with initials, color, and hasProfilePicture
  */
-export const getAvatarProps = (user: { name?: string; fullName?: string; profilePicture?: string | null }) => {
+export const getAvatarProps = (user: { name?: string; fullName?: string; profilePicture?: string | null; id?: string; firebaseUid?: string }) => {
   const name = user.name || user.fullName || '';
-  const hasProfilePicture = user.profilePicture && user.profilePicture.trim() !== '';
+  const userId = user.firebaseUid || user.id;
+  const profilePictureUrl = constructProfilePictureUrl(user.profilePicture, userId);
+  const hasProfilePicture = profilePictureUrl && profilePictureUrl.trim() !== '';
   
   return {
     initials: generateInitials(name),
     color: generateAvatarColor(name),
     hasProfilePicture,
-    name
+    name,
+    profilePictureUrl
   };
 };

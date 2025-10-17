@@ -27,6 +27,7 @@ import { lightweightImagePicker } from '@/services/lightweightImagePicker';
 import { locationsService } from '@/services/locationsService';
 import Toast from 'react-native-toast-message';
 import ModernDropdown from '@/components/atoms/ui/ModernDropdown';
+import { constructProfilePictureUrl } from '@/utils/avatarUtils';
 
 export default function EditProfileScreen() {
   const navigation = useNavigation();
@@ -309,16 +310,19 @@ export default function EditProfileScreen() {
         console.log('✅ [EditProfileScreen] Profile update successful, updating Redux store...');
         console.log('✅ [EditProfileScreen] API response user:', response.user);
         
+        // Construct proper profile picture URL from UUID
+        const profilePictureUrl = constructProfilePictureUrl(
+          response.user.profilePicture, 
+          user?.firebaseUid || user?.id
+        );
         // Update Redux store with the updated user data from API
         dispatch(updateUserProfile({
           fullName: response.user.fullName,
           country: response.user.location?.country,
           state: response.user.location?.state,
           status: response.user.status,
-          profilePicture: response.user.profilePicture,
+          profilePicture: profilePictureUrl,
         }));
-
-        console.log('✅ [EditProfileScreen] Redux store updated, showing success message...');
 
         Toast.show({
           type: 'success',

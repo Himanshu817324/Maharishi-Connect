@@ -1,5 +1,5 @@
-import { useNavigation } from '@react-navigation/native';
-import React, { useState } from 'react';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import React, { useCallback } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, Image, Switch } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useDispatch, useSelector } from 'react-redux';
@@ -7,12 +7,27 @@ import { logout } from '@/store/slices/authSlice';
 import { RootState } from '@/store';
 import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
+import { constructProfilePictureUrl } from '@/utils/avatarUtils';
 
 export default function SettingsScreen() {
   const { colors, isDark, toggleTheme, isSystemTheme, setIsSystemTheme } = useTheme();
   const navigation = useNavigation();
   const dispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
+
+  // Construct proper profile picture URL
+  const profilePictureUrl = constructProfilePictureUrl(
+    user?.profilePicture || user?.avatar, 
+    user?.firebaseUid || user?.id
+  );
+
+  // Force re-render when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      // Screen focused - user data will be updated automatically via Redux
+    }, [])
+  );
+
 
   const handleLogout = () => {
     Alert.alert(
@@ -131,9 +146,9 @@ export default function SettingsScreen() {
           activeOpacity={0.7}
         >
           <View style={styles.avatarContainer}>
-            {(user?.avatar || user?.profilePicture) ? (
+            {profilePictureUrl ? (
               <Image
-                source={{ uri: user.avatar || user?.profilePicture }}
+                source={{ uri: profilePictureUrl }}
                 style={styles.avatar}
               />
             ) : (

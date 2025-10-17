@@ -16,6 +16,7 @@ import { useTheme } from '@/theme';
 import { moderateScale, responsiveFont, wp, hp } from '@/theme/responsive';
 import { lightweightImagePicker } from '@/services/lightweightImagePicker';
 import Toast from 'react-native-toast-message';
+import { constructProfilePictureUrl } from '@/utils/avatarUtils';
 
 interface SideDrawerProps {
   visible: boolean;
@@ -36,6 +37,13 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
 }) => {
   const { colors } = useTheme();
   const { user } = useSelector((state: RootState) => state.auth);
+  
+  // Construct proper profile picture URL
+  const profilePictureUrl = constructProfilePictureUrl(
+    user?.profilePicture || user?.avatar, 
+    user?.firebaseUid || user?.id
+  );
+  
   const slideAnim = React.useRef(new Animated.Value(-screenWidth)).current;
   const backdropAnim = React.useRef(new Animated.Value(0)).current;
   const [shouldRender, setShouldRender] = React.useState(false);
@@ -183,9 +191,9 @@ const SideDrawer: React.FC<SideDrawerProps> = ({
         {/* Header */}
         <View style={styles.drawerHeader}>
           <View style={styles.userProfileContainer}>
-            {(user?.avatar || user?.profilePicture) ? (
+            {profilePictureUrl ? (
               <Image
-                source={{ uri: user.avatar || user?.profilePicture }}
+                source={{ uri: profilePictureUrl }}
                 style={styles.userAvatar}
               />
             ) : (

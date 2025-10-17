@@ -10,16 +10,20 @@ import AvatarWithInitials from '../../../../components/atoms/ui/AvatarWithInitia
 import { logout } from '../../../../store/slices/authSlice';
 import { moderateScale, responsiveFont, wp, hp } from '../../../../theme/responsive';
 import { LightColors } from '../../../../theme/colors';
+import { constructProfilePictureUrl } from '../../../../utils/avatarUtils';
 
 export default function UserInfoScreen() {
   const navigation = useNavigation();
   const dispatch = useDispatch();
   const { colors } = useTheme();
   const user = useSelector((state: RootState) => state.auth.user);
-  const profileCompleted = useSelector((state: RootState) => state.auth.profileCompleted);
 
-  console.log('🔍 UserInfoScreen - Current user data:', user);
-  console.log('🔍 UserInfoScreen - Profile completed:', profileCompleted);
+  // Construct proper profile picture URL
+  const profilePictureUrl = constructProfilePictureUrl(
+    user?.profilePicture || user?.avatar, 
+    user?.firebaseUid || user?.id
+  );
+
 
   const infoSections = [
     {
@@ -133,7 +137,7 @@ export default function UserInfoScreen() {
         <View style={styles.avatarContainer}>
           <AvatarWithInitials
             name={user?.fullName || 'User Name'}
-            profilePicture={user?.avatar || user?.profilePicture}
+            profilePicture={profilePictureUrl}
             size={moderateScale(100)}
           />
           <TouchableOpacity 
