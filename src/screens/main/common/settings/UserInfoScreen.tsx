@@ -1,14 +1,27 @@
 import { useNavigation } from '@react-navigation/native';
-import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../../../store';
 import { useTheme } from '../../../../theme';
 import CustomHeader from '../../../../components/atoms/ui/CustomHeader';
 import AvatarWithInitials from '../../../../components/atoms/ui/AvatarWithInitials';
-import { logout } from '../../../../store/slices/authSlice';
-import { moderateScale, responsiveFont, wp, hp } from '../../../../theme/responsive';
+import { logout, updateUserProfile } from '../../../../store/slices/authSlice';
+import {
+  moderateScale,
+  responsiveFont,
+  wp,
+  hp,
+} from '../../../../theme/responsive';
 import { LightColors } from '../../../../theme/colors';
 import { constructProfilePictureUrl } from '../../../../utils/avatarUtils';
 
@@ -29,63 +42,69 @@ export default function UserInfoScreen() {
     {
       title: 'Personal Information',
       items: [
-        { 
-          label: 'Full Name', 
-          value: user?.fullName || user?.name || 'Not set', 
+        {
+          label: 'Full Name',
+          value: user?.fullName || user?.name || 'Not set',
           icon: 'person-outline',
-          iconColor: LightColors.primary
+          iconColor: LightColors.primary,
         },
-        { 
-          label: 'Phone Number', 
-          value: user?.phone || 'Not set', 
+        {
+          label: 'Phone Number',
+          value: user?.phone || 'Not set',
           icon: 'call-outline',
-          iconColor: LightColors.accent
+          iconColor: LightColors.accent,
         },
-        { 
-          label: 'Status', 
-          value: user?.status || 'Available', 
+        {
+          label: 'Status',
+          value: user?.status || 'Available',
           icon: 'chatbubble-ellipses-outline',
-          iconColor: LightColors.accent
+          iconColor: LightColors.accent,
         },
-      ]
+      ],
     },
     {
       title: 'Location',
       items: [
-        { 
-          label: 'Country', 
-          value: user?.country || 'Not set', 
+        {
+          label: 'Country',
+          value: user?.country || 'Not set',
           icon: 'earth-outline',
-          iconColor: LightColors.primary
+          iconColor: LightColors.primary,
         },
-        { 
-          label: 'State/Region', 
-          value: user?.state || 'Not set', 
+        {
+          label: 'State/Region',
+          value: user?.state || 'Not set',
           icon: 'location-outline',
-          iconColor: LightColors.accent
+          iconColor: LightColors.accent,
         },
-      ]
+      ],
     },
     {
       title: 'Account Status',
       items: [
-        { 
-          label: 'Verification', 
-          value: user?.isVerified ? 'Verified' : 'Not Verified', 
-          icon: user?.isVerified ? 'shield-checkmark-outline' : 'shield-outline',
+        {
+          label: 'Verification',
+          value: user?.isVerified ? 'Verified' : 'Not Verified',
+          icon: user?.isVerified
+            ? 'shield-checkmark-outline'
+            : 'shield-outline',
           iconColor: user?.isVerified ? LightColors.accent : LightColors.error,
           showBadge: true,
-          badgeStatus: user?.isVerified
+          badgeStatus: user?.isVerified,
         },
-        { 
-          label: 'Profile Status', 
-          value: user?.profileCompleted ? 'Complete' : 'Incomplete', 
-          icon: user?.profileCompleted ? 'checkmark-circle-outline' : 'alert-circle-outline',
-          iconColor: user?.profileCompleted ? LightColors.accent : LightColors.error,
+        {
+          label: 'Profile Status',
+          value: user?.profileCompleted ? 'Complete' : 'Incomplete',
+          icon: user?.profileCompleted
+            ? 'checkmark-circle-outline'
+            : 'alert-circle-outline',
+          iconColor: user?.profileCompleted
+            ? LightColors.accent
+            : LightColors.error,
           showBadge: true,
-          badgeStatus: user?.profileCompleted
+          badgeStatus: user?.profileCompleted,
         },
-      ]
+      ],
     },
   ];
 
@@ -94,39 +113,44 @@ export default function UserInfoScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      {
+        text: 'Cancel',
+        style: 'cancel',
+      },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: () => {
+          console.log('🚪 User logging out from UserInfoScreen...');
+          dispatch(logout());
+          // Reset navigation stack to prevent back navigation
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'SplashScreen' as never }],
+          });
         },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: () => {
-            console.log('🚪 User logging out from UserInfoScreen...');
-            dispatch(logout());
-            // Reset navigation stack to prevent back navigation
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'SplashScreen' as never }],
-            });r
-          },
-        },
-      ]
-    );
+      },
+    ]);
   };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <CustomHeader 
-        title="Profile" 
+      <CustomHeader
+        title="Profile"
         showBackButton={true}
         onBackPress={() => navigation.goBack()}
       />
-      
+
+      {isLoadingProfile && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color={colors.accent} />
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+            Refreshing profile data...
+          </Text>
+        </View>
+      )}
+
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
@@ -172,75 +196,113 @@ export default function UserInfoScreen() {
         </View>
       </View>
 
-      {/* Info Sections */}
-      {infoSections.map((section, sectionIndex) => (
-        <View key={section.title} style={styles.infoSectionContainer}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-            {section.title}
-          </Text>
-          <View style={[styles.infoCard, { backgroundColor: colors.surface }]}>
-            {section.items.map((item, itemIndex) => (
-              <View
-                key={item.label}
-                style={[
-                  styles.infoItem,
-                  itemIndex !== section.items.length - 1 && { 
-                    borderBottomWidth: 1, 
-                    borderBottomColor: colors.border + '30' 
-                  }
-                ]}
-              >
-                <View style={styles.infoLeft}>
-                  <View style={[styles.infoIconContainer, { backgroundColor: item.iconColor + '15' }]}>
-                    <Icon name={item.icon} size={moderateScale(20)} color={item.iconColor} />
-                  </View>
-                  <Text style={[styles.infoLabel, { color: colors.text }]}>
-                    {item.label}
-                  </Text>
-                </View>
-                <View style={styles.infoRight}>
-                  <Text style={[styles.infoValue, { color: colors.textSecondary }]}>
-                    {item.value}
-                  </Text>
-                  {item.showBadge && (
-                    <View style={[
-                      styles.statusBadge, 
-                      { backgroundColor: item.badgeStatus ? LightColors.accent : LightColors.error }
-                    ]}>
-                      <Icon 
-                        name={item.badgeStatus ? 'checkmark' : 'close'} 
-                        size={moderateScale(12)} 
-                        color={LightColors.textOnPrimary} 
+        {/* Info Sections */}
+        {infoSections.map((section, sectionIndex) => (
+          <View key={section.title} style={styles.infoSectionContainer}>
+            <Text
+              style={[styles.sectionTitle, { color: colors.textSecondary }]}
+            >
+              {section.title}
+            </Text>
+            <View
+              style={[styles.infoCard, { backgroundColor: colors.surface }]}
+            >
+              {section.items.map((item, itemIndex) => (
+                <View
+                  key={item.label}
+                  style={[
+                    styles.infoItem,
+                    itemIndex !== section.items.length - 1 && {
+                      borderBottomWidth: 1,
+                      borderBottomColor: colors.border + '30',
+                    },
+                  ]}
+                >
+                  <View style={styles.infoLeft}>
+                    <View
+                      style={[
+                        styles.infoIconContainer,
+                        { backgroundColor: item.iconColor + '15' },
+                      ]}
+                    >
+                      <Icon
+                        name={item.icon}
+                        size={moderateScale(20)}
+                        color={item.iconColor}
                       />
                     </View>
-                  )}
+                    <Text style={[styles.infoLabel, { color: colors.text }]}>
+                      {item.label}
+                    </Text>
+                  </View>
+                  <View style={styles.infoRight}>
+                    <Text
+                      style={[
+                        styles.infoValue,
+                        { color: colors.textSecondary },
+                      ]}
+                    >
+                      {item.value}
+                    </Text>
+                    {'showBadge' in item && item.showBadge && (
+                      <View
+                        style={[
+                          styles.statusBadge,
+                          {
+                            backgroundColor: item.badgeStatus
+                              ? LightColors.accent
+                              : LightColors.error,
+                          },
+                        ]}
+                      >
+                        <Icon
+                          name={item.badgeStatus ? 'checkmark' : 'close'}
+                          size={moderateScale(12)}
+                          color={LightColors.textOnPrimary}
+                        />
+                      </View>
+                    )}
+                  </View>
                 </View>
-              </View>
-            ))}
+              ))}
+            </View>
           </View>
+        ))}
+
+        {/* Action Buttons */}
+        <View style={styles.actionsSection}>
+          <TouchableOpacity
+            style={[styles.primaryButton, { backgroundColor: colors.accent }]}
+            onPress={handleEditProfile}
+            activeOpacity={0.8}
+          >
+            <Icon
+              name="create-outline"
+              size={moderateScale(20)}
+              color={LightColors.textOnPrimary}
+            />
+            <Text style={styles.primaryButtonText}>Edit Profile</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.dangerButton,
+              {
+                backgroundColor: LightColors.error + '15',
+                borderColor: LightColors.error + '30',
+              },
+            ]}
+            onPress={handleLogout}
+            activeOpacity={0.8}
+          >
+            <Icon
+              name="log-out-outline"
+              size={moderateScale(20)}
+              color={LightColors.error}
+            />
+            <Text style={styles.dangerButtonText}>Logout</Text>
+          </TouchableOpacity>
         </View>
-      ))}
-
-      {/* Action Buttons */}
-      <View style={styles.actionsSection}>
-        <TouchableOpacity
-          style={[styles.primaryButton, { backgroundColor: colors.accent }]}
-          onPress={handleEditProfile}
-          activeOpacity={0.8}
-        >
-          <Icon name="create-outline" size={moderateScale(20)} color={LightColors.textOnPrimary} />
-          <Text style={styles.primaryButtonText}>Edit Profile</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.dangerButton, { backgroundColor: LightColors.error + '15', borderColor: LightColors.error + '30' }]}
-          onPress={handleLogout}
-          activeOpacity={0.8}
-        >
-          <Icon name="log-out-outline" size={moderateScale(20)} color={LightColors.error} />
-          <Text style={styles.dangerButtonText}>Logout</Text>
-        </TouchableOpacity>
-      </View>
       </ScrollView>
     </View>
   );
@@ -249,6 +311,19 @@ export default function UserInfoScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: hp(1),
+    paddingHorizontal: wp(5),
+    backgroundColor: 'rgba(0, 122, 255, 0.1)',
+  },
+  loadingText: {
+    fontSize: responsiveFont(14),
+    fontWeight: '500',
+    marginLeft: wp(2),
   },
   scrollView: {
     flex: 1,

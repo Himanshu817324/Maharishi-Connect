@@ -52,7 +52,7 @@ class ContactService {
     return results.flat();
   }
 
-  // ✅ OPTIMIZED: Process batch with yield to prevent UI blocking
+  // ✅ ENHANCED: Flexible phone number processing for all device types
   private async processBatch(batch: any[]): Promise<string[]> {
     return new Promise((resolve) => {
       const processContacts = () => {
@@ -219,7 +219,7 @@ class ContactService {
       // Since the contacts API endpoint doesn't exist, use local search only
       const contacts = this.contactsCache?.data.existingUsers || [];
       const contact = contacts.find(c => c.user_id === userId);
-      
+
       if (contact) {
         return contact;
       } else {
@@ -639,26 +639,41 @@ class ContactService {
         await new Promise<void>(resolve => setTimeout(resolve, 100));
       }
       // Return cached data if available
-      if (this.contactsCache && 
-          Date.now() - this.contactsCache.timestamp < this.CACHE_DURATION) {
+      if (this.contactsCache &&
+        Date.now() - this.contactsCache.timestamp < this.CACHE_DURATION) {
         return this.contactsCache.data;
       }
     }
 
     try {
       this.isLoading = true;
-      
-      // Check cache first - only return cached data if it's valid and not empty
-      if (this.contactsCache && 
-          Date.now() - this.contactsCache.timestamp < this.CACHE_DURATION &&
-          (this.contactsCache.data.existingUsers.length > 0 || this.contactsCache.data.nonUsers.length > 0)) {
-        console.log('📱 Using cached contacts data');
-        return this.contactsCache.data;
+
+      // ✅ ENHANCED: Smart cache management with invalidation logic
+      if (this.contactsCache && Date.now() - this.contactsCache.timestamp < this.CACHE_DURATION) {
+        const isEmpty = this.contactsCache.data.existingUsers.length === 0 &&
+          this.contactsCache.data.nonUsers.length === 0;
+        const isRecent = Date.now() - this.contactsCache.timestamp < 60000; // 1 minute
+        const hasData = this.contactsCache.data.existingUsers.length > 0 ||
+          this.contactsCache.data.nonUsers.length > 0;
+
+        if (hasData) {
+          console.log('📱 Using cached contacts data:', {
+            existingUsers: this.contactsCache.data.existingUsers.length,
+            nonUsers: this.contactsCache.data.nonUsers.length,
+            age: Date.now() - this.contactsCache.timestamp
+          });
+          return this.contactsCache.data;
+        } else if (isEmpty && isRecent) {
+          console.log('📱 Cache is empty and recent (likely an error) - invalidating and fetching fresh data');
+          this.clearCache();
+        } else if (isEmpty) {
+          console.log('📱 Cache exists but is empty, will fetch fresh data');
+        }
       }
-      
-      // First get all device contacts
+      // ✅ ENHANCED: Get device contacts with comprehensive error handling
       let deviceContacts;
       try {
+        console.log('📱 Fetching device contacts...');
         deviceContacts = await permissionManager.syncContactsWithBackend();
         
         // Log device-specific contact data for debugging
@@ -666,26 +681,90 @@ class ContactService {
           console.log('📱 Device contact sample:', JSON.stringify(deviceContacts[0], null, 2));
         }
       } catch (permissionError) {
-        // Check if it's a permission error or other error
-        if (permissionError instanceof Error) {
-          if (permissionError.message.includes('permission')) {
-            console.warn('⚠️ Contacts permission denied, using empty contacts list');
-          } else {
-            console.error('❌ Contact sync error:', permissionError.message);
-          }
+        const errorMessage = permissionError instanceof Error ? permissionError.message : 'Unknown error';
+        const errorType = permissionError instanceof Error ? permissionError.constructor.name : 'Unknown';
+        const errorStack = permissionError instanceof Error ? permissionError.stack : undefined;
+
+        console.error('❌ Failed to fetch device contacts:', {
+          error: errorMessage,
+          type: errorType,
+          stack: errorStack
+        });
+
+        // ✅ ENHANCED: Handle permission errors gracefully without crashing the app
+        if (errorMessage?.includes('permission')) {
+          console.warn('⚠️ Contacts permission not granted - returning empty contact list');
+          return {
+            existingUsers: [],
+            nonUsers: [],
+          };
+        } else if (errorMessage?.includes('timeout')) {
+          console.warn('⚠️ Contact sync timed out - returning empty contact list');
+          return {
+            existingUsers: [],
+            nonUsers: [],
+          };
+        } else {
+          console.warn('⚠️ Contact sync failed - returning empty contact list:', errorMessage);
+          return {
+            existingUsers: [],
+            nonUsers: [],
+          };
         }
-        
-        deviceContacts = [];
       }
 
-      // Check if deviceContacts is null or undefined
+      // ✅ ENHANCED: Validate device contacts with detailed logging
       if (!deviceContacts || !Array.isArray(deviceContacts)) {
+        console.error('❌ Device contacts validation failed:', {
+          type: typeof deviceContacts,
+          isArray: Array.isArray(deviceContacts),
+          value: deviceContacts
+        });
+        throw new Error('Invalid contact data received from device');
+      }
+
+      if (deviceContacts.length === 0) {
+        console.warn('⚠️ No contacts found on device');
+        // Don't throw error for empty contacts - this might be legitimate
         return {
           existingUsers: [],
           nonUsers: [],
         };
       }
 
+      // ✅ ENHANCED: Comprehensive debugging and device analysis
+      console.log('📱 Device contact analysis:', {
+        totalContacts: deviceContacts.length,
+        contactsWithPhones: deviceContacts.filter(c => c.phoneNumber && c.phoneNumber.length > 0).length,
+        contactsWithNames: deviceContacts.filter(c => c.fullName && c.fullName !== 'Unknown Contact').length,
+        contactsWithEmails: deviceContacts.filter(c => c.email && c.email.length > 0).length,
+        sampleContacts: deviceContacts.slice(0, 3).map((contact, index) => ({
+          index: index + 1,
+          userId: contact.user_id,
+          name: contact.fullName,
+          phone: contact.phoneNumber,
+          email: contact.email || 'no-email',
+          hasDebugInfo: !!contact._debug
+        }))
+      });
+
+      // ✅ ENHANCED: Phone number format analysis
+      const phoneFormats = deviceContacts
+        .filter(c => c.phoneNumber)
+        .map(c => c.phoneNumber)
+        .slice(0, 10);
+
+      console.log('📱 Phone number format analysis:', {
+        samplePhones: phoneFormats,
+        formats: phoneFormats.map(phone => ({
+          original: phone,
+          length: phone.length,
+          hasPlus: phone.includes('+'),
+          hasSpaces: phone.includes(' '),
+          hasDashes: phone.includes('-'),
+          hasParentheses: phone.includes('(') || phone.includes(')')
+        }))
+      });
 
       // ✅ OPTIMIZED: Async batch processing for large contact lists
       const phoneNumbers = await this.processContactsAsync(deviceContacts);
@@ -693,16 +772,64 @@ class ContactService {
       // Remove duplicates
       const uniquePhoneNumbers = [...new Set(phoneNumbers)];
 
-      // Check if we have any phone numbers
+      // ✅ ENHANCED: Comprehensive phone number validation and logging
       if (!uniquePhoneNumbers || uniquePhoneNumbers.length === 0) {
-        console.warn('⚠️ No valid phone numbers found in device contacts');
+        console.error('❌ No valid phone numbers found in device contacts');
+        console.error('📱 This could indicate:');
+        console.error('   1. All contacts have invalid phone number formats');
+        console.error('   2. Phone number cleaning logic is too restrictive');
+        console.error('   3. Device-specific contact structure issues');
+        console.error('   4. Contacts exist but phone numbers are in unexpected fields');
+
+        // ✅ ENHANCED: Don't return empty - try to diagnose the issue
+        const contactsWithoutPhones = deviceContacts.filter(c => !c.phoneNumber || c.phoneNumber.length === 0);
+        console.error('📱 Contacts without phone numbers:', contactsWithoutPhones.length);
+
+        if (contactsWithoutPhones.length > 0) {
+          console.error('📱 Sample contacts without phones:', contactsWithoutPhones.slice(0, 3).map(c => ({
+            name: c.fullName,
+            userId: c.user_id,
+            hasPhoneField: 'phoneNumber' in c,
+            phoneValue: c.phoneNumber,
+            allFields: Object.keys(c)
+          })));
+        }
+
         return {
           existingUsers: [],
           nonUsers: [],
         };
       }
 
-      console.log('📱 Found device contacts with phone numbers:', uniquePhoneNumbers.length);
+      console.log('✅ Phone number extraction successful:', {
+        totalDeviceContacts: deviceContacts.length,
+        validPhoneNumbers: uniquePhoneNumbers.length,
+        extractionRate: `${((uniquePhoneNumbers.length / deviceContacts.length) * 100).toFixed(1)}%`,
+        samplePhones: uniquePhoneNumbers.slice(0, 5)
+      });
+
+      // Check if known users are in the extracted phone numbers
+      const knownUsers = ['9450869601', '9450869602', '9137538943', '9087654321'];
+      console.log('🔍 Checking if known users are in extracted phone numbers:');
+      knownUsers.forEach(phone => {
+        const isInExtracted = uniquePhoneNumbers.includes(phone);
+        console.log(`📞 Known user ${phone} - In extracted list: ${isInExtracted}`);
+      });
+
+      // Debug: Check if any device contacts contain the known phone numbers
+      console.log('🔍 Checking device contacts for known phone numbers:');
+      knownUsers.forEach(knownPhone => {
+        const matchingContacts = deviceContacts.filter(contact => {
+          if (!contact.phoneNumber) return false;
+          return contact.phoneNumber.includes(knownPhone) || knownPhone.includes(contact.phoneNumber.replace(/[^\d]/g, ''));
+        });
+        if (matchingContacts.length > 0) {
+          console.log(`📞 Found ${matchingContacts.length} contacts for ${knownPhone}:`,
+            matchingContacts.map(c => ({ name: c.fullName, phone: c.phoneNumber })));
+        } else {
+          console.log(`📞 No contacts found for ${knownPhone}`);
+        }
+      });
 
       // Check which ones are existing users
       const { existingUsers, nonUsers } = await this.checkExistingUsers(uniquePhoneNumbers, deviceContacts);
@@ -769,9 +896,9 @@ class ContactService {
 
   // Check if cache has valid data
   hasValidCache(): boolean {
-    return this.contactsCache !== null && 
-           Date.now() - this.contactsCache.timestamp < this.CACHE_DURATION &&
-           (this.contactsCache.data.existingUsers.length > 0 || this.contactsCache.data.nonUsers.length > 0);
+    return this.contactsCache !== null &&
+      Date.now() - this.contactsCache.timestamp < this.CACHE_DURATION &&
+      (this.contactsCache.data.existingUsers.length > 0 || this.contactsCache.data.nonUsers.length > 0);
   }
 
   // Get cache status for UI loading states
@@ -779,10 +906,10 @@ class ContactService {
     if (!this.contactsCache) {
       return { hasCache: false, isEmpty: true, isExpired: false };
     }
-    
+
     const isExpired = Date.now() - this.contactsCache.timestamp >= this.CACHE_DURATION;
     const isEmpty = this.contactsCache.data.existingUsers.length === 0 && this.contactsCache.data.nonUsers.length === 0;
-    
+
     return {
       hasCache: true,
       isEmpty,

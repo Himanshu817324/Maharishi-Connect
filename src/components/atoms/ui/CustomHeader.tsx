@@ -37,6 +37,7 @@ const CustomHeader: React.FC<CustomHeaderProps> = ({
               style={styles.backButton}
               onPress={onBackPress}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.7}
             >
               <Icon
                 name="arrow-back"

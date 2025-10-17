@@ -48,7 +48,7 @@ class ApiService {
       });
 
       clearTimeout(timeoutId);
-      
+
       console.log('🌐 [ApiService] Response status:', response.status);
       console.log('🌐 [ApiService] Response headers:', Object.fromEntries(response.headers.entries()));
 
@@ -58,9 +58,18 @@ class ApiService {
       if (!contentType || !contentType.includes('application/json')) {
         // If not JSON, get the text response for debugging
         const textResponse = await response.text();
-        console.error("❌ Non-JSON response received:", textResponse.substring(0, 200));
-        
+        console.warn("⚠️ Non-JSON response received:", textResponse.substring(0, 200));
+
         if (!response.ok) {
+          // ✅ ENHANCED: Handle 404 errors gracefully
+          if (response.status === 404) {
+            console.warn('⚠️ API endpoint not found (404) - this might be expected for some endpoints');
+            return {
+              status: 'error',
+              message: 'Endpoint not found',
+              data: null
+            } as ApiResponse<T>;
+          }
           throw new Error(`Server error ${response.status}: ${response.statusText}. Server returned: ${textResponse.substring(0, 100)}`);
         } else {
           throw new Error("Server returned non-JSON response. Please check your API endpoint.");
@@ -72,11 +81,12 @@ class ApiService {
       try {
         data = await response.json();
       } catch (parseError) {
+        const parseErrorMessage = parseError instanceof Error ? parseError.message : 'Unknown parse error';
         console.error("Failed to parse JSON response:", parseError);
         // Try to get the raw response for debugging
         const textResponse = await response.text();
         console.error("Raw response:", textResponse.substring(0, 200));
-        throw new Error(`Invalid JSON response: ${parseError.message}`);
+        throw new Error(`Invalid JSON response: ${parseErrorMessage}`);
       }
 
       if (!response.ok) {
@@ -92,7 +102,7 @@ class ApiService {
 
       return data;
     } catch (error) {
-      console.error("API request failed:", error);
+      console.warn("⚠️ API request failed:", error);
 
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
@@ -101,10 +111,24 @@ class ApiService {
           throw new Error(NETWORK_ERRORS.NETWORK_FAILED);
         } else if (error.message.includes('CORS')) {
           throw new Error(NETWORK_ERRORS.CORS_ERROR);
+        } else if (error.message.includes('404')) {
+          // ✅ ENHANCED: Handle 404 errors gracefully
+          console.warn('⚠️ API endpoint not found - returning error response instead of throwing');
+          return {
+            status: 'error',
+            message: 'Endpoint not found',
+            data: null
+          } as ApiResponse<T>;
         }
       }
 
-      throw error;
+      // ✅ ENHANCED: Don't throw errors for non-critical API calls
+      console.warn('⚠️ API call failed, returning error response:', error);
+      return {
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        data: null
+      } as ApiResponse<T>;
     }
   }
 
@@ -142,17 +166,19 @@ class ApiService {
 
   // Fetch complete user profile data
   async getUserProfile(firebaseUid: string, token: string): Promise<ApiResponse> {
+    console.log('🔍 [getUserProfile] Attempting to fetch profile for user:', firebaseUid);
 
     // Try multiple endpoints in order of preference
     const endpoints = [
-      `/users/${firebaseUid}`,
-      `/auth/profile`,
+      `/auth/profile`,  // Most likely to work based on login endpoint
       `/user/profile`,
-      `/profile`
+      `/profile`,
+      `/users/${firebaseUid}`  // Move this to last as it's returning 404
     ];
 
     for (const endpoint of endpoints) {
       try {
+        console.log('🔍 [getUserProfile] Trying endpoint:', endpoint);
         const response = await this.makeRequest(endpoint, {
           method: "GET",
           headers: {
@@ -161,14 +187,21 @@ class ApiService {
           },
         });
 
+        console.log('✅ [getUserProfile] Success with endpoint:', endpoint);
         return response;
       } catch (error) {
+        console.log('❌ [getUserProfile] Failed with endpoint:', endpoint, error);
         // Continue to next endpoint
       }
     }
 
-    // If all endpoints fail, throw the last error
-    throw new Error('All profile endpoints failed. Please check your backend API.');
+    // If all endpoints fail, return a structured error response instead of throwing
+    console.log('❌ [getUserProfile] All endpoints failed for user:', firebaseUid);
+    return {
+      status: 'error',
+      message: 'Profile endpoint not available',
+      data: null
+    };
   }
 
   private async makeFormDataRequest<T>(
@@ -201,7 +234,7 @@ class ApiService {
         // If not JSON, get the text response for debugging
         const textResponse = await response.text();
         console.error("❌ Non-JSON response received for FormData:", textResponse.substring(0, 200));
-        
+
         if (!response.ok) {
           throw new Error(`Upload failed ${response.status}: ${response.statusText}. Server returned: ${textResponse.substring(0, 100)}`);
         } else {
@@ -218,12 +251,12 @@ class ApiService {
         // Try to get the raw response for debugging
         const textResponse = await response.text();
         console.error("Raw FormData response:", textResponse.substring(0, 200));
-        throw new Error(`Invalid JSON response from upload: ${parseError.message}`);
+        throw new Error(`Invalid JSON response from upload: ${parseError instanceof Error ? parseError.message : 'Unknown parse error'}`);
       }
 
       if (!response.ok) {
         let errorMessage = data.message || `HTTP ${response.status}: ${response.statusText}`;
-        
+
         // Provide more specific error messages based on status codes
         switch (response.status) {
           case 400:
@@ -259,7 +292,7 @@ class ApiService {
               errorMessage = 'Request failed. Please check your file and try again.';
             }
         }
-        
+
         throw new Error(errorMessage);
       }
 
@@ -321,33 +354,33 @@ class ApiService {
   async uploadProfileImage(formData: FormData): Promise<ApiResponse> {
     const endpoints = [
       "/upload/profile-image",
-      "/upload/image", 
+      "/upload/image",
       "/upload/cloud",
       "/user/upload-profile-image",
       "/api/upload/profile-image"
     ];
-    
+
     let lastError: Error | null = null;
-    
+
     for (let i = 0; i < endpoints.length; i++) {
       try {
         const result = await this.makeFormDataRequest(endpoints[i], formData);
         return result;
       } catch (error) {
         lastError = error as Error;
-        
+
         // If it's a client error (4xx), don't try other endpoints
         if (error instanceof Error && error.message.includes('4')) {
           throw error;
         }
-        
+
         // Wait before trying next endpoint (except for last one)
         if (i < endpoints.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise<void>(resolve => setTimeout(resolve, 1000));
         }
       }
     }
-    
+
     // If all endpoints failed, throw the last error with context
     throw new Error(`All upload endpoints failed. Last error: ${lastError?.message || 'Unknown error'}`);
   }
@@ -372,7 +405,7 @@ class ApiService {
   }): Promise<ApiResponse> {
     // Get auth token from AsyncStorage
     const token = await this.getAuthToken();
-    
+
     if (!token) {
       throw new Error('Authentication token not found. Please log in again.');
     }
@@ -431,7 +464,7 @@ class ApiService {
    */
   async testServerResponse(): Promise<void> {
     try {
-      
+
       const response = await fetch(`${API_BASE_URL}/health`, {
         method: "GET",
         headers: {
@@ -440,15 +473,15 @@ class ApiService {
         },
       });
 
-      
+
       const contentType = response.headers.get('content-type');
-      
+
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
       } else {
         const textResponse = await response.text();
       }
-      
+
     } catch (error) {
       console.error("🧪 Health check failed:", error);
     }

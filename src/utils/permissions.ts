@@ -5,6 +5,7 @@ export interface PermissionResult {
   granted: boolean;
   canAskAgain: boolean;
   status: 'granted' | 'denied' | 'never_ask_again' | 'unavailable';
+  error?: string;
 }
 
 export interface ContactPermissionResult extends PermissionResult {
@@ -12,109 +13,49 @@ export interface ContactPermissionResult extends PermissionResult {
 }
 
 class PermissionManager {
-  private lastPermissionRequest: number = 0;
-  private readonly PERMISSION_REQUEST_COOLDOWN = 5000; // 5 seconds
+  private lastPermissionRequest = 0;
+  private readonly PERMISSION_REQUEST_COOLDOWN = 5000; // ms
 
-  /**
-   * Request contacts permission
-   */
+  // Request contacts permission and optionally return fetched contacts
   async requestContactsPermission(): Promise<ContactPermissionResult> {
-    // Rate limiting to prevent too many requests
     const now = Date.now();
     if (now - this.lastPermissionRequest < this.PERMISSION_REQUEST_COOLDOWN) {
       console.log('⏳ Permission request rate limited');
-      return {
-        granted: false,
-        canAskAgain: true,
-        status: 'denied',
-      };
+      return { granted: false, canAskAgain: true, status: 'denied' };
     }
     this.lastPermissionRequest = now;
-    
+
     try {
-      if (Platform.OS === 'ios') {
-        // iOS contacts permission
-        const permission = await Contacts.requestPermission();
-        
-        if (permission === 'authorized') {
+      const permission = await Contacts.requestPermission();
+
+      if (permission === 'authorized') {
+        // Attempt to fetch contacts immediately (best-effort)
+        try {
           const contacts = await Contacts.getAll();
+          return { granted: true, canAskAgain: true, status: 'granted', contacts };
+        } catch (err: any) {
+          // Permission granted but fetching failed
           return {
             granted: true,
             canAskAgain: true,
             status: 'granted',
-            contacts: contacts,
-          };
-        } else if (permission === 'denied') {
-          return {
-            granted: false,
-            canAskAgain: true,
-            status: 'denied',
-          };
-        } else {
-          return {
-            granted: false,
-            canAskAgain: false,
-            status: 'never_ask_again',
-          };
-        }
-      } else {
-        // Android contacts permission - handle different Android versions
-        try {
-          const permission = await Contacts.requestPermission();
-          
-          if (permission === 'authorized') {
-            // Try to get contacts to verify permission actually works
-            try {
-              const contacts = await Contacts.getAll();
-              return {
-                granted: true,
-                canAskAgain: true,
-                status: 'granted',
-                contacts: contacts,
-              };
-            } catch (contactError) {
-              return {
-                granted: false,
-                canAskAgain: true,
-                status: 'denied',
-                error: 'Permission granted but contacts access failed',
-              };
-            }
-          } else if (permission === 'denied') {
-            return {
-              granted: false,
-              canAskAgain: true,
-              status: 'denied',
-            };
-          } else {
-            return {
-              granted: false,
-              canAskAgain: false,
-              status: 'never_ask_again',
-            };
-          }
-        } catch (androidError) {
-          return {
-            granted: false,
-            canAskAgain: false,
-            status: 'unavailable',
-            error: androidError.message,
+            error: err?.message || 'Failed to read contacts after grant',
           };
         }
       }
-    } catch (error) {
+
+      if (permission === 'denied') {
+        return { granted: false, canAskAgain: true, status: 'denied' };
+      }
+
+      // Fallback for other return values
+      return { granted: false, canAskAgain: false, status: 'never_ask_again' };
+    } catch (error: any) {
       console.error('Error requesting contacts permission:', error);
-      return {
-        granted: false,
-        canAskAgain: false,
-        status: 'unavailable',
-      };
+      return { granted: false, canAskAgain: false, status: 'unavailable', error: error?.message };
     }
   }
 
-  /**
-   * Check if contacts permission is granted
-   */
   async checkContactsPermission(): Promise<boolean> {
     try {
       const permission = await Contacts.checkPermission();
@@ -125,80 +66,45 @@ class PermissionManager {
     }
   }
 
-  /**
-   * Get all contacts with fallback methods
-   */
+  // Returns all contacts. Throws if permission not granted or fetch fails.
   async getAllContacts(): Promise<any[]> {
+    const hasPermission = await this.checkContactsPermission();
+    if (!hasPermission) throw new Error('Contacts permission not granted');
+
+    // Try standard API first, then fallback to matching string
     try {
-      const hasPermission = await this.checkContactsPermission();
-      if (!hasPermission) {
-        throw new Error('Contacts permission not granted');
-      }
-      
-      // Try the standard method first
+      return await Contacts.getAll();
+    } catch (standardError) {
       try {
-        const contacts = await Contacts.getAll();
-        return contacts;
-      } catch (standardError) {
-        // Try alternative method for problematic devices
-        try {
-          const contacts = await Contacts.getContactsMatchingString('');
-          return contacts;
-        } catch (alternativeError) {
-          throw standardError; // Throw the original error
-        }
+        return await Contacts.getContactsMatchingString('');
+      } catch (fallbackError) {
+        console.error('[PermissionManager] Failed to fetch contacts (standard & fallback)', standardError, fallbackError);
+        throw standardError;
       }
-    } catch (error) {
-      console.error('📱 [PermissionManager] Error getting contacts:', error);
-      throw error;
     }
   }
 
-  /**
-   * Search contacts
-   */
   async searchContacts(searchTerm: string): Promise<any[]> {
-    try {
-      const hasPermission = await this.checkContactsPermission();
-      if (!hasPermission) {
-        throw new Error('Contacts permission not granted');
-      }
-      
-      return await Contacts.getContactsMatchingString(searchTerm);
-    } catch (error) {
-      console.error('Error searching contacts:', error);
-      throw error;
-    }
+    const hasPermission = await this.checkContactsPermission();
+    if (!hasPermission) throw new Error('Contacts permission not granted');
+    return await Contacts.getContactsMatchingString(searchTerm);
   }
 
-  /**
-   * Show permission denied alert with settings option
-   */
   showPermissionDeniedAlert(permissionType: string) {
-    // Only show alert if app is in foreground
     try {
       Alert.alert(
         'Permission Required',
         `${permissionType} permission is required to use this feature. Please enable it in settings.`,
         [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-          {
-            text: 'Open Settings',
-            onPress: () => this.openAppSettings(),
-          },
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => this.openAppSettings() },
         ]
       );
     } catch (error) {
-      console.log('⚠️ Cannot show alert - app not ready:', error);
+      console.warn('Cannot show permission alert:', error);
     }
   }
 
-  /**
-   * Open app settings
-   */
   async openAppSettings() {
     try {
       await Linking.openSettings();
@@ -207,140 +113,97 @@ class PermissionManager {
     }
   }
 
-  /**
-   * Request multiple permissions at once
-   */
   async requestMultiplePermissions(permissions: string[]): Promise<Record<string, PermissionResult>> {
     const results: Record<string, PermissionResult> = {};
-    
-    for (const permission of permissions) {
-      if (permission === 'contacts') {
-        results[permission] = await this.requestContactsPermission();
-      }
-      // Add more permission types as needed
+    for (const p of permissions) {
+      if (p === 'contacts') results[p] = await this.requestContactsPermission();
+      // extend: handle other permission types
     }
-    
     return results;
   }
 
-  /**
-   * Check if all required permissions are granted
-   */
   async checkAllPermissions(permissions: string[]): Promise<boolean> {
-    for (const permission of permissions) {
-      if (permission === 'contacts') {
-        const hasPermission = await this.checkContactsPermission();
-        if (!hasPermission) {
-          return false;
-        }
+    for (const p of permissions) {
+      if (p === 'contacts') {
+        const ok = await this.checkContactsPermission();
+        if (!ok) return false;
       }
-      // Add more permission checks as needed
     }
-    
     return true;
   }
 
-  /**
-   * Format contact data for the app
-   */
+  // Normalize contact objects to the app's expected shape
   formatContactData(contacts: any[]): any[] {
+    if (!Array.isArray(contacts)) {
+      console.warn('⚠️ formatContactData received non-array:', typeof contacts);
+      return [];
+    }
+
     return contacts.map(contact => {
-      // Handle different contact name formats
-      let fullName = 'Unknown';
-      if (contact.displayName) {
-        fullName = contact.displayName;
-      } else if (contact.givenName || contact.familyName) {
-        fullName = `${contact.givenName || ''} ${contact.familyName || ''}`.trim();
-      } else if (contact.name) {
-        fullName = contact.name;
-      }
+      const fullName =
+        contact.displayName ||
+        [contact.givenName, contact.familyName].filter(Boolean).join(' ').trim() ||
+        contact.name ||
+        'Unknown';
 
-      // Handle different phone number formats
       let phoneNumber = '';
-      if (contact.phoneNumbers && Array.isArray(contact.phoneNumbers) && contact.phoneNumbers.length > 0) {
-        phoneNumber = contact.phoneNumbers[0].number || contact.phoneNumbers[0];
-      } else if (contact.phoneNumber) {
-        phoneNumber = contact.phoneNumber;
-      } else if (contact.phone) {
-        phoneNumber = contact.phone;
-      }
+      if (Array.isArray(contact.phoneNumbers) && contact.phoneNumbers.length > 0) {
+        const pn = contact.phoneNumbers[0];
+        phoneNumber = typeof pn === 'string' ? pn : pn.number || '';
+      } else if (contact.phoneNumber) phoneNumber = contact.phoneNumber;
 
-      // Handle different email formats
       let email = '';
-      if (contact.emailAddresses && Array.isArray(contact.emailAddresses) && contact.emailAddresses.length > 0) {
-        email = contact.emailAddresses[0].email || contact.emailAddresses[0];
-      } else if (contact.emailAddress) {
-        email = contact.emailAddress;
-      } else if (contact.email) {
-        email = contact.email;
-      }
+      if (Array.isArray(contact.emailAddresses) && contact.emailAddresses.length > 0) {
+        const e = contact.emailAddresses[0];
+        email = typeof e === 'string' ? e : e.email || '';
+      } else if (contact.email) email = contact.email;
+
+      const profilePicture = contact.thumbnailPath || (contact.hasThumbnail ? contact.thumbnailPath : undefined);
 
       return {
         user_id: contact.recordID || contact.id,
         fullName,
         email,
         phoneNumber,
-        profilePicture: contact.thumbnailPath || contact.hasThumbnail ? contact.thumbnailPath : undefined,
+        profilePicture,
         isOnline: false,
         lastSeen: undefined,
         isBlocked: false,
         isFavorite: false,
-        // Store original contact for debugging
         originalContact: contact,
       };
     });
   }
 
-  /**
-   * Sync contacts with backend
-   */
+  // High-level sync: ensure permission, read contacts, and return formatted data
   async syncContactsWithBackend(): Promise<any[]> {
     try {
-      // Check current permission status
+      let contacts: any[] | undefined;
+
       const hasPermission = await this.checkContactsPermission();
-      
       if (!hasPermission) {
         const result = await this.requestContactsPermission();
-        
         if (!result.granted) {
           this.showPermissionDeniedAlert('Contacts');
           throw new Error(`Contacts permission denied: ${result.status}`);
         }
-        
-        // If permission was granted and we have contacts from the request, use them
-        if (result.contacts && result.contacts.length > 0) {
-          const formattedContacts = this.formatContactData(result.contacts);
-          return formattedContacts;
-        }
+
+        if (result.contacts && result.contacts.length > 0) contacts = result.contacts;
       }
 
-      // Try to get contacts
-      const contacts = await this.getAllContacts();
-      
-      if (!contacts || contacts.length === 0) {
-        return [];
+      if (!contacts) contacts = await this.getAllContacts();
+      if (!contacts || contacts.length === 0) return [];
+
+      return this.formatContactData(contacts);
+    } catch (error: any) {
+      console.error('Contact sync failed:', error);
+      if (error?.message?.toLowerCase().includes('permission')) {
+        throw new Error('Contacts permission is required. Please enable it in your device settings.');
       }
-      
-      const formattedContacts = this.formatContactData(contacts);
-      return formattedContacts;
-      
-    } catch (error) {
-      // Provide more specific error messages
-      if (error instanceof Error) {
-        if (error.message.includes('permission')) {
-          throw new Error('Contacts permission is required. Please enable it in your device settings.');
-        } else if (error.message.includes('contacts access failed')) {
-          throw new Error('Permission granted but unable to access contacts. Please try restarting the app.');
-        } else {
-          throw new Error(`Contact sync failed: ${error.message}`);
-        }
-      }
-      
-      throw new Error('Contact sync failed. Please check your device settings and try again.');
+      throw new Error(`Contact sync failed: ${error?.message ?? 'unknown error'}`);
     }
   }
 }
 
-// Export singleton instance
 export const permissionManager = new PermissionManager();
 export default permissionManager;

@@ -62,7 +62,7 @@ class SocketService {
   // Typing indicators
   startTyping(chatId: string): void {
     if (!this.socket?.isConnected) return;
-    
+
     this.socket.emit('typing_start', {
       chatId: chatId
     });
@@ -70,7 +70,7 @@ class SocketService {
 
   stopTyping(chatId: string): void {
     if (!this.socket?.isConnected) return;
-    
+
     this.socket.emit('typing_stop', {
       chatId: chatId
     });
@@ -79,10 +79,10 @@ class SocketService {
   // Message status updates
   markAsRead(messageId: string, chatId: string): void {
     if (!this.socket?.isConnected) return;
-    
-    this.socket.emit('mark_read', { 
-      message_id: messageId, 
-      chat_id: chatId 
+
+    this.socket.emit('mark_read', {
+      message_id: messageId,
+      chat_id: chatId
     });
   }
 
@@ -116,10 +116,10 @@ class SocketService {
   addConnectionListener(callback: (connected: boolean) => void): () => void {
     const connectHandler = () => callback(true);
     const disconnectHandler = () => callback(false);
-    
+
     this.socket?.on('connect', connectHandler);
     this.socket?.on('disconnect', disconnectHandler);
-    
+
     return () => {
       this.socket?.off('connect', connectHandler);
       this.socket?.off('disconnect', disconnectHandler);

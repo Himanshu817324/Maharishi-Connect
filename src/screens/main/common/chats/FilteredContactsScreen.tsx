@@ -43,6 +43,7 @@ import { useUserStatus } from '@/hooks/useUserStatus';
 import OnlineStatusIndicator from '@/components/OnlineStatusIndicator';
 import { AppDispatch, RootState } from '@/store';
 import CustomHeader from '@/components/atoms/ui/CustomHeader';
+import ContactDebugger from '@/components/ContactDebugger';
 
 const FilteredContactsScreen: React.FC = () => {
   const { colors } = useTheme();
@@ -82,6 +83,7 @@ const FilteredContactsScreen: React.FC = () => {
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const [hasData, setHasData] = useState(false);
   const [isDataReady, setIsDataReady] = useState(false);
+  const [showDebugger, setShowDebugger] = useState(false);
   const hasLoadedRef = useRef(false);
 
   // Get user IDs for status monitoring
@@ -760,6 +762,14 @@ const FilteredContactsScreen: React.FC = () => {
         title="New Chat"
         showBackButton={true}
         onBackPress={() => navigation.goBack()}
+        rightComponent={
+          <TouchableOpacity
+            onPress={() => setShowDebugger(true)}
+            style={styles.debugButton}
+          >
+            <Icon name="bug-outline" size={20} color={colors.text} />
+          </TouchableOpacity>
+        }
       />
 
       {/* Enhanced Search Bar */}
@@ -1070,6 +1080,24 @@ const FilteredContactsScreen: React.FC = () => {
             <Text style={[styles.loaderText, { color: colors.text }]}>
               Creating chat...
             </Text>
+          </View>
+        </View>
+      )}
+
+      {/* Contact Debugger Modal */}
+      {showDebugger && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Contact Debugger</Text>
+              <TouchableOpacity
+                onPress={() => setShowDebugger(false)}
+                style={styles.closeButton}
+              >
+                <Icon name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ContactDebugger />
           </View>
         </View>
       )}
@@ -1468,6 +1496,44 @@ const styles = StyleSheet.create({
     height: moderateScale(12),
     borderRadius: moderateScale(6),
     width: '50%',
+  },
+  debugButton: {
+    padding: moderateScale(8),
+    borderRadius: moderateScale(4),
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  modalContent: {
+    width: '90%',
+    height: '80%',
+    backgroundColor: 'white',
+    borderRadius: moderateScale(12),
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: moderateScale(16),
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  modalTitle: {
+    fontSize: responsiveFont(18),
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  closeButton: {
+    padding: moderateScale(4),
   },
 });
 
